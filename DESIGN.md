@@ -21,7 +21,10 @@ colors:
   scanner-stage: "#050506"
   scanner-contour: "#e5efdc"
   scanner-active: "#d7d8da"
-  guide-background: "#191c1b"
+  guide-background: "#262b28"
+  glass-dark: "#303432"
+  glass-control: "#343b32cc"
+  glass-dialog: "#252a26ed"
   guide-foreground: "#f5f5f2"
   guide-muted: "#b1b5b1"
   guide-accent: "#d4ecba"
@@ -76,11 +79,11 @@ typography:
     fontWeight: 400
     lineHeight: 1.5
 rounded:
-  scanner-stage: "4px"
-  scanner-control: "6px"
+  control-radius: "999px"
+  panel: "24px"
+  studio-field: "14px"
   circle: "50%"
-  guide-control: "10px"
-  guide-dialog: "20px"
+  guide-dialog: "30px"
 spacing:
   scanner-action-gap: "8px"
   control-gap: "12px"
@@ -93,11 +96,14 @@ components:
     backgroundColor: "{colors.welcome-accent}"
     textColor: "{colors.welcome-ink}"
     typography: "{typography.welcome-button}"
+    rounded: "{rounded.control-radius}"
     padding: "17px 23px"
   welcome-primary-hover:
     backgroundColor: "{colors.welcome-accent-hover}"
   welcome-outline:
-    textColor: "{colors.welcome-paper}"
+    backgroundColor: "{colors.glass-dark}"
+    textColor: "{colors.guide-foreground}"
+    rounded: "{rounded.control-radius}"
     padding: "13px 17px"
   welcome-outline-hover:
     backgroundColor: "{colors.welcome-paper}"
@@ -106,7 +112,7 @@ components:
     backgroundColor: "{colors.scanner-foreground}"
     textColor: "{colors.scanner-background}"
     typography: "{typography.scanner-button}"
-    rounded: "{rounded.scanner-control}"
+    rounded: "{rounded.control-radius}"
     padding: "0 30px"
   scanner-primary-active:
     backgroundColor: "{colors.scanner-active}"
@@ -124,7 +130,7 @@ components:
   guide-next:
     backgroundColor: "{colors.guide-foreground}"
     textColor: "{colors.guide-button-ink}"
-    rounded: "{rounded.guide-control}"
+    rounded: "{rounded.control-radius}"
     padding: "0 18px"
   guide-next-hover:
     backgroundColor: "{colors.guide-button-hover}"
@@ -136,7 +142,7 @@ components:
 
 **Creative North Star: "Optically lit introduction, focused camera operation"**
 
-OptiFrame has two deliberate surface families. The welcome page is a Persuade surface: graphite, lime, editorial ivory, generous Manrope typography, and a dramatically lit frame concept. The scanner is an Operate surface: system typography, a nearly black camera stage, compact instructions, and one next action. Their typography and density remain separate.
+OptiFrame has two deliberate surface families. The welcome page is a Persuade surface: graphite, lime, editorial ivory, generous Manrope typography, and a dramatically lit frame concept. The scanner is an Operate surface: system typography, a nearly black camera stage, compact instructions, and one next action. Their typography and density remain separate. Rounded pill controls and a restrained glass finish now connect the welcome, scanner, and fitting workspace.
 
 The optional tutorial belongs to Operate even when opened from the welcome page. It uses a native dialog with the proportions and controls of a phone guide, restrained motion, and precise diagrams derived from existing captured contours. The concept image is explicitly a generated illustration; neither imagery nor diagrams imply proven physical accuracy or a certified product.
 
@@ -146,8 +152,9 @@ The optional tutorial belongs to Operate even when opened from the welcome page.
 - Minimal scanner contained within the viewport, without editorial sections or page scrolling.
 - Optional guidance with independent left and right contours and one illustrated step at a time.
 - Clear separation between a contour proposal and checked physical measurements.
+- Shared rounded controls and frosted secondary surfaces with opaque fallbacks.
 
-Extracted from `web/welcome.html`, `web/welcome.css`, `web/welcome.js`, `web/simple.css`, `web/tutorial.css`, and `web/tutorial.js`. Tokens describe the implemented defaults; responsive changes and interaction details follow below. The existing studio is outside this documentation's token scope.
+Extracted from `web/welcome.html`, `web/welcome.css`, `web/welcome.js`, `web/simple.css`, `web/tutorial.css`, `web/tutorial.js`, and the overriding shared `web/glass.css`. Tokens describe the implemented defaults; responsive changes and interaction details follow below. Studio coverage here is limited to the shared control finish, panel shapes, and field radii.
 
 ## Colors
 
@@ -159,7 +166,7 @@ Welcome lime highlights the concluding phrase in the hero and the main scanner a
 
 Welcome graphite supports ivory type and the illuminated image. The ivory process section reverses text to graphite, with its own muted copy and dividers. The reference-sheet image sits on a slightly lighter dark plane. Scanner near-black separates the camera stage from its surrounding controls; off-white carries the primary action. Guide charcoal, soft white, and muted gray support readable steps over a dark backdrop.
 
-**The Surface Boundary Rule.** Keep welcome, scanner, and guide color assignments local to their implemented surfaces; importing the welcome stylesheet into the scanner or dialog would erase intentional differences.
+**The Surface Boundary Rule.** Preserve each surface's typography, density, and accent assignments while sharing the rounded control finish through glass.css.
 
 ## Typography
 
@@ -183,13 +190,15 @@ Tutorial is optional and opens on request. Its native dialog is centered on larg
 
 Welcome depth comes from the illuminated object image, graphite field, tonal shifts, and thin rules. Its primary surfaces have no card shadows. The hero image uses `mix-blend-mode: lighten`; the generated illustration is captioned as a frame concept.
 
-Scanner uses functional shadows only for the aiming crosshair and loupe. The guide uses a single substantial dialog shadow and a dark native backdrop to separate guidance from its invoking surface. Exact shadow, focus, and motion values live in `.impeccable/design.json`.
+Controls use an inset highlight and restrained lift shadows. Secondary controls receive frosted backgrounds when standard or WebKit backdrop filtering is supported; the guide uses a stronger blur, inset highlight, and dialog shadow. Opaque colors are declared first, and reduced-transparency preferences disable filtering. Exact shadows, filter declarations, focus, and motion values live in `.impeccable/design.json`.
+
+**The Clear Camera Rule.** Apply glass to small controls and the optional dialog; keep live camera images and measurement overlays unblurred.
 
 The hero arrives once with a reveal and small translation. Tutorial motion explains reflected light, settling capture brackets, and printer layers; it does not automatically advance steps. Reduced-motion preferences disable these animations and smooth scrolling.
 
 ## Shapes
 
-Welcome actions and editorial planes use square edges and thin borders. Scanner stage corners are slightly rounded; primary controls are modestly rounded and the shutter is circular. The tutorial has a more rounded dialog shell, rounded actions, and small progress marks. These radii express local function rather than a universal card style.
+Welcome, scanner, guide, and studio actions share pill corners. The shutter remains circular. The camera stage, reference-sheet container, and studio lens panels share the panel radius; the guide uses the larger dialog radius. Studio canvas and numeric-field surfaces use the smaller studio-field radius. Editorial sections keep their existing composition and dividers.
 
 Tutorial lens silhouettes are the two distinct captured contours from `gpu/fixtures/scanned-lens-outlines.json`, rounded to two decimal places in the implementation. Preserve their asymmetry, contour detail, and orientation. Paper, reference grid, optical-centre crosses, arrows, and measurement lines remain SVG geometry. The diagrams explain the process; their visual precision is not evidence of validated millimetre accuracy.
 
@@ -197,7 +206,7 @@ Tutorial lens silhouettes are the two distinct captured contours from `gpu/fixtu
 
 ### Welcome actions and navigation
 
-The lime primary action uses an inline arrow and directs users into the scanner. Outline links provide secondary document actions; unboxed text actions open guides. Hover lightens the primary fill, reverses outline actions, or underlines text. Keyboard focus uses a visible accent outline, with a darker green outline on the ivory section. The wordmark and scanner link stay available on mobile. Same-site scanner and home links preserve a session access fragment.
+The lime primary pill uses an inline arrow and directs users into the scanner. Secondary document and scanner navigation actions have frosted fills; the hero guide trigger is also a pill. Other inline guide links retain their text treatment. Primary hover lightens the fill and pill presses scale slightly. Keyboard focus uses a visible accent outline, with a darker green outline on the ivory section. The wordmark and scanner link stay available on mobile. Same-site scanner and home links preserve a session access fragment.
 
 ### Scanner stage and controls
 
@@ -217,10 +226,11 @@ The SVG diagram is decorative to assistive technology because nearby copy convey
 - **Do** keep tutorial guidance optional, keyboard accessible, and readable at short phone heights.
 - **Do** use the existing independent contours for technical diagrams and clearly label generated concept imagery.
 - **Do** retain reduced-motion behavior, visible focus, and physical measurement checks.
+- **Do** use the shared pill and panel radii, with opaque fallbacks and reduced-transparency support for glass surfaces.
 
 ### Don't:
 
 - **Don't** add landing-page sections, promotional cards, Manrope headings, or page scrolling to the scanner.
 - **Don't** replace the two lens contours with a symmetric generic glasses icon in instructional diagrams.
 - **Don't** imply proven millimetre accuracy, validated physical fit, or certified eyewear through claims or imagery.
-- **Don't** promote local landing composition or tutorial radii into a universal style for every application surface.
+- **Don't** blur the camera image or measurement overlays, or import the landing page's editorial layout into the scanner.

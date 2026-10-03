@@ -108,6 +108,10 @@ Regression gates after integration: **44 Python tests and 70 web tests passed**.
 
 The same downloaded plate completed generic slicing with a 220 × 220 mm bed, 0.4 mm nozzle, 0.2 mm layers and supports. This smoke test validates slicer acceptance; its temporary G-code is not supplied as a machine-specific print file.
 
+## Rounded interface release — 3 October 2026
+
+The shared glass-control stylesheet preserves the capture JavaScript, keeps blur off camera/measurement surfaces, and includes opaque and reduced-transparency fallbacks. The 70 web regression tests passed again. Public GPU health reported CUDA and a loaded model; eight HTTPS segmentation requests on the same 139,286-byte dark-lens JPEG all returned HTTP 200 and a 132-point contour. Median request latency was 156.8 ms; the maximum was 662.4 ms including connection setup. These desktop HTTP timings exclude iPhone camera encoding, rendering and mobile networking. Physical iPhone camera operation still requires the user's device test.
+
 ## Scope of claim
 
 The demo can claim a measured contour, wearer-specific geometric placement, and a tested mechanical fit only when the checks above are filled in. A prescription-ready or standards-compliant wearable frame needs professional optical and safety assessment.

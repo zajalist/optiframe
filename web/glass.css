@@ -1,0 +1,89 @@
+/* Shared control finish. Blur stays on small controls and the optional guide,
+   never on the live image or measurement overlays. Opaque fallbacks come first. */
+:root {
+  --control-radius: 999px;
+  --glass-dark: #303432;
+  --glass-highlight: inset 0 1px 0 #ffffff30;
+}
+.button, .nav-scan, .primary:not(.shutter), #camera-retry,
+.photo-import, .help-button, .secondary, .lens-caption button,
+.oft-back, .oft-next { border-radius: var(--control-radius); }
+.button, .nav-scan { transition: background 180ms ease-out, box-shadow 180ms ease-out, transform 180ms ease-out; }
+.button-primary { background: #d5ef83; box-shadow: inset 0 1px 0 #ffffff80, 0 6px 18px #0002; }
+.button-primary:hover { background: #e4f6b0; }
+.button:active, .nav-scan:active { transform: scale(.98); }
+.nav-scan, .button-outline {
+  background: var(--glass-dark); border-color: transparent;
+  box-shadow: var(--glass-highlight); color: #f5f5f2;
+}
+.hero-actions .text-action {
+  min-height: 48px; padding: 0 17px; border-radius: var(--control-radius);
+  background: var(--glass-dark); box-shadow: var(--glass-highlight);
+}
+.hero-actions .text-action:hover { background: #424843; text-decoration: none; }
+.reference-sheet { border-radius: 24px; }
+.stage { border-radius: 24px; }
+.header-actions { gap: 12px; }
+.help-button { padding: 0 15px; background: var(--glass-dark); box-shadow: var(--glass-highlight); }
+.photo-import {
+  padding: 0 15px; border-color: transparent; background: #262c29;
+  box-shadow: var(--glass-highlight), 0 4px 16px #0003;
+}
+.secondary, .lens-caption button {
+  background: var(--glass-dark); box-shadow: var(--glass-highlight);
+}
+.secondary:hover, .lens-caption button:hover { background: #424843; text-decoration: none; }
+.primary:not(.shutter), #camera-retry { box-shadow: inset 0 1px 0 #fff9, 0 5px 16px #0002; }
+.primary.shutter { box-shadow: 0 4px 20px #0003; }
+.oft-dialog { border-radius: 30px; background: #262b28; box-shadow: inset 0 1px 0 #ffffff29, 0 24px 80px #0007; }
+.oft-dialog::backdrop { background: #03050496; }
+.oft-back, .oft-close { background: #ffffff0e; box-shadow: var(--glass-highlight); }
+.oft-back:hover:not(:disabled), .oft-close:hover { background: #ffffff1c; }
+.oft-next { box-shadow: inset 0 1px 0 #fff9, 0 4px 12px #0002; }
+.oft-dialog .oft-dot { width: 44px; height: 44px; min-height: 44px; }
+/* The fitting workspace uses the same shapes on a light surface. */
+body[data-surface="studio"] button:not(.oft-dialog button),
+body[data-surface="studio"] input[type=file]::file-selector-button { border-radius: var(--control-radius); min-height: 44px; }
+body[data-surface="studio"] .lens-panel { border-radius: 24px; }
+body[data-surface="studio"] .canvas-wrap,
+body[data-surface="studio"] .outline-review svg,
+body[data-surface="studio"] input[type=number],
+body[data-surface="studio"] .proposal-select { border-radius: 14px; }
+body[data-surface="studio"] .site-header .tutorial-trigger {
+  padding: 0 16px; background: #e6ebe4; box-shadow: inset 0 1px 0 #fffc;
+}
+@supports ((backdrop-filter: blur(16px)) or (-webkit-backdrop-filter: blur(16px))) {
+  .nav-scan, .button-outline, .hero-actions .text-action,
+  .photo-import, .help-button, .secondary, .lens-caption button {
+    background: #343b32cc;
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+    backdrop-filter: blur(16px) saturate(140%);
+  }
+  .oft-dialog {
+    background: #252a26ed;
+    -webkit-backdrop-filter: blur(24px) saturate(125%);
+    backdrop-filter: blur(24px) saturate(125%);
+  }
+}
+@media (max-width: 760px) {
+  .site-header .nav-scan { padding: 12px 15px; }
+  .hero-actions { gap: 12px; }
+  .hero-actions .text-action { padding: 0 14px; }
+}
+@media (max-width: 400px) {
+  .hero-actions .text-action { padding: 0 12px; gap: 6px; }
+  .hero-actions { gap: 10px; }
+  body[data-surface="studio"] .site-header { gap: 8px; flex-wrap: wrap; }
+}
+@media (max-height: 570px) {
+  .oft-dialog .oft-dot { width: 32px; height: 44px; min-height: 44px; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .nav-scan, .button-outline, .hero-actions .text-action,
+  .photo-import, .help-button, .secondary, .lens-caption button,
+  .oft-dialog { background: var(--glass-dark); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .button, .nav-scan { transition: none; }
+  .button:active, .nav-scan:active { transform: none; }
+}
