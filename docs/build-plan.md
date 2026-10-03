@@ -35,6 +35,8 @@ If the first capture cannot achieve a clean repeatable contour quickly, switch t
 
 For difficult transparent lenses, test a two-shot capture on a printed pattern: empty sheet, then sheet with lens, aligned using markers. Use the difference as an edge proposal and retain manual correction. Do not spend the hackathon building a point-cloud or Gaussian-splat lens scanner.
 
+The concrete capture algorithm and its validation gate are in [lens-capture-pipeline.md](lens-capture-pipeline.md).
+
 ## Live demo script (about 90 seconds)
 
 1. Hold up two different recycled lenses and the capture sheet.
