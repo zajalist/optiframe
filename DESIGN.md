@@ -245,5 +245,7 @@ The SVG diagram is decorative to assistive technology because nearby copy convey
 - **Don't** blur the camera image or measurement overlays, or import the landing page's editorial layout into the scanner.
 ## Copy restraint
 
+The landing frame uses the existing Higgsfield concept image with one 2.4-second studio-light reveal. It stops after settling; reduced motion, data saving and backgrounding suppress the effect. No extra media request, perpetual animation or UI decoration is added. A proposed Higgsfield video could not be generated because the workspace had no credits; it is not a shipped asset.
+
 Keep controls text-only, without decorative arrows. Do not add slogans, floating captions, process ribbons, or repeated calls to action. Keep instructions in the capture/printing guides and preserve only necessary measurement and error guidance in the scanner.
 

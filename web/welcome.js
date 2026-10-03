@@ -1,6 +1,11 @@
 import heroSource from './assets/hero-source.js';
 
 const heroImage = document.getElementById('hero-image');
+// One short studio reveal; never keep a mobile GPU busy with a decorative loop.
+if (navigator.connection?.saveData || document.hidden) document.body.classList.add('motion-still');
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) document.body.classList.add('motion-still');
+});
 heroImage.addEventListener('load', () => { heroImage.hidden = false; }, { once: true });
 heroImage.src = heroSource;
 
