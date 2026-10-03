@@ -5,11 +5,12 @@ import vm from 'node:vm';
 
 function harness() {
   const fields = new Map();
+  const designInput = {listeners: new Map(), addEventListener(name, listener) {this.listeners.set(name, listener);}};
   const field = selector => {
     if (!fields.has(selector)) fields.set(selector, {value: selector.includes('width') ? '50' : '30', checked: true});
     return fields.get(selector);
   };
-  const context = {document:{querySelectorAll:()=>[]},location:{hash:''},URLSearchParams,FormData};
+  const context = {document:{querySelectorAll:selector=>selector==='.design-inputs input'?[designInput]:[]},location:{hash:''},URLSearchParams,FormData};
   vm.createContext(context);
   vm.runInContext(fs.readFileSync(new URL('./calibration.js',import.meta.url),'utf8').replace(/^export .*;$/m,''),context);
   const app=fs.readFileSync(new URL('./app.js',import.meta.url),'utf8').replace(/^import .*;$/m,'');
@@ -17,8 +18,8 @@ function harness() {
   const panel=Object.create(context.Panel.prototype);
   Object.assign(panel,{el:{querySelector:field},photoVersion:1,points:[[0,0],[50,0],[50,30],[0,30]],homography:[1,0,0,0,1,0,0,0],mmPerPixel:null,opticalCentre:[25,15],bitmap:null,size:{},photoLoading:false});
   context.panel=panel;
-  vm.runInContext('const leftPanel=panel,rightPanel=panel;const designStatus={};globalThis.status=designStatus;'+app.slice(app.indexOf('function framePayload()'),app.indexOf("document.getElementById('preview-frame')"))+';globalThis.payload=framePayload;globalThis.makeFrame=makeFrame;',context);
-  return {panel,field,context};
+  vm.runInContext('const leftPanel=panel,rightPanel=panel;const designStatus={};globalThis.status=designStatus;'+app.slice(app.indexOf('function invalidateFrameResult()'),app.indexOf("document.getElementById('preview-frame')"))+';globalThis.payload=framePayload;globalThis.makeFrame=makeFrame;globalThis.invalidateFrameResult=invalidateFrameResult;',context);
+  return {panel,field,context,designInput};
 }
 
 test('geometry/calibration changes revoke confirmed evidence even when dimensions still pass',()=>{
@@ -46,6 +47,67 @@ test('loading a photo blocks preview, checked export and experimental export',as
     await context.makeFrame(...args);
     assert.match(context.status.textContent,/finish loading/);
   }
+});
+
+test('older frame responses cannot replace a newer result', async () => {
+  const {panel, context} = harness();
+  panel.millimetreOutline = () => Array.from({length: 12}, (_, index) => [index, index]);
+  context.number = () => 2.5;
+  const deferred = () => { let resolve; return {promise: new Promise(r => resolve = r), resolve}; };
+  const first = deferred(), second = deferred();
+  let calls = 0;
+  context.fetch = () => ++calls === 1 ? first.promise : second.promise;
+  const old = context.makeFrame(true);
+  const latest = context.makeFrame(true);
+  const failure = detail => ({ok: false, headers: {get: () => 'application/json'}, json: async () => ({detail})});
+  second.resolve(failure('newer request result'));
+  await latest;
+  first.resolve(failure('stale request result'));
+  await old;
+  assert.equal(context.status.textContent, 'newer request result');
+});
+
+test('panel changes during one pending request discard its result without another request', async () => {
+  const {panel, context} = harness();
+  panel.millimetreOutline = () => Array.from({length: 12}, (_, index) => [index, index]);
+  context.number = () => 2.5;
+  let resolve;
+  context.fetch = () => new Promise(r => resolve = r);
+  const pending = context.makeFrame(true);
+  panel.photoVersion++;
+  resolve({ok: false, headers: {get: () => 'application/json'}, json: async () => ({detail: 'outdated server result'})});
+  await pending;
+  assert.match(context.status.textContent, /Design inputs changed/);
+  assert.doesNotMatch(context.status.textContent, /outdated server result/);
+});
+
+test('editing a shown preview marks it stale', () => {
+  const {context} = harness();
+  const badges = [];
+  const viewer = {dataset: {}, classList: {contains: () => true}, setAttribute(name, value) {this[name] = value;}, appendChild: badge => badges.push(badge)};
+  context.document.getElementById = () => viewer;
+  context.document.createElement = () => ({style: {}});
+  context.invalidateFrameResult();
+  assert.equal(viewer.dataset.stale, 'true');
+  assert.match(viewer['aria-label'], /Stale 3D preview/);
+  assert.equal(badges.length, 1);
+  assert.match(context.status.textContent, /Design inputs changed/);
+});
+
+test('an input edit during ZIP generation prevents the old download', async () => {
+  const {panel, context, designInput} = harness();
+  panel.millimetreOutline = () => Array.from({length: 12}, (_, index) => [index, index]);
+  context.number = () => 2.5;
+  let resolve, clicks = 0;
+  context.fetch = () => new Promise(r => resolve = r);
+  context.URL = {createObjectURL: () => 'blob:old', revokeObjectURL() {}};
+  context.document.createElement = () => ({click() {clicks++;}});
+  const pending = context.makeFrame(false, true);
+  designInput.listeners.get('input')();
+  resolve({ok: true, blob: async () => new Blob(['outdated ZIP'])});
+  await pending;
+  assert.equal(clicks, 0);
+  assert.match(context.status.textContent, /Design inputs changed/);
 });
 
 test('pending archive owns loading state; a later photo or archive wins the race',async()=>{

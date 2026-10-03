@@ -33,7 +33,7 @@ python -m pip install -r gpu/requirements.txt
 python -m uvicorn segment:app --app-dir gpu --host 127.0.0.1 --port 8765
 ```
 
-Open <http://127.0.0.1:8765>. The web app imports iPhone capture ZIPs, videos or phone photos, proposes lens edges with image difference and GPU SAM, lets you edit each contour, and calibrates each lens independently. After marking both optical centres and entering wearer measurements, it previews the 3D front and downloads one five-part build-plate STL plus individual closed part STLs. See [GPU service and frame export](gpu/README.md) and [iPhone capture app](ios/README.md).
+Open <http://127.0.0.1:8765>. The web app imports iPhone capture ZIPs, videos or phone photos, proposes lens edges with image difference and GPU SAM, lets you edit each contour, and calibrates each lens independently. After marking both optical centres and entering separate pupil distances, edge thicknesses and fitting-height offsets, it previews the 3D assembly and downloads one five-part build-plate STL plus individual closed part STLs. See [GPU service and frame export](gpu/README.md) and [iPhone capture app](ios/README.md).
 
 ## Status
 

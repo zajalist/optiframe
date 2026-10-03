@@ -60,10 +60,12 @@ class LensPanel {
       this.repeatOutline = this.points.map(point => project(point, this.homography));
       this.repeatPhotoVersion = this.loadedPhotoVersion;
       this.el.querySelector('.evidence-confirmed').checked=false;
+      invalidateFrameResult();
       this.message('Dimensions and rectified outline saved. Load and rectify a new independent photo in the same top orientation to compare edge repeatability.');
       this.updateMeasurement();
     });
     this.el.querySelector('.photo-input').addEventListener('change', event => this.loadPhoto(event.target.files[0]));
+    this.el.querySelector('.evidence-confirmed').addEventListener('change', invalidateFrameResult);
     this.el.querySelector('.empty-input').addEventListener('change', event => {
       this.empty = event.target.files[0] || null;
       this.message(this.empty ? 'Empty-sheet photo loaded. Propose the lens edge.' : 'Empty-sheet photo removed.');
@@ -83,6 +85,7 @@ class LensPanel {
       this.message('Contour cleared. The image and scale remain available.');
     });
     this.select.addEventListener('change', () => this.useProposal(Number(this.select.value)));
+    this.reference.addEventListener('input', invalidateFrameResult);
     this.reference.addEventListener('change', () => this.updateScale());
     this.canvas.addEventListener('pointerdown', event => this.pointerDown(event));
     this.canvas.addEventListener('pointermove', event => this.pointerMove(event));
@@ -93,6 +96,7 @@ class LensPanel {
   message(text) { this.status.textContent = text; }
 
   invalidateEvidence() {
+    invalidateFrameResult();
     this.el.querySelector('.evidence-confirmed').checked = false;
     this.caliperCheck = { pass: false, error: null };
     this.repeatCheck = { pass: false, error: null };
@@ -449,7 +453,58 @@ class LensPanel {
 
 const [leftPanel, rightPanel] = panels.map(panel => new LensPanel(panel));
 const designStatus = document.querySelector('#design-status');
-const number = id => Number(document.getElementById(id).value);
+const number = id => {
+  const input = document.getElementById(id);
+  if (!input.value.trim() || !input.validity.valid) throw new Error(`Enter a valid value for ${input.closest('label')?.textContent.trim() || id}.`);
+  const value = Number(input.value);
+  if (!Number.isFinite(value)) throw new Error(`Enter a finite value for ${id}.`);
+  return value;
+};
+
+function invalidateFrameResult() {
+  makeFrame.sequence = (makeFrame.sequence || 0) + 1;
+  const viewer = document.getElementById?.('viewer');
+  const showingPreview = viewer?.classList?.contains?.('active');
+  if (showingPreview && viewer.dataset.stale !== 'true') {
+    viewer.dataset.stale = 'true';
+    viewer.setAttribute('aria-label', 'Stale 3D preview. Rebuild after input changes.');
+    const badge = document.createElement('div');
+    badge.className = 'preview-stale-badge';
+    badge.textContent = 'PREVIEW OUTDATED — rebuild before exporting';
+    badge.style.cssText = 'position:absolute;left:10px;right:10px;bottom:10px;z-index:2;padding:10px;background:#621e22;color:white;font-weight:700;border-radius:6px;text-align:center';
+    viewer.appendChild(badge);
+  }
+  if (showingPreview || makeFrame.pending)
+    designStatus.textContent = 'Design inputs changed. Rebuild the 3D assembly preview or generate a new STL.';
+  makeFrame.pending = false;
+}
+
+function frameSnapshot(payload) {
+  const panelState = [leftPanel, rightPanel].map(panel => ({
+    photoVersion: panel.photoVersion,
+    photoLoading: panel.photoLoading,
+    evidenceGeometry: panel.evidenceGeometry,
+    evidenceConfirmed: panel.el.querySelector('.evidence-confirmed').checked,
+    caliper: ['width', 'height'].map(axis => panel.el.querySelector('.caliper-' + axis).value),
+    repeat: ['width', 'height'].map(axis => panel.el.querySelector('.repeat-' + axis).value),
+    repeatPhotoVersion: panel.repeatPhotoVersion,
+  }));
+  return JSON.stringify([payload, panelState]);
+}
+
+function isCurrentFrameRequest(request, snapshot) {
+  if (request !== makeFrame.sequence) return false;
+  try {
+    if (frameSnapshot(framePayload()) === snapshot) return true;
+  } catch { /* An incomplete replacement input also makes the result stale. */ }
+  invalidateFrameResult();
+  return false;
+}
+
+document.querySelectorAll('.design-inputs input').forEach(input => {
+  input.addEventListener('input', invalidateFrameResult);
+  input.addEventListener('change', invalidateFrameResult);
+});
 
 function framePayload() {
   if ([leftPanel, rightPanel].some(panel => panel.photoLoading))
@@ -457,33 +512,49 @@ function framePayload() {
   const left = leftPanel.millimetreOutline();
   const right = rightPanel.millimetreOutline();
   if (!left || !right) throw new Error('Each lens needs at least 12 contour points, a sheet calibration or two-point scale, and an optical centre.');
+  const leftThickness = number('left-edge-thickness');
+  const rightThickness = number('right-edge-thickness');
   return { left, right, settings: {
     left_pd: number('left-pd'), right_pd: number('right-pd'),
-    edge_thickness: number('edge-thickness'), temple_length: number('temple-length'),
+    edge_thickness: leftThickness, left_edge_thickness: leftThickness, right_edge_thickness: rightThickness,
+    left_vertical_offset: number('left-vertical-offset'), right_vertical_offset: number('right-vertical-offset'),
+    temple_length: number('temple-length'),
     bed_width: number('bed-width'), bed_depth: number('bed-depth'),
   } };
 }
 
 async function makeFrame(preview, experimental = false) {
+  const request = makeFrame.sequence = (makeFrame.sequence || 0) + 1;
   try {
     if ([leftPanel, rightPanel].some(panel => panel.photoLoading))
       throw new Error('Wait for both selected photos to finish loading before previewing or exporting.');
     if(!preview&&!experimental&&[leftPanel,rightPanel].some(p=>!p.homography||!p.caliperCheck?.pass||!p.repeatCheck?.pass||!p.edgeRepeatCheck?.pass||!p.el.querySelector('.evidence-confirmed').checked))
       throw new Error('Checked export requires four markers, caliper/repeat width-height checks and saved-outline edge repeatability ≤ 0.5 mm for each lens, plus confirmed physical evidence. Use UNVERIFIED experimental export for a test.');
     const payload = framePayload();
+    const snapshot = frameSnapshot(payload);
+    makeFrame.pending = true;
     designStatus.textContent = preview ? 'Building 3D preview…' : 'Generating and checking closed STL meshes…';
     const response = await apiFetch(preview ? '/api/frame-preview' : '/api/frame', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
     });
+    if (!isCurrentFrameRequest(request, snapshot)) return;
     if (!response.ok) {
       const error = await responseData(response);
+      if (!isCurrentFrameRequest(request, snapshot)) return;
       throw new Error(error.detail || 'Frame generation failed');
     }
     const blob = await response.blob();
+    if (!isCurrentFrameRequest(request, snapshot)) return;
     if (preview) {
       const { showSTL } = await import('./viewer.js');
-      showSTL(await blob.arrayBuffer(), document.getElementById('viewer'));
-      designStatus.textContent = '3D front preview. Rotate to inspect; export includes the front, two retainers and two hinged temples.';
+      if (!isCurrentFrameRequest(request, snapshot)) return;
+      const buffer = await blob.arrayBuffer();
+      if (!isCurrentFrameRequest(request, snapshot)) return;
+      const viewer = document.getElementById('viewer');
+      showSTL(buffer, viewer);
+      viewer.dataset.stale = 'false';
+      viewer.setAttribute('aria-label', 'Rotatable 3D preview of current frame assembly');
+      designStatus.textContent = '3D assembly preview. Rotate or pinch to inspect both lenses, retainers and temples. Optical curvature is not measured.';
     } else {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -493,7 +564,8 @@ async function makeFrame(preview, experimental = false) {
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
       designStatus.textContent = (experimental ? 'UNVERIFIED experimental kit. ' : 'Measurement checks passed; physical fit unverified. ') + 'STL kit downloaded. Slice at 100% in millimetres, print a fit test and inspect lens retention before use.';
     }
-  } catch (error) { designStatus.textContent = error.message; }
+  } catch (error) { if (request === makeFrame.sequence) designStatus.textContent = error.message; }
+  finally { if (request === makeFrame.sequence) makeFrame.pending = false; }
 }
 
 document.getElementById('preview-frame').addEventListener('click', () => makeFrame(true));

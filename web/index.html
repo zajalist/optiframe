@@ -68,18 +68,21 @@
         <p class="panel-status" role="status">Capture one lens at a time on the marked sheet.</p>
       </section>
     </div>
-    <section class="design"><span class="eyebrow">02 / DESIGN + EXPORT</span><h2>Place both lenses for the wearer</h2><p>Enter measured monocular pupil distances and lens edge thickness. The marked optical centre of each lens must be set in its photo. The downloaded ZIP contains separate closed STL parts in millimetres.</p>
+    <section class="design"><span class="eyebrow">02 / DESIGN + EXPORT</span><h2>Place both lenses for the wearer</h2><p>Enter each measured monocular pupil distance and lens edge thickness. Mark each lens optical centre in its photo. Vertical offsets place those centres above or below a shared wearer baseline; positive means up. Confirm fitting heights with an eye care professional. The downloaded ZIP contains separate closed STL parts in millimetres.</p>
       <div class="design-inputs">
         <label>Left monocular PD <input id="left-pd" type="number" min="20" max="40" step="0.1" value="32"> mm</label>
         <label>Right monocular PD <input id="right-pd" type="number" min="20" max="40" step="0.1" value="32"> mm</label>
-        <label>Lens edge thickness <input id="edge-thickness" type="number" min="1" max="6" step="0.1" value="2.5"> mm</label>
+        <label>Left lens edge thickness <input id="left-edge-thickness" type="number" min="1" max="6" step="0.1" value="2.5"> mm</label>
+        <label>Right lens edge thickness <input id="right-edge-thickness" type="number" min="1" max="6" step="0.1" value="2.5"> mm</label>
+        <label>Left optical-centre height offset <input id="left-vertical-offset" type="number" min="-10" max="10" step="0.1" value="0"> mm</label>
+        <label>Right optical-centre height offset <input id="right-vertical-offset" type="number" min="-10" max="10" step="0.1" value="0"> mm</label>
         <label>Temple length <input id="temple-length" type="number" min="90" max="180" step="1" value="130"> mm</label>
         <label>Printer bed width <input id="bed-width" type="number" min="100" step="1" value="220"> mm</label>
         <label>Printer bed depth <input id="bed-depth" type="number" min="100" step="1" value="220"> mm</label>
       </div>
-      <div class="design-actions"><button id="preview-frame">Preview 3D front</button><button id="download-frame">Download measurement-checked STL kit</button><button id="download-experimental">Download UNVERIFIED experimental STL kit</button></div>
+      <div class="design-actions"><button id="preview-frame">Preview 3D assembly</button><button id="download-frame">Download measurement-checked STL kit</button><button id="download-experimental">Download UNVERIFIED experimental STL kit</button></div>
       <p id="design-status" role="status">Both contours, scales and optical centres are required.</p>
-      <div id="viewer" aria-label="Rotatable 3D preview of frame front"></div>
+      <div id="viewer" aria-label="Rotatable 3D preview of full frame assembly"></div>
     </section>
   </main>
   <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"}}</script>

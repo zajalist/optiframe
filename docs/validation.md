@@ -8,6 +8,7 @@ Use this as a lab notebook during the hackathon. Report observed measurements; n
 | --- | --- |
 | Date / device | TBD |
 | Lens identifiers and top marks | TBD |
+| Left/right measured edge thickness (mm) | TBD / TBD |
 | Provider and prescription verification for each lens | TBD |
 | Optical-centre marks / monocular pupil positions / fitting heights | TBD |
 | Wearer frame width / bridge or nose fit measurements | TBD |
@@ -42,6 +43,8 @@ Run synthetic calibration and browser state checks with `node --test web/calibra
 
 Local RTX 5070, protected FastAPI `/api/segment`, SAM2.1 small on CUDA: supplied 1280 × 720 video frames returned HTTP 200 in 8.88 s (IMG_1620 at 5 s) and 9.4 s (IMG_1621 at 8 s); prior visual inspection reported contours of 81 and 88 vertices. These observations demonstrate request success and latency only. No corresponding caliper dimensions or independently measured lens-edge errors are available.
 
+Visual check of the saved overlays: both green contours broadly follow the visible circular lens rim despite bright glare and marks on the background. The 1620 frame has a faint upper-left edge and highlights near the right edge; the 1621 frame has a bright top highlight and dirt visible through the lens. Those are useful stress cases for transparent-object segmentation, but a plausible overlay cannot show whether the chosen curve follows the true outer edge within 0.5 mm. Neither video frame contains the calibrated sheet in view, and there is no caliper ground truth. Treat these as **segmentation demonstrations only**, then repeat on the marker sheet with two independent captures for dimensional validation.
+
 ## Fit loop
 
 | Revision | Clearance / edge-thickness settings | Coupon result | Change made |
@@ -51,6 +54,8 @@ Local RTX 5070, protected FastAPI `/api/segment`, SAM2.1 small on CUDA: supplied
 Check that the lens seats without obvious forced bending, stays captured during gentle handling, and remains in its marked orientation. Record any crack, stress mark, or poor fit. Do not use a damaged lens for a wearable prototype.
 
 ## Wearer alignment and optical verification
+
+Record the two vertical offset inputs as positions of the **marked lens optical centres** relative to one wearer baseline (positive up). These offsets and monocular PD place the printed rims; they do not establish that the resulting lens power, fitting height or prism is appropriate. Confirm each value and the completed frame on the wearer with an eye care professional.
 
 | Eye | Lens prescription verified by provider? | Wearer's monocular pupil offset / fitting height (mm) | Lens optical-centre mark aligned? | Remaining concern |
 | --- | --- | --- | --- | --- |

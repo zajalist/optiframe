@@ -15,6 +15,15 @@ final class FrameProcessor {
     func save(frame: ARFrame, side: LensSide, kind: FrameKind,
               index: Int, folder: URL) throws -> SavedFrame {
         let name = String(format: "frame-%04d", index)
+        var completed = false
+        defer {
+            if !completed {
+                // A failed write must not leave an unreferenced partial frame in the ZIP.
+                for suffix in ["-original.jpg", "-enhanced.jpg", "-depth-f32le.bin", "-confidence-u8.bin"] {
+                    try? FileManager.default.removeItem(at: folder.appendingPathComponent(name + suffix))
+                }
+            }
+        }
         let image = CIImage(cvPixelBuffer: frame.capturedImage)
         guard let original = context.jpegRepresentation(of: image, colorSpace: colorSpace) else {
             throw ProcessingError.jpeg
@@ -53,6 +62,10 @@ final class FrameProcessor {
             try copyRows(depthBuffer, bytesPerPixel: 4)
                 .write(to: folder.appendingPathComponent(depthName!))
             if let confidence = depth.confidenceMap {
+                guard CVPixelBufferGetWidth(confidence) == depthWidth,
+                      CVPixelBufferGetHeight(confidence) == depthHeight else {
+                    throw ProcessingError.depth
+                }
                 confidenceName = "\(name)-confidence-u8.bin"
                 try copyRows(confidence, bytesPerPixel: 1)
                     .write(to: folder.appendingPathComponent(confidenceName!))
@@ -74,6 +87,7 @@ final class FrameProcessor {
             trackingValid: trackingValid,
             sharpness: quality.sharpness, clippedFraction: quality.clippedFraction
         )
+        completed = true
         return SavedFrame(frame: record, points: points)
     }
 
@@ -96,9 +110,14 @@ final class FrameProcessor {
         CVPixelBufferLockBaseAddress(buffer, .readOnly)
         defer { CVPixelBufferUnlockBaseAddress(buffer, .readOnly) }
         guard let base = CVPixelBufferGetBaseAddress(buffer) else { throw ProcessingError.depth }
+        let expectedFormat = bytesPerPixel == 4 ? kCVPixelFormatType_DepthFloat32 : kCVPixelFormatType_OneComponent8
+        guard CVPixelBufferGetPixelFormatType(buffer) == expectedFormat else { throw ProcessingError.depth }
         let width = CVPixelBufferGetWidth(buffer)
         let height = CVPixelBufferGetHeight(buffer)
         let stride = CVPixelBufferGetBytesPerRow(buffer)
+        guard width > 0, height > 0, stride >= width * bytesPerPixel else {
+            throw ProcessingError.depth
+        }
         var data = Data(capacity: width * height * bytesPerPixel)
         for y in 0..<height {
             let row = base.advanced(by: y * stride).assumingMemoryBound(to: UInt8.self)
@@ -160,7 +179,15 @@ final class FrameProcessor {
     }
 }
 
-enum ProcessingError: Error { case jpeg, depth }
+enum ProcessingError: LocalizedError {
+    case jpeg, depth
+    var errorDescription: String? {
+        switch self {
+        case .jpeg: "Could not encode the camera image. Try capturing again."
+        case .depth: "Could not read the depth buffer. Try capturing again."
+        }
+    }
+}
 
 enum DepthProjection {
     static func worldPoint(u: Float, v: Float, depth: Float,

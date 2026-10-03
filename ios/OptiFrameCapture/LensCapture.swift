@@ -21,6 +21,8 @@ enum FrameKind: String, CaseIterable, Identifiable, Codable {
 }
 
 struct CapturedFrame: Codable {
+    // JPEGs remain in ARKit sensor coordinates so depth and intrinsics align.
+    var imageOrientation = "sensor-landscape-right"
     let side: LensSide
     let kind: FrameKind
     let original: String
@@ -56,14 +58,22 @@ final class LensCapture: NSObject, ObservableObject, ARSessionDelegate {
     @Published private(set) var status = "Aim at a marked sheet; keep lens and sheet still."
     @Published private(set) var frameCount = 0
     @Published private(set) var depthAvailable = false
+    @Published private(set) var isBusy = false
 
     private let queue = DispatchQueue(label: "optiframe.capture.processing")
     private let processor = FrameProcessor()
     private var folder: URL?
     private var records: [CapturedFrame] = []
     private var points: [DepthPoint] = []
+    private var configured = false
+    private var needsNewLens = false
+    static let maximumFrames = 60
 
     func start() {
+        if configured, let configuration = session.configuration {
+            session.run(configuration)
+            return
+        }
         guard ARWorldTrackingConfiguration.isSupported else {
             status = "ARKit world tracking is unavailable on this iPhone."
             return
@@ -75,6 +85,7 @@ final class LensCapture: NSObject, ObservableObject, ARSessionDelegate {
         session.delegate = self
         session.delegateQueue = queue
         session.run(configuration, options: [.resetTracking, .removeExistingAnchors])
+        configured = true
         status = hasDepth
             ? "LiDAR ready. Capture empty and lens views, then a slow upright arc."
             : "Capture empty and lens views. Depth requires a LiDAR iPhone."
@@ -83,51 +94,80 @@ final class LensCapture: NSObject, ObservableObject, ARSessionDelegate {
     func stop() { session.pause() }
 
     func newLens() {
+        guard !isBusy else { return }
+        isBusy = true
         queue.async { [self] in
             records.removeAll()
             points.removeAll()
+            if let folder { try? FileManager.default.removeItem(at: folder) }
             folder = nil
             DispatchQueue.main.async {
                 self.frameCount = 0
+                self.isBusy = false
+                self.needsNewLens = false
+                self.configured = false
                 self.start()
             }
         }
     }
 
     func capture(side: LensSide, kind: FrameKind) {
+        guard !isBusy else { return }
+        guard !needsNewLens else {
+            status = "Tracking was interrupted. Export existing frames, then tap New lens."
+            return
+        }
+        guard frameCount < Self.maximumFrames else {
+            status = "60-frame limit reached. Export this lens before starting another."
+            return
+        }
         guard let frame = session.currentFrame else {
             status = "Camera is starting. Try again."
             return
         }
+        guard case .normal = frame.camera.trackingState else {
+            status = "Move slowly over the patterned sheet until tracking is ready."
+            return
+        }
+        isBusy = true
         status = "Saving frame…"
         queue.async { [self] in
             do {
                 if let first = records.first, first.side != side {
                     DispatchQueue.main.async {
+                        self.isBusy = false
                         self.status = "Export the \(first.side.rawValue) lens before capturing the other side."
                     }
                     return
                 }
                 let folder = try workingFolder()
                 let index = records.count + 1
-                let result = try processor.save(frame: frame, side: side, kind: kind,
-                                                index: index, folder: folder)
+                let result = try autoreleasepool {
+                    try processor.save(frame: frame, side: side, kind: kind,
+                                       index: index, folder: folder)
+                }
                 records.append(result.frame)
                 if kind == .arc { points.append(contentsOf: result.points) }
                 let emptyClipping = records.first { $0.kind == .empty }?.clippedFraction ?? 0
                 DispatchQueue.main.async {
+                    self.isBusy = false
                     self.frameCount = index
                     self.status = result.frame.clippedFraction > max(0.25, emptyClipping + 0.08)
                         ? "Saved. Bright clipping rose; try another angle."
                         : "Saved. Take another angle or export."
                 }
             } catch {
-                DispatchQueue.main.async { self.status = "Capture failed: \(error.localizedDescription)" }
+                DispatchQueue.main.async {
+                    self.isBusy = false
+                    self.status = "Capture failed: \(error.localizedDescription)"
+                }
             }
         }
     }
 
     func export(completion: @escaping (URL?) -> Void) {
+        guard !isBusy else { return }
+        isBusy = true
         status = "Packaging capture…"
         queue.async { [self] in
             do {
@@ -143,15 +183,31 @@ final class LensCapture: NSObject, ObservableObject, ARSessionDelegate {
                 encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
                 try encoder.encode(manifest).write(to: folder.appendingPathComponent("manifest.json"))
                 if !points.isEmpty { try savePLY(to: folder.appendingPathComponent("raw-cloud.ply")) }
+                let files = try FileManager.default.contentsOfDirectory(
+                    at: folder, includingPropertiesForKeys: [.fileSizeKey])
+                let sizes = try files.map { url -> UInt64 in
+                    let values = try url.resourceValues(forKeys: [.fileSizeKey])
+                    guard let size = values.fileSize, size >= 0 else { throw CaptureError.fileSize }
+                    return UInt64(size)
+                }
+                try ArchiveBudget.validateExpanded(fileSizes: sizes)
                 let zip = FileManager.default.temporaryDirectory
                     .appendingPathComponent("optiframe-\(UUID().uuidString).zip")
+                var keepZIP = false
+                defer { if !keepZIP { try? FileManager.default.removeItem(at: zip) } }
                 try FileManager.default.zipItem(at: folder, to: zip, shouldKeepParent: false)
+                let zipValues = try zip.resourceValues(forKeys: [.fileSizeKey])
+                guard let zipSize = zipValues.fileSize, zipSize >= 0 else { throw CaptureError.fileSize }
+                try ArchiveBudget.validateCompressed(bytes: UInt64(zipSize))
+                keepZIP = true
                 DispatchQueue.main.async {
+                    self.isBusy = false
                     self.status = "Capture exported. The contour still needs scale and review."
                     completion(zip)
                 }
             } catch {
                 DispatchQueue.main.async {
+                    self.isBusy = false
                     self.status = "Export failed: \(error.localizedDescription)"
                     completion(nil)
                 }
@@ -160,7 +216,17 @@ final class LensCapture: NSObject, ObservableObject, ARSessionDelegate {
     }
 
     func session(_ session: ARSession, didFailWithError error: Error) {
-        DispatchQueue.main.async { self.status = "ARKit error: \(error.localizedDescription)" }
+        DispatchQueue.main.async {
+            self.needsNewLens = true
+            self.status = "ARKit error: \(error.localizedDescription). Export, then start a New lens."
+        }
+    }
+
+    func sessionWasInterrupted(_ session: ARSession) {
+        DispatchQueue.main.async {
+            self.needsNewLens = true
+            self.status = "Camera interrupted. Export existing frames, then tap New lens."
+        }
     }
 
     private func workingFolder() throws -> URL {
@@ -173,7 +239,7 @@ final class LensCapture: NSObject, ObservableObject, ARSessionDelegate {
     }
 
     private func savePLY(to url: URL) throws {
-        var text = "ply\nformat ascii 1.0\nelement vertex \(points.count)\n"
+        var text = "ply\nformat ascii 1.0\ncomment units meters\ncomment ARKit world coordinates; raw scene depth may be background\nelement vertex \(points.count)\n"
         text += "property float x\nproperty float y\nproperty float z\nproperty uchar confidence\nend_header\n"
         for point in points {
             let p = point.position
@@ -183,4 +249,42 @@ final class LensCapture: NSObject, ObservableObject, ARSessionDelegate {
     }
 }
 
-private enum CaptureError: Error { case noFrames }
+private enum CaptureError: LocalizedError {
+    case noFrames, fileSize
+    var errorDescription: String? {
+        switch self {
+        case .noFrames: "Capture at least one frame before exporting."
+        case .fileSize: "Could not verify archive size. Free storage and try exporting again."
+        }
+    }
+}
+
+enum ArchiveBudget {
+    // Decimal bytes keep a margin below public import's 100 MB / 250 MB limits.
+    static let maximumCompressedBytes: UInt64 = 90_000_000
+    static let maximumExpandedBytes: UInt64 = 240_000_000
+
+    static func validateExpanded(fileSizes: [UInt64]) throws {
+        var total: UInt64 = 0
+        for size in fileSizes {
+            guard size <= maximumExpandedBytes - total else { throw ArchiveBudgetError.expanded }
+            total += size
+        }
+    }
+
+    static func validateCompressed(bytes: UInt64) throws {
+        guard bytes <= maximumCompressedBytes else { throw ArchiveBudgetError.compressed }
+    }
+}
+
+enum ArchiveBudgetError: LocalizedError {
+    case expanded, compressed
+    var errorDescription: String? {
+        let limit: String
+        switch self {
+        case .expanded: limit = "240 MB of capture files"
+        case .compressed: limit = "90 MB ZIP size"
+        }
+        return "This capture exceeds \(limit). Start a New lens and recapture fewer views (keep empty sheet, lens photo, and a short depth arc). All current frames are retained; no partial archive was shared."
+    }
+}

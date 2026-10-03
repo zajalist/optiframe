@@ -3,6 +3,46 @@ import simd
 @testable import OptiFrameCapture
 
 final class CaptureMathTests: XCTestCase {
+    func testArchiveBudgetBoundariesAndOverflow() {
+        XCTAssertNoThrow(try ArchiveBudget.validateExpanded(fileSizes: [100_000_000, 140_000_000]))
+        XCTAssertThrowsError(try ArchiveBudget.validateExpanded(fileSizes: [240_000_000, 1]))
+        XCTAssertThrowsError(try ArchiveBudget.validateExpanded(fileSizes: [UInt64.max]))
+        XCTAssertNoThrow(try ArchiveBudget.validateExpanded(fileSizes: []))
+        XCTAssertNoThrow(try ArchiveBudget.validateCompressed(bytes: 90_000_000))
+        XCTAssertThrowsError(try ArchiveBudget.validateCompressed(bytes: 90_000_001))
+    }
+
+    func testDepthProjectionUsesSensorAxesAndWorldTranslation() {
+        let intrinsics = simd_float3x3(columns: (
+            SIMD3<Float>(200, 0, 0), SIMD3<Float>(0, 100, 0), SIMD3<Float>(100, 50, 1)
+        ))
+        var pose = matrix_identity_float4x4
+        pose.columns.3 = SIMD4<Float>(1, 2, 3, 1)
+        let point = DepthProjection.worldPoint(
+            u: 75, v: 10, depth: 0.5,
+            depthWidth: 100, depthHeight: 25,
+            imageWidth: 200, imageHeight: 100,
+            intrinsics: intrinsics, cameraToWorld: pose
+        )
+        XCTAssertEqual(point.x, 1.125, accuracy: 0.0001)
+        XCTAssertEqual(point.y, 2.05, accuracy: 0.0001)
+        XCTAssertEqual(point.z, 2.5, accuracy: 0.0001)
+    }
+
+    func testClippingMeasuresCentralRegionAndRejectsMalformedImage() {
+        var image = [UInt8](repeating: 0, count: 8 * 8 * 4)
+        for y in 2..<6 {
+            for x in 2..<6 {
+                let i = (y * 8 + x) * 4
+                image[i] = 255
+                image[i + 1] = 255
+                image[i + 2] = 255
+            }
+        }
+        XCTAssertEqual(FrameQuality.measure(rgba: image, width: 8, height: 8).clippedFraction, 1)
+        XCTAssertEqual(FrameQuality.measure(rgba: [], width: 8, height: 8).clippedFraction, 1)
+    }
+
     func testDepthProjectsForwardAtImageCentre() {
         let intrinsics = simd_float3x3(columns: (
             SIMD3<Float>(100, 0, 0),

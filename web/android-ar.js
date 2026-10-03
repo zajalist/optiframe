@@ -42,16 +42,29 @@ if (typeof document !== "undefined") {
   const status = message => { $("status").textContent = message; };
   const ctx = $("depth-preview").getContext("2d");
   let session = null, capture = null, gl = null, space = null, lastSample = -Infinity, startTime = null;
-  let timeout = null, ending = false;
-  const diagnostics = () => { $("diagnostics").textContent = JSON.stringify({secureContext: isSecureContext, userAgent: navigator.userAgent, depthUsage: capture?.depthUsage, depthDataFormat: capture?.depthDataFormat, frames: capture?.frames.length || 0, missingDepthFrames: capture?.missingDepthFrames || 0, trackingLostFrames: capture?.trackingLostFrames || 0, referenceSpaceResets: capture?.referenceSpaceResets || 0, lastError: capture?.lastError}, null, 2); };
+  let timeout = null, ending = false, settingUp = false, framePending = false;
+  const diagnostics = () => { $("diagnostics").textContent = JSON.stringify({secureContext: isSecureContext, userAgent: navigator.userAgent, depthUsage: capture?.depthUsage, depthDataFormat: capture?.depthDataFormat, frames: capture?.frames.length || 0, rawDepthEntries: capture?.rawDepthEntries || 0, missingDepthFrames: capture?.missingDepthFrames || 0, trackingLostFrames: capture?.trackingLostFrames || 0, referenceSpaceResets: capture?.referenceSpaceResets || 0, stopReason: capture?.stopReason, lastError: capture?.lastError}, null, 2); };
   const exportButtons = () => { $("json").disabled = !capture?.frames.length || !!session; $("ply").disabled = $("json").disabled; };
 
   async function stop(message) {
     if (ending) return;
     ending = true;
+    if (capture) capture.stopReason = message || "Capture stopped during setup.";
     if (message) status(message);
-    try { await session?.end(); } catch (error) { status(`Could not end AR: ${error.message}. Use the browser's AR exit control.`); }
-    finally { ending = false; }
+    try { await session?.end(); } catch (error) {
+      if (capture) capture.lastError = `Could not end AR: ${error.message}`;
+      status(`Could not end AR: ${error.message}. Use the browser's AR exit control.`);
+    } finally {
+      ending = false;
+      if (session && capture && !framePending) scheduleFrame();
+      diagnostics();
+    }
+  }
+
+  function scheduleFrame() {
+    if (!session || framePending) return;
+    framePending = true;
+    session.requestAnimationFrame(onFrame);
   }
 
   function drawSamples(samples) {
@@ -64,8 +77,9 @@ if (typeof document !== "undefined") {
   }
 
   function onFrame(time, frame) {
+    framePending = false;
     if (!session || ending) return;
-    session.requestAnimationFrame(onFrame);
+    scheduleFrame();
     gl.bindFramebuffer(gl.FRAMEBUFFER, session.renderState.baseLayer.framebuffer);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -73,7 +87,7 @@ if (typeof document !== "undefined") {
     lastSample = time;
     try {
       const pose = frame.getViewerPose(space);
-      if (!pose) { capture.trackingLostFrames++; status("Tracking unavailable. Move slowly toward the patterned board."); return; }
+      if (!pose) { capture.trackingLostFrames++; status("Tracking unavailable. Move slowly toward the patterned board."); diagnostics(); return; }
       const views = [];
       for (const view of pose.views) {
         const depth = frame.getDepthInformation(view);
@@ -113,33 +127,59 @@ if (typeof document !== "undefined") {
   }
 
   $("start").addEventListener("click", async () => {
+    if (session || settingUp) return;
+    settingUp = true;
     $("start").disabled = true;
+    let activeSession = null, activeGL = null, sessionEnded = false;
+    const stillActive = () => !sessionEnded && session === activeSession;
+    const releaseGL = () => {
+      if (!activeGL) return;
+      activeGL.getExtension("WEBGL_lose_context")?.loseContext();
+      if (gl === activeGL) gl = null;
+      activeGL = null;
+    };
     try {
       session = await navigator.xr.requestSession("immersive-ar", {requiredFeatures: ["depth-sensing"], optionalFeatures: ["dom-overlay"], domOverlay: {root: $("overlay")}, depthSensing: {usagePreference: ["cpu-optimized"], dataFormatPreference: ["luminance-alpha", "float32"]}});
+      activeSession = session;
+      capture = null;
+      exportButtons(); diagnostics();
       session.addEventListener("end", () => {
-        clearTimeout(timeout); session = null; $("stop").disabled = true; $("start").disabled = false;
+        sessionEnded = true;
+        framePending = false;
+        if (capture && !capture.stopReason) capture.stopReason = "AR session ended by the browser or device.";
+        releaseGL();
+        clearTimeout(timeout); session = null; $("stop").disabled = true; $("start").disabled = settingUp;
         $("start").textContent = "Start new 15-second scan";
         exportButtons(); diagnostics();
-        if (!capture?.frames.length) status("Session ended without depth frames. Try an opaque object or continue with photos.");
+        if (capture?.stopReason) status(capture.stopReason);
+        else if (!capture?.frames.length) status("Session ended without depth frames. Try an opaque object or continue with photos.");
         else status(`Capture ended: ${capture.frames.length} depth frames. Download both files before starting again.${capture.lastError ? ` Error: ${capture.lastError}` : ""}`);
       }, {once: true});
       if (session.depthUsage !== "cpu-optimized" || !["luminance-alpha", "float32"].includes(session.depthDataFormat)) throw new Error("This device did not provide a supported CPU depth format");
       const canvas = document.createElement("canvas");
       gl = canvas.getContext("webgl", {xrCompatible: true, alpha: true});
+      activeGL = gl;
       if (!gl) throw new Error("WebGL is unavailable");
       await gl.makeXRCompatible();
+      if (!stillActive()) { releaseGL(); return; }
       session.updateRenderState({baseLayer: new XRWebGLLayer(session, gl)});
       space = await session.requestReferenceSpace("local");
+      if (!stillActive()) return;
       capture = {schema: "optiframe-webxr-depth-v1", createdAt: new Date().toISOString(), userAgent: navigator.userAgent, units: "meters", coordinateFrame: "WebXR local; right-handed; Y up; camera looks down -Z; column-major matrices", warning: "Experimental scene points; transparent lenses may return background. No lens measurement, board alignment, fusion, confidence or RGB capture.", depthUsage: session.depthUsage, depthDataFormat: session.depthDataFormat, sampleGrid: [32, 24], maxDepthMeters: 5, rawDepthEntries: 0, missingDepthFrames: 0, trackingLostFrames: 0, referenceSpaceResets: 0, frames: []};
       space.addEventListener("reset", () => { capture.referenceSpaceResets++; capture.lastError = "XR local reference space reset; capture stopped to prevent mixing coordinate frames"; void stop(capture.lastError); });
       startTime = performance.now(); lastSample = -Infinity;
       $("stop").disabled = false; exportButtons(); diagnostics();
       status("AR started. Move slowly. Capture ends automatically after 15 seconds.");
       timeout = setTimeout(() => void stop("15 seconds complete. Download JSON and PLY."), 15000);
-      session.requestAnimationFrame(onFrame);
+      scheduleFrame();
     } catch (error) {
+      if (sessionEnded) return;
       const message = `AR depth unavailable: ${error.name}: ${error.message}. Use Android Chrome, enable Google Play Services for AR, or continue with photos.`;
       await stop(); status(message); $("start").disabled = false; $("start").textContent = "Retry AR depth";
+    } finally {
+      settingUp = false;
+      $("start").disabled = !!session;
+      if (!session) releaseGL();
     }
   });
   $("stop").addEventListener("click", () => void stop("Capture stopped. Download both files."));

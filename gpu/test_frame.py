@@ -6,7 +6,7 @@ from zipfile import ZipFile
 import trimesh
 import numpy as np
 
-from frame import Settings, generate
+from frame import Settings, generate, preview
 
 
 def ellipse(rx, ry, count=96):
@@ -21,6 +21,66 @@ def bed_contact_area(mesh):
 
 
 class FrameTests(unittest.TestCase):
+    def test_independent_edge_thickness_and_optical_centre_height(self):
+        settings = Settings(32, 31, 2.5, 125, left_edge_thickness=1.4,
+                            right_edge_thickness=4.2, left_vertical_offset=3,
+                            right_vertical_offset=-2)
+        left, right = ellipse(25, 19), ellipse(23, 17)
+        assembly = preview(left, right, settings)
+        meshes = {part["name"]: trimesh.Trimesh(vertices=part["vertices"], faces=part["faces"])
+                  for part in assembly["meshes"]}
+        np.testing.assert_allclose(meshes["left-lens"].bounds,
+                                   [[-57, -16, 2.15], [-7, 22, 3.55]], atol=1e-4)
+        np.testing.assert_allclose(meshes["right-lens"].bounds,
+                                   [[8, -19, 2.15], [54, 15, 6.35]], atol=1e-4)
+        self.assertEqual(assembly["opticalCentres"], [[-32, 3, 2.15], [31, -2, 2.15]])
+        data, notes = generate(left, right, settings)
+        self.assertEqual(notes["lens_edge_thickness_mm"], {"left": 1.4, "right": 4.2})
+        self.assertEqual(notes["optical_centre_vertical_offset_mm"], {"left": 3, "right": -2})
+        with ZipFile(io.BytesIO(data)) as archive:
+            printed = {name: trimesh.load(io.BytesIO(archive.read(name + ".stl")), file_type="stl")
+                       for name in notes["parts"]}
+            for side, thickness in (("left", 1.4), ("right", 4.2)):
+                retainer = printed[side + "-retainer"]
+                self.assertAlmostEqual(retainer.bounds[0, 2], 2.3 + thickness, places=5)
+                np.testing.assert_allclose(retainer.bounds, meshes[side + "-retainer"].bounds, atol=1e-4)
+            face = printed["front"]
+            self.assertAlmostEqual(face.bounds[1, 2], 2.3 + 4.2, places=4)
+            for index, first in enumerate(printed):
+                for second in list(printed)[index + 1:]:
+                    intersection = trimesh.boolean.intersection(
+                        [printed[first], printed[second]], engine="manifold")
+                    self.assertLess(abs(intersection.volume), 1e-5, f"{first}/{second}")
+
+    def test_rejects_invalid_independent_fitting_values(self):
+        for changes, expected in (
+            ({"left_edge_thickness": float("nan")}, "edge thickness"),
+            ({"right_edge_thickness": 6.1}, "edge thickness"),
+            ({"left_vertical_offset": float("inf")}, "vertical offset"),
+            ({"right_vertical_offset": -10.1}, "vertical offset"),
+        ):
+            with self.subTest(changes=changes), self.assertRaisesRegex(ValueError, expected):
+                preview(ellipse(25, 19), ellipse(23, 17), Settings(32, 31, 2.5, 125, **changes))
+
+    def test_preview_matches_assembly_export_and_independent_lens_positions(self):
+        settings = Settings(32, 31, 2.5, 125)
+        left, right = ellipse(25, 19), ellipse(23, 17)
+        result = preview(left, right, settings)
+        meshes = {part["name"]: trimesh.Trimesh(vertices=part["vertices"], faces=part["faces"])
+                  for part in result["meshes"]}
+        self.assertEqual(len(meshes), 7)
+        archive_bytes, notes = generate(left, right, settings)
+        with ZipFile(io.BytesIO(archive_bytes)) as archive:
+            for name in notes["parts"]:
+                exported = trimesh.load(io.BytesIO(archive.read(name + ".stl")), file_type="stl")
+                np.testing.assert_allclose(meshes[name].bounds, exported.bounds, atol=1e-4)
+                self.assertAlmostEqual(meshes[name].volume, exported.volume, delta=0.02)
+        np.testing.assert_allclose(meshes["left-lens"].bounds, [[-57, -19, 2.15], [-7, 19, 4.65]])
+        np.testing.assert_allclose(meshes["right-lens"].bounds, [[8, -17, 2.15], [54, 17, 4.65]])
+        self.assertEqual(result["opticalCentres"], [[-32, 0, 2.15], [31, 0, 2.15]])
+        # Preview remains available to inspect an assembly before choosing a larger bed.
+        self.assertEqual(len(preview(left, right, Settings(32, 31, 2.5, 125, 150, 70))["meshes"]), 7)
+
     def test_asymmetric_kit_has_watertight_parts(self):
         archive_bytes, notes = generate(ellipse(25, 19), ellipse(23, 17),
                                         Settings(32, 31, 2.5, 125))

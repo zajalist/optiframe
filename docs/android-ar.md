@@ -47,6 +47,18 @@ node --check web/android-ar.js
 
 These checks do not validate physical depth scale or phone WebXR support. Run the opaque-object test against a known size and distance before scanning lenses.
 
+## Real-device field checklist
+
+No ARCore phone has been validated yet. The Node checks use simulated sessions and cannot establish browser support, depth scale, camera behavior or physical accuracy.
+
+- Record the exact phone model, Android build, Chrome version, Google Play Services for AR version, page URL and whether HTTPS or USB localhost forwarding was used. Copy the diagnostics before starting and after each scan; report permission denials and exact error text.
+- Start with an opaque object of known dimensions beside the patterned board. Record caliper dimensions, phone-to-object distance, board offset, lighting and a photo of the arrangement. Hold everything fixed except the phone. Run at least three scans before testing the clear lens and empty stand with the same arrangement.
+- For every scan, report elapsed time, stop reason, frame count, raw depth entry count, selected depth usage/format, missing depth frames, tracking lost frames, reference-space resets and valid point count. Preserve JSON and PLY together with a scan identifier. Report whether points follow the object, board or neither; report missing depth and drift without interpreting them as lens geometry.
+- Exercise manual stop, browser AR exit during startup, leaving/returning to Chrome, tracking loss/recovery and two consecutive scans. Confirm the Start button recovers, no capture continues after exit, diagnostics change during tracking loss and each download contains the intended scan. Where a limit is reached, retain its stop reason from JSON and the page status.
+- Confirm downloads are nonempty and readable: JSON raw lengths equal width × height for each view, sample grids contain 768 entries, transforms contain 16 values and PLY vertex count equals exported non-null points. Compare the opaque object's cloud and known distance before making any depth-scale claim. Record mismatches and attach the original files.
+
+Run the focused numerical and simulated lifecycle suite with `node --test web/android-ar.test.cjs`, then `node --check web/android-ar.js`. The suite covers projection/pose math, invalid depth, PLY counts, session exit during both asynchronous setup stages, context cleanup, tracking diagnostics and the memory-limit stop message. Passing it does not validate an Android device.
+
 ## API references
 
 - [Google WebXR requirements and secure port forwarding](https://developers.google.com/ar/develop/webxr/requirements)

@@ -22,9 +22,17 @@ class Settings:
     temple_length: float
     bed_width: float = 220
     bed_depth: float = 220
+    left_edge_thickness: float | None = None
+    right_edge_thickness: float | None = None
+    left_vertical_offset: float = 0
+    right_vertical_offset: float = 0
+
+    def edge_thicknesses(self) -> tuple[float, float]:
+        return (self.edge_thickness if self.left_edge_thickness is None else self.left_edge_thickness,
+                self.edge_thickness if self.right_edge_thickness is None else self.right_edge_thickness)
 
 
-def _polygon(points: list[list[float]], sign: int, pd: float) -> Polygon:
+def _polygon(points: list[list[float]], sign: int, pd: float, vertical_offset: float = 0) -> Polygon:
     if not 12 <= len(points) <= 3000:
         raise ValueError("Each lens needs 12–3000 reviewed outline points")
     array = np.asarray(points, dtype=float)
@@ -34,6 +42,7 @@ def _polygon(points: list[list[float]], sign: int, pd: float) -> Polygon:
         raise ValueError("Lens outline exceeds the 100 mm coordinate limit")
     array[:, 0] += sign * pd
     array[:, 1] *= -1
+    array[:, 1] += vertical_offset
     polygon = Polygon(array)
     if not polygon.is_valid or polygon.area < 300 or polygon.area > 4000:
         raise ValueError("Lens outline must be a simple, plausible closed shape")
@@ -151,22 +160,29 @@ def _build_plate(parts: dict[str, trimesh.Trimesh], width: float,
     return trimesh.util.concatenate(packed)
 
 
-def generate(left: list[list[float]], right: list[list[float]], settings: Settings) -> tuple[bytes, dict]:
-    if not (20 <= settings.left_pd <= 40 and 20 <= settings.right_pd <= 40):
+def build_parts(left: list[list[float]], right: list[list[float]], settings: Settings):
+    """Build printable solids in their shared assembly coordinates."""
+    if not (np.isfinite([settings.left_pd, settings.right_pd]).all() and
+            20 <= settings.left_pd <= 40 and 20 <= settings.right_pd <= 40):
         raise ValueError("Monocular pupil distances must each be 20–40 mm")
-    if not 1.0 <= settings.edge_thickness <= 6.0:
-        raise ValueError("Measured lens edge thickness must be 1–6 mm")
-    if not 90 <= settings.temple_length <= 180:
+    edge_thicknesses = settings.edge_thicknesses()
+    if not (np.isfinite(edge_thicknesses).all() and
+            all(1.0 <= thickness <= 6.0 for thickness in edge_thicknesses)):
+        raise ValueError("Each measured lens edge thickness must be 1–6 mm")
+    offsets = (settings.left_vertical_offset, settings.right_vertical_offset)
+    if not (np.isfinite(offsets).all() and all(-10 <= offset <= 10 for offset in offsets)):
+        raise ValueError("Each optical-centre vertical offset must be −10 to 10 mm")
+    if not np.isfinite(settings.temple_length) or not 90 <= settings.temple_length <= 180:
         raise ValueError("Temple length must be 90–180 mm")
-    lens_l = _polygon(left, -1, settings.left_pd)
-    lens_r = _polygon(right, 1, settings.right_pd)
+    lens_l = _polygon(left, -1, settings.left_pd, settings.left_vertical_offset)
+    lens_r = _polygon(right, 1, settings.right_pd, settings.right_vertical_offset)
     if lens_l.bounds[2] + 2 > lens_r.bounds[0]:
         raise ValueError("The measured lenses overlap at these pupil distances")
 
     lenses = [lens_l, lens_r]
     centres = [_fastener_centres(lens) for lens in lenses]
     front_z = 2.0
-    seat_z = settings.edge_thickness + 0.3
+    seat_z = [thickness + 0.3 for thickness in edge_thicknesses]
     outer = [lens.buffer(5.3, join_style=1) for lens in lenses]
     if outer[0].distance(outer[1]) < 0.2:
         raise ValueError("The outer rims and rear retainers overlap or have less than 0.2 mm clearance at these pupil distances")
@@ -201,22 +217,22 @@ def generate(left: list[list[float]], right: list[list[float]], settings: Settin
     face = _extrude(face_shape, front_z)
 
     # An outer rail surrounds the lens edge. The rear retainers press against its back.
-    rails = [_extrude(o.difference(lens.buffer(0.2)), seat_z, front_z)
-             for o, lens in zip(outer, lenses)]
+    rails = [_extrude(o.difference(lens.buffer(0.2)), seat, front_z)
+             for o, lens, seat in zip(outer, lenses, seat_z)]
     hinge_lugs = []
     for x, y in hinge_centres:
         hinge_lugs.append(_block((8, 8, 6), (x, y, 3)))
     face = _union([face] + rails + hinge_lugs)
     all_centres = centres[0] + centres[1]
-    face = _holes(face, all_centres, 1.1, -0.5, front_z + seat_z + 1)
+    face = _holes(face, all_centres, 1.1, -0.5, front_z + max(seat_z) + 1)
     for x, y in hinge_centres:
         face = trimesh.boolean.difference([face, _hinge_bore(x, y, 3, 9)],
                                           engine="manifold")
 
     retainers = []
-    for rim, group in zip(rim_shapes, centres):
-        retainer = _extrude(rim, 1.8, front_z + seat_z)
-        retainers.append(_holes(retainer, group, 1.1, front_z + seat_z - 0.5, 2.8))
+    for rim, group, seat in zip(rim_shapes, centres, seat_z):
+        retainer = _extrude(rim, 1.8, front_z + seat)
+        retainers.append(_holes(retainer, group, 1.1, front_z + seat - 0.5, 2.8))
 
     temples = [
         _temple(-1, settings.temple_length, *hinge_centres[0]),
@@ -228,12 +244,12 @@ def generate(left: list[list[float]], right: list[list[float]], settings: Settin
         if not mesh.is_watertight or mesh.volume <= 0:
             raise RuntimeError(f"{name} mesh failed watertight validation")
 
-    plate = _build_plate(parts, settings.bed_width, settings.bed_depth)
     notes = {
         "status": "experimental; lens fit and hinge strength require physical validation",
         "units": "millimetres", "parts": list(parts),
         "hardware": "Eight M2 through fasteners for lens retainers; two M2 hinge screws and matching nuts. Check actual screw length and clearance.",
-        "lens_edge_thickness_mm": settings.edge_thickness,
+        "lens_edge_thickness_mm": {"left": edge_thicknesses[0], "right": edge_thicknesses[1]},
+        "optical_centre_vertical_offset_mm": {"left": offsets[0], "right": offsets[1]},
         "warning": "Measure lens power and optical centres with an eye care professional. Test a lens fit coupon and verify slicer dimensions before use.",
         "bedFit": True,
         "build_plate": "plate.stl",
@@ -242,6 +258,30 @@ def generate(left: list[list[float]], right: list[list[float]], settings: Settin
         "assembly": "Individual STLs share assembly coordinates: retainers begin at the rear lens-seat plane; hinge axes lie 8 mm beyond outer rim bounds at Z=3 mm.",
         "supports": "Review temple fork/block overhangs and horizontal hinge bores in the slicer; support-free printing is not validated.",
     }
+    return parts, lenses, notes
+
+
+def preview(left: list[list[float]], right: list[list[float]], settings: Settings) -> dict:
+    """Assembly only: skip print-bed packing, compression and STL round trips."""
+    parts, lenses, _ = build_parts(left, right, settings)
+
+    def mesh_data(name, mesh, kind):
+        return {"name": name, "kind": kind,
+                "vertices": np.round(mesh.vertices, 5).tolist(), "faces": mesh.faces.tolist()}
+
+    meshes = [mesh_data(name, mesh, "printed") for name, mesh in parts.items()]
+    for side, lens, thickness in zip(("left", "right"), lenses, settings.edge_thicknesses()):
+        meshes.append(mesh_data(side + "-lens", _extrude(lens, thickness, 2.15), "lens"))
+    return {"schemaVersion": 1, "units": "millimetres", "meshes": meshes,
+            "opticalCentres": [[-settings.left_pd, settings.left_vertical_offset, 2.15],
+                               [settings.right_pd, settings.right_vertical_offset, 2.15]],
+            "lensRepresentation": "Flat outlines with measured edge thickness; optical curvature is not measured",
+            "bedFit": "Not checked in preview; checked during STL export"}
+
+
+def generate(left: list[list[float]], right: list[list[float]], settings: Settings) -> tuple[bytes, dict]:
+    parts, _, notes = build_parts(left, right, settings)
+    plate = _build_plate(parts, settings.bed_width, settings.bed_depth)
     stream = io.BytesIO()
     with ZipFile(stream, "w", ZIP_DEFLATED) as archive:
         for name, mesh in parts.items():

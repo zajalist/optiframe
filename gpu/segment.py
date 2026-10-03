@@ -28,22 +28,27 @@ _processor = None
 _model_lock = threading.Lock()
 
 
-class VideoBodyLimit:
-    """Bound multipart bytes before Starlette spools the upload."""
+class CaptureBodyLimit:
+    """Bound multipart bytes before Starlette spools phone uploads."""
 
     def __init__(self, app):
         self.app = app
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] != "http" or scope["path"] != "/api/video-frames":
+        limits = {"/api/video-frames": VIDEO_MAX_BYTES,
+                  "/api/import": 100_000_000,
+                  "/api/segment": 48_000_000}
+        if scope["type"] != "http" or scope["path"] not in limits:
             return await self.app(scope, receive, send)
-        limit = VIDEO_MAX_BYTES + 64_000  # Multipart headers and boundaries.
+        limit = limits[scope["path"]] + 64_000  # Multipart headers and boundaries.
+        detail = ("Video request exceeds 100 MB" if scope["path"] == "/api/video-frames"
+                  else "Capture request exceeds upload limit")
         headers = dict(scope.get("headers", []))
         try:
             length = int(headers.get(b"content-length", b"0"))
         except ValueError:
             length = 0
-        rejection = Response('Video request exceeds 100 MB', status_code=413)
+        rejection = Response(detail, status_code=413)
         if length > limit:
             return await rejection(scope, receive, send)
         total = 0
@@ -57,7 +62,7 @@ class VideoBodyLimit:
                 exceeded = True
                 # Starlette closes partial upload files only for parser errors.
                 # bounded_send restores 413 after its parser error becomes a 400.
-                raise MultiPartException("Video request exceeds 100 MB")
+                raise MultiPartException(detail)
             return message
 
         async def bounded_send(message):
@@ -69,7 +74,7 @@ class VideoBodyLimit:
         await self.app(scope, bounded_receive, bounded_send)
 
 
-app.add_middleware(VideoBodyLimit)
+app.add_middleware(CaptureBodyLimit)
 
 
 @app.middleware("http")
@@ -184,7 +189,9 @@ def sam_mask(image: np.ndarray, box: tuple[int, int, int, int]) -> np.ndarray:
 def inspect_capture(data: bytes) -> dict:
     with ZipFile(BytesIO(data)) as archive:
         files = archive.infolist()
-        if len(files) > 100 or sum(item.file_size for item in files) > 250_000_000:
+        # Sixty native frames can each include original/enhanced JPEG, depth and
+        # confidence files, plus the manifest and the sampled point cloud.
+        if len(files) > 300 or sum(item.file_size for item in files) > 250_000_000:
             raise ValueError("Capture archive is too large")
         manifest = json.loads(archive.read("manifest.json"))
         if manifest.get("schemaVersion") != 1:
@@ -365,16 +372,11 @@ def frame(payload: dict) -> Response:
 
 
 @app.post("/api/frame-preview")
-def frame_preview(payload: dict) -> Response:
-    from frame import Settings, generate
+def frame_preview(payload: dict) -> dict:
+    from frame import Settings, preview
 
     try:
-        archive_bytes, notes = generate(payload["left"], payload["right"],
-                                         Settings(**payload["settings"]))
-        if not notes["bedFit"]:
-            raise ValueError("A part exceeds the selected printer bed")
-        with ZipFile(BytesIO(archive_bytes)) as archive:
-            return Response(archive.read("front.stl"), media_type="model/stl")
+        return preview(payload["left"], payload["right"], Settings(**payload["settings"]))
     except (KeyError, TypeError, ValueError) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 

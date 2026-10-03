@@ -18,11 +18,16 @@ struct CaptureView: View {
                 ForEach(LensSide.allCases) { value in Text(value.rawValue).tag(value) }
             }
             .pickerStyle(.segmented)
+            .disabled(capture.isBusy)
 
             Picker("View", selection: $kind) {
                 ForEach(FrameKind.allCases) { value in Text(value.title).tag(value) }
             }
             .pickerStyle(.segmented)
+            .disabled(capture.isBusy)
+
+            Text("Keep all four scale markers visible. Verify the printed ruler. If glare hides the rim, use oblique side lighting and retake; enhanced images cannot restore clipped detail.")
+                .font(.caption)
 
             Text(capture.status)
                 .font(.footnote)
@@ -34,16 +39,17 @@ struct CaptureView: View {
             HStack {
                 Button("Capture frame") { capture.capture(side: side, kind: kind) }
                     .buttonStyle(.borderedProminent)
+                    .disabled(capture.isBusy)
                 Button("Export") {
                     capture.export { url in
                         if let url { export = CaptureExport(url: url) }
                     }
                 }
                 .buttonStyle(.bordered)
-                .disabled(capture.frameCount == 0)
+                .disabled(capture.frameCount == 0 || capture.isBusy)
                 Button("New lens") { capture.newLens() }
                     .buttonStyle(.bordered)
-                    .disabled(capture.frameCount == 0)
+                    .disabled(capture.isBusy)
             }
         }
         .padding()
