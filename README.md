@@ -21,6 +21,7 @@ The core proof is **verified lenses + wearer measurements -> two independent len
 ## Project notes
 
 - [Research and evidence](docs/research.md) — optical and physical constraints, source evidence, and decisions.
+- [Lens capture pipeline](docs/lens-capture-pipeline.md) — low-cost kit, transparent-edge extraction, point-cloud decision, and test gates.
 - [Hackathon build plan](docs/build-plan.md) — scope, architecture, order of work, and demo.
 - [Validation protocol](docs/validation.md) — concrete checks and pass/fail evidence.
 
