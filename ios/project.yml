@@ -14,7 +14,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.zajalist.optiframe.capture
         GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_NSCameraUsageDescription: OptiFrame records lens photos and optional depth for frame fitting.
+        INFOPLIST_KEY_NSCameraUsageDescription: OptiFrame records lens photos and optional depth, and estimates face measurements when you choose Face measurements.
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         TARGETED_DEVICE_FAMILY: 1
     dependencies:

@@ -2,6 +2,14 @@
 
 This is OptiFrame's own SwiftUI/ARKit capture app. It records **one lens per ZIP**. Use the marked capture sheet and verify its printed scale with a ruler before measuring a lens in the web app.
 
+## Experimental face fitting
+
+Before capturing a lens, choose **Face measurements** for the optional front-camera ARKit estimate. Hold still and face the camera; a stable capture completes automatically. Export the JSON and import it in the web fitting page, or enter provider measurements manually. Left/right refer to the wearer. The estimate uses ARKit eye-transform origins and must be verified by an eye-care provider; it is not clinical pupil metrology.
+
+Support is checked on device. AR face tracking does not necessarily imply TrueDepth hardware. The face session pauses when iOS reports serious/critical thermal pressure, and clears partial estimates after tracking loss or backgrounding. It never saves or uploads face photos/meshes. Face entry is unavailable during an existing lens session to keep tracking coordinates separate.
+
+See [capabilities, schema and validation limits](../docs/face-fitting.md). This feature still needs an Xcode build and physical iPhone validation; it is not accessible through Safari's camera API.
+
 ## Capture sequence
 
 1. Select left or right. Put the empty marked sheet under a fixed phone and save an **Empty sheet** frame.

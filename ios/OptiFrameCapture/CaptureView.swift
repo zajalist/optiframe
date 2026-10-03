@@ -9,6 +9,7 @@ struct CaptureView: View {
     @State private var mode = CaptureMode.photo
     @State private var export: CaptureExport?
     @State private var reviewing = false
+    @State private var faceFitting = false
     @State private var gpuServer = ""
     @State private var gpuToken = ""
     @Environment(\.scenePhase) private var scenePhase
@@ -22,6 +23,13 @@ struct CaptureView: View {
                 Text(capture.depthAvailable ? "LiDAR" : "RGB + pose")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Button("Face measurements") {
+                capture.stop()
+                faceFitting = true
+            }
+            .buttonStyle(.bordered)
+            .disabled(capture.isBusy || capture.isRecording || capture.frameCount > 0)
+            .accessibilityHint("Available before a lens session. Export existing lens frames and start a new lens first.")
             CameraPreview(session: capture.session, contour: [],
                           showBox: mode == .liveSegmentation)
                 .frame(height: 260)
@@ -112,6 +120,9 @@ struct CaptureView: View {
         }
         .onChange(of: mode) { _, _ in capture.stopSegmentation() }
         .sheet(item: $export) { item in ShareSheet(url: item.url) }
+        .fullScreenCover(isPresented: $faceFitting, onDismiss: {
+            if scenePhase == .active { capture.start() }
+        }) { FaceFitView() }
         .sheet(isPresented: $reviewing) {
             NavigationStack {
                 ScrollView {
