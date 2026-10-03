@@ -2,4 +2,3 @@ Saved/
 node_modules/
 dist/
 .env*
-*.stl
