@@ -24,6 +24,39 @@ function measure(points, mmPerPixel) {
   };
 }
 
+function sheetHomography(corners) {
+  if (corners.length !== 4) return null;
+  const targets = [[0, 0], [100, 0], [100, 70], [0, 70]];
+  const rows = [];
+  corners.forEach(([x, y], index) => {
+    const [u, v] = targets[index];
+    rows.push([x, y, 1, 0, 0, 0, -u * x, -u * y, u]);
+    rows.push([0, 0, 0, x, y, 1, -v * x, -v * y, v]);
+  });
+  for (let col = 0; col < 8; col++) {
+    let pivot = col;
+    for (let row = col + 1; row < 8; row++) if (Math.abs(rows[row][col]) > Math.abs(rows[pivot][col])) pivot = row;
+    if (Math.abs(rows[pivot][col]) < 1e-8) throw new Error('Sheet markers are too close or crossed. Tap them again in order.');
+    [rows[col], rows[pivot]] = [rows[pivot], rows[col]];
+    const scale = rows[col][col];
+    for (let k = col; k <= 8; k++) rows[col][k] /= scale;
+    for (let row = 0; row < 8; row++) {
+      if (row === col) continue;
+      const factor = rows[row][col];
+      for (let k = col; k <= 8; k++) rows[row][k] -= factor * rows[col][k];
+    }
+  }
+  return rows.map(row => row[8]);
+}
+
+function project(point, h) {
+  const [x, y] = point;
+  const denominator = h[6] * x + h[7] * y + 1;
+  if (Math.abs(denominator) < 1e-8) throw new Error('Perspective calibration is unstable. Retake the sheet photo.');
+  return [(h[0] * x + h[1] * y + h[2]) / denominator,
+          (h[3] * x + h[4] * y + h[5]) / denominator];
+}
+
 class LensPanel {
   constructor(element) {
     this.el = element;
@@ -37,11 +70,14 @@ class LensPanel {
     this.reference = element.querySelector('.reference-mm');
     this.scaleStatus = element.querySelector('.scale-status');
     this.centreStatus = element.querySelector('.centre-status');
+    this.markerStatus = element.querySelector('.marker-status');
     this.photo = null;
     this.empty = null;
     this.bitmap = null;
     this.points = [];
     this.scalePoints = [];
+    this.markerPoints = [];
+    this.homography = null;
     this.opticalCentre = null;
     this.mmPerPixel = null;
     this.box = null;
@@ -60,7 +96,7 @@ class LensPanel {
       this.message(this.empty ? 'Empty-sheet photo loaded. Propose the lens edge.' : 'Empty-sheet photo removed.');
     });
     this.el.querySelector('.zip-input').addEventListener('change', event => this.loadArchive(event.target.files[0]));
-    for (const mode of ['trace', 'box', 'scale', 'optical']) {
+    for (const mode of ['trace', 'box', 'markers', 'scale', 'optical']) {
       this.el.querySelector(`.${mode}`).addEventListener('click', () => this.setMode(this.mode === mode ? null : mode));
     }
     this.el.querySelector('.propose').addEventListener('click', () => this.propose());
@@ -113,6 +149,8 @@ class LensPanel {
       this.points = [];
       this.box = null;
       this.scalePoints = [];
+      this.markerPoints = [];
+      this.homography = null;
       this.opticalCentre = null;
       this.mmPerPixel = null;
       this.history = [];
@@ -124,10 +162,11 @@ class LensPanel {
 
   setMode(mode) {
     this.mode = mode;
-    for (const name of ['trace', 'box', 'scale', 'optical']) this.el.querySelector(`.${name}`).classList.toggle('active', name === mode);
+    for (const name of ['trace', 'box', 'markers', 'scale', 'optical']) this.el.querySelector(`.${name}`).classList.toggle('active', name === mode);
     if (mode === 'trace') this.message('Tap around the outer lens edge in order. Tap Trace edge again when done.');
     if (mode === 'box') this.message('Drag a box around the lens to guide the GPU proposal.');
     if (mode === 'scale') this.message('Tap two ends of a known printed distance, then enter its length in mm.');
+    if (mode === 'markers') this.message('Tap sheet markers in order: top-left, top-right, bottom-right, bottom-left. Printed span: 100 × 70 mm.');
     if (mode === 'optical') this.message('Tap the lens optical centre marked by the eye care provider.');
   }
 
@@ -159,6 +198,23 @@ class LensPanel {
       if (this.scalePoints.length >= 2) this.scalePoints = [];
       this.scalePoints.push(point);
       this.updateScale();
+      this.render();
+    } else if (this.mode === 'markers') {
+      if (this.markerPoints.length >= 4) this.markerPoints = [];
+      this.markerPoints.push(point);
+      if (this.markerPoints.length === 4) {
+        try {
+          this.homography = sheetHomography(this.markerPoints);
+          this.markerStatus.textContent = 'Perspective calibrated to 100 × 70 mm sheet';
+          this.message('Four markers set. Check the outline and optical centre.');
+        } catch (error) {
+          this.homography = null;
+          this.markerStatus.textContent = error.message;
+        }
+      } else {
+        this.homography = null;
+        this.markerStatus.textContent = `${this.markerPoints.length} of 4 markers set`;
+      }
       this.render();
     } else if (this.mode === 'optical') {
       this.opticalCentre = point;
@@ -219,7 +275,8 @@ class LensPanel {
   }
 
   updateMeasurement() {
-    const result = measure(this.points, this.mmPerPixel);
+    const transformed = this.homography ? this.points.map(point => project(point, this.homography)) : this.points;
+    const result = measure(transformed, this.homography ? 1 : this.mmPerPixel);
     this.size.textContent = result ? `${result.width.toFixed(1)} × ${result.height.toFixed(1)} mm` : 'Awaiting reviewed contour + scale';
     if (result) this.size.title = `Perimeter ${result.perimeter.toFixed(1)} mm; area ${result.area.toFixed(1)} mm². Flat photo measurement only.`;
   }
@@ -294,6 +351,11 @@ class LensPanel {
     }
     drawPath(this.scalePoints, '#ffae70');
     this.scalePoints.forEach(([x, y]) => { ctx.beginPath(); ctx.arc(x, y, width * 2, 0, Math.PI * 2); ctx.fillStyle = '#ffae70'; ctx.fill(); });
+    drawPath(this.markerPoints, '#79d7ef', this.markerPoints.length === 4);
+    this.markerPoints.forEach(([x, y], index) => {
+      ctx.beginPath(); ctx.arc(x, y, width * 2.5, 0, Math.PI * 2); ctx.fillStyle = '#79d7ef'; ctx.fill();
+      ctx.fillText(String(index + 1), x + width * 3, y - width * 3);
+    });
     if (this.opticalCentre) {
       const [x, y] = this.opticalCentre;
       ctx.strokeStyle = '#ff7bb5'; ctx.lineWidth = width;
@@ -304,11 +366,14 @@ class LensPanel {
   }
 
   millimetreOutline() {
-    if (this.points.length < 12 || !this.mmPerPixel || !this.opticalCentre) return null;
-    return this.points.map(([x, y]) => [
-      Number(((x - this.opticalCentre[0]) * this.mmPerPixel).toFixed(3)),
-      Number(((y - this.opticalCentre[1]) * this.mmPerPixel).toFixed(3)),
-    ]);
+    if (this.points.length < 12 || (!this.mmPerPixel && !this.homography) || !this.opticalCentre) return null;
+    const origin = this.homography ? project(this.opticalCentre, this.homography) : this.opticalCentre;
+    return this.points.map(point => {
+      const position = this.homography ? project(point, this.homography) : point;
+      const scale = this.homography ? 1 : this.mmPerPixel;
+      return [Number(((position[0] - origin[0]) * scale).toFixed(3)),
+              Number(((position[1] - origin[1]) * scale).toFixed(3))];
+    });
   }
 }
 
@@ -319,7 +384,7 @@ const number = id => Number(document.getElementById(id).value);
 function framePayload() {
   const left = leftPanel.millimetreOutline();
   const right = rightPanel.millimetreOutline();
-  if (!left || !right) throw new Error('Each lens needs at least 12 contour points, a confirmed scale and an optical centre.');
+  if (!left || !right) throw new Error('Each lens needs at least 12 contour points, a sheet calibration or two-point scale, and an optical centre.');
   return { left, right, settings: {
     left_pd: number('left-pd'), right_pd: number('right-pd'),
     edge_thickness: number('edge-thickness'), temple_length: number('temple-length'),
@@ -357,4 +422,4 @@ async function makeFrame(preview) {
 
 document.getElementById('preview-frame').addEventListener('click', () => makeFrame(true));
 document.getElementById('download-frame').addEventListener('click', () => makeFrame(false));
-export { distance, polygonArea, measure };
+export { distance, polygonArea, measure, sheetHomography, project };

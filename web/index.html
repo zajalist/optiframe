@@ -15,10 +15,10 @@
   <main>
     <section class="intro">
       <div><span class="eyebrow">01 / MEASURE</span><h1>Two lenses.<br><em>One made-to-fit frame.</em></h1></div>
-      <p>Load each lens photo or an iPhone capture ZIP. Compare the empty sheet, inspect the proposed edge, and set a real-world scale. Every contour stays editable.</p>
+      <p>Load each lens photo or an iPhone capture ZIP. Compare the empty sheet, inspect the proposed edge, and calibrate the photo with four sheet markers. Every contour stays editable.</p>
     </section>
 
-    <div class="notice">Experimental prototype: check the printed reference, lens edge thickness and optical centres with an eye care professional. Print a fit test and verify both hinges before using the frame.</div>
+    <div class="notice">Print the <a href="/calibration-sheet.svg" target="_blank" rel="noopener">100 × 70 mm calibration sheet</a> at 100% and verify its dimensions with a ruler. Experimental prototype: check lens edge thickness and optical centres with an eye care professional. Print a fit test and verify both hinges before use.</div>
 
     <div class="panels">
       <section class="lens-panel" data-side="left">
@@ -31,11 +31,12 @@
         <div class="canvas-wrap"><canvas aria-label="Left lens image and editable contour"></canvas><span class="canvas-placeholder">Add a capture to begin</span></div>
         <div class="toolbar">
           <button class="propose">Propose edge</button><button class="trace">Trace edge</button>
-          <button class="box">Set lens box</button><button class="scale">Set scale</button><button class="optical">Set optical centre</button>
+          <button class="box">Set lens box</button><button class="markers">4 sheet markers</button><button class="scale">2-point scale</button><button class="optical">Set optical centre</button>
           <button class="undo">Undo</button><button class="clear">Clear</button>
         </div>
         <select class="proposal-select" aria-label="Contour proposal" hidden></select>
         <div class="scale-row"><label>Reference length <input class="reference-mm" type="number" min="1" step="0.1" value="50"> mm</label><span class="scale-status">Scale not set</span></div>
+        <p class="marker-status">Four-marker perspective calibration recommended</p>
         <p class="centre-status">Optical centre not set</p>
         <p class="panel-status" role="status">Capture one lens at a time on the marked sheet.</p>
       </section>
@@ -50,11 +51,12 @@
         <div class="canvas-wrap"><canvas aria-label="Right lens image and editable contour"></canvas><span class="canvas-placeholder">Add a capture to begin</span></div>
         <div class="toolbar">
           <button class="propose">Propose edge</button><button class="trace">Trace edge</button>
-          <button class="box">Set lens box</button><button class="scale">Set scale</button><button class="optical">Set optical centre</button>
+          <button class="box">Set lens box</button><button class="markers">4 sheet markers</button><button class="scale">2-point scale</button><button class="optical">Set optical centre</button>
           <button class="undo">Undo</button><button class="clear">Clear</button>
         </div>
         <select class="proposal-select" aria-label="Contour proposal" hidden></select>
         <div class="scale-row"><label>Reference length <input class="reference-mm" type="number" min="1" step="0.1" value="50"> mm</label><span class="scale-status">Scale not set</span></div>
+        <p class="marker-status">Four-marker perspective calibration recommended</p>
         <p class="centre-status">Optical centre not set</p>
         <p class="panel-status" role="status">Capture one lens at a time on the marked sheet.</p>
       </section>
