@@ -21,6 +21,7 @@ from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
 from starlette.formparsers import MultiPartException
+from preprocess import isolate_lens, restore_best_lens_mask
 
 app = FastAPI(title="OptiFrame contour proposals")
 _model = None
@@ -187,6 +188,7 @@ def live_quality(image: np.ndarray, contour: list[list[int]],
 def sam_mask(image: np.ndarray, box: tuple[int, int, int, int]) -> np.ndarray:
     import torch
 
+    crop = isolate_lens(image, box)
     global _model, _processor
     with _model_lock:
         if not torch.cuda.is_available():
@@ -197,15 +199,16 @@ def sam_mask(image: np.ndarray, box: tuple[int, int, int, int]) -> np.ndarray:
             name = "facebook/sam2.1-hiera-small"
             _processor = Sam2Processor.from_pretrained(name)
             _model = Sam2Model.from_pretrained(name).to("cuda").eval()
-        rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        inputs = _processor(images=Image.fromarray(rgb), input_boxes=[[list(box)]],
+        rgb = cv2.cvtColor(crop.image, cv2.COLOR_BGR2RGB)
+        inputs = _processor(images=Image.fromarray(rgb), input_boxes=[[list(crop.box)]],
                             return_tensors="pt").to("cuda")
         with torch.inference_mode():
             result = _model(**inputs)
         masks = _processor.post_process_masks(result.pred_masks.cpu(),
                                                inputs["original_sizes"])[0]
-        index = int(result.iou_scores.reshape(-1).argmax().item())
-        return (masks.reshape(-1, *masks.shape[-2:])[index].numpy() > 0).astype(np.uint8) * 255
+        candidates = masks.reshape(-1, *masks.shape[-2:]).numpy()
+        scores = result.iou_scores.reshape(-1).cpu().numpy()
+        return restore_best_lens_mask(candidates, scores, crop)
 
 
 def inspect_capture(data: bytes) -> dict:
@@ -249,9 +252,11 @@ def health() -> dict:
     try:
         import torch
     except ImportError:
-        return {"cuda": False, "gpu": None, "modelLoaded": _model is not None}
+        return {"cuda": False, "gpu": None, "modelLoaded": _model is not None,
+                "pipeline": "isolated-lens-crop-v1"}
     return {"cuda": torch.cuda.is_available(), "gpu": torch.cuda.get_device_name(0)
-            if torch.cuda.is_available() else None, "modelLoaded": _model is not None}
+            if torch.cuda.is_available() else None, "modelLoaded": _model is not None,
+            "pipeline": "isolated-lens-crop-v1"}
 
 
 @app.post("/api/import")
@@ -360,9 +365,13 @@ def segment(image: UploadFile = File(...), empty: UploadFile | None = File(None)
                                  min(w, x + bw + pad), min(h, y + bh + pad))
         if use_gpu and given_box:
             try:
-                proposal = contour_from_mask(sam_mask(enhance(photo), given_box))
+                proposal = contour_from_mask(sam_mask(photo, given_box))
                 if proposal:
                     candidates.append({"method": "sam2.1-hiera-small-cuda", "contour": proposal})
+            except ValueError as error:
+                if not candidates:
+                    raise
+                candidates.append({"method": "sam2.1-hiera-small-cuda", "error": str(error)})
             except Exception:
                 logging.exception("SAM2 proposal failed")
                 candidates.append({"method": "sam2.1-hiera-small-cuda",
@@ -371,6 +380,7 @@ def segment(image: UploadFile = File(...), empty: UploadFile | None = File(None)
             raise ValueError("Provide an empty-sheet image or a box around the lens")
         return {"width": w, "height": h, "candidates": candidates,
                 "clippedFraction": glare_fraction(photo, given_box or (0, 0, w, h)),
+                "preprocessing": "isolated-lens-crop-v1",
                 "measurementStatus": "proposal-only; scale and contour review required"}
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
@@ -395,12 +405,13 @@ def live_segment(image: UploadFile = File(...), box: str = Form(...)) -> dict:
         if not (0 <= x0 < x1 <= w and 0 <= y0 < y1 <= h and
                 x1 - x0 >= 16 and y1 - y0 >= 16):
             raise ValueError("Box must be at least 16 pixels wide and high inside the image")
-        contour = contour_from_mask(sam_mask(enhance(photo), tuple(parsed)))
+        contour = contour_from_mask(sam_mask(photo, tuple(parsed)))
         if len(contour) < 3:
             raise ValueError("No lens contour found in the box")
         return {"width": w, "height": h, "contour": contour,
                 "quality": live_quality(photo, contour, tuple(parsed)),
                 "method": "sam2.1-hiera-small-cuda",
+                "preprocessing": "isolated-lens-crop-v1",
                 "measurementStatus": "proposal-only; review contour and calibrate sheet scale"}
     except (ValueError, TypeError, json.JSONDecodeError) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error

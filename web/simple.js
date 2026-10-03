@@ -1,6 +1,6 @@
-import { createLiveSegmentSession } from './live-segment.js?v=6';
+import { createLiveSegmentSession } from './live-segment.js?v=10';
 import { sheetHomography, project, measure } from './calibration.js';
-import { detectSheetMarkers } from './marker-detect.js?v=6';
+import { detectSheetMarkers } from './marker-detect.js?v=9';
 
 const $ = id => document.getElementById(id);
 const stage = $('stage');
@@ -13,7 +13,6 @@ const primary = $('primary');
 const secondary = $('secondary');
 const photoLabel = $('photo-label');
 const controllerButton = $('controller-capture');
-const sides = { left: $('side-left'), right: $('side-right') };
 const captures = { left: null, right: null };
 const accessKey = new URLSearchParams(location.hash.slice(1)).get('access');
 const apiFetch = (url, options = {}) => fetch(url, {
@@ -27,6 +26,34 @@ let captureGeneration = 0;
 let controller;
 let pendingPhoto = null;
 let targetPointer = null;
+let audioContext = null;
+
+// Unlock sound during a user gesture; camera startup never plays audio.
+function enableSound() {
+  try {
+    const Audio = window.AudioContext || window.webkitAudioContext;
+    if (!Audio) return;
+    audioContext ||= new Audio();
+    void audioContext.resume().catch(() => {});
+  } catch { /* Sound is optional when the browser blocks it. */ }
+}
+
+function validationSound() {
+  if (audioContext?.state !== 'running') return;
+  try {
+    const oscillator = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+    const now = audioContext.currentTime;
+    oscillator.frequency.setValueAtTime(660, now);
+    oscillator.frequency.setValueAtTime(880, now + .09);
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(.07, now + .015);
+    gain.gain.exponentialRampToValueAtTime(.001, now + .22);
+    oscillator.connect(gain); gain.connect(audioContext.destination);
+    oscillator.start(now); oscillator.stop(now + .23);
+    oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
+  } catch { /* A sound failure must not block capture. */ }
+}
 
 const aimOverlay = document.createElement('div');
 aimOverlay.id = 'aim-overlay';
@@ -95,7 +122,13 @@ function fitCamera() {
   if (!video.videoWidth || !video.videoHeight) return;
   frame.style.width = `${Math.min(stage.clientWidth, stage.clientHeight * video.videoWidth / video.videoHeight)}px`;
 }
-new ResizeObserver(fitCamera).observe(stage);
+function fitReview() {
+  if (!review.width || !review.height) return;
+  const factor = Math.min(stage.clientWidth / review.width, stage.clientHeight / review.height);
+  review.style.width = `${review.width * factor}px`;
+  review.style.height = `${review.height * factor}px`;
+}
+new ResizeObserver(() => { fitCamera(); fitReview(); syncAimOverlay(); }).observe(stage);
 
 function activeCapture() { return captures[side]; }
 
@@ -105,8 +138,10 @@ function setStage(view) {
   review.hidden = view !== 'review';
   // SVGElement.hidden is not reflected consistently in Safari/WebKit.
   $('result-svg').toggleAttribute('hidden', view !== 'result');
+  $('pair-results').hidden = view !== 'pair';
   stage.classList.toggle('camera-on', view === 'camera');
   if (view === 'camera') fitCamera();
+  if (view === 'review') fitReview();
 }
 
 function setPhase(next, message) {
@@ -114,41 +149,36 @@ function setPhase(next, message) {
   document.body.dataset.phase = next;
   const capture = activeCapture();
   const hasResult = Boolean(capture?.measurement);
-  const labels = { idle: '01 / CAPTURE', starting: '01 / CAPTURE', live: '01 / LIVE', aim: '01 / TARGET', processing: '01 / TARGET', markers: '02 / SCALE', result: '03 / RESULT' };
-  $('step-label').textContent = labels[next];
-  sides.left.setAttribute('aria-pressed', String(side === 'left'));
-  sides.right.setAttribute('aria-pressed', String(side === 'right'));
-  $('headline').textContent = hasResult && next === 'result'
-    ? `${capture.measurement.width.toFixed(1)} × ${capture.measurement.height.toFixed(1)} mm`
-    : next === 'markers' ? 'Mark the four dots'
+  $('step-label').textContent = next === 'pair' ? '2 of 2' : `${side === 'left' ? 1 : 2} of 2`;
+  $('headline').textContent = next === 'pair' ? 'Your two lenses' : hasResult && next === 'result'
+    ? `${side === 'left' ? 'Left' : 'Right'} lens`
+    : next === 'markers' ? 'Set the scale'
     : next === 'aim' || next === 'processing' ? 'Locate the lens'
-    : `Scan ${side} lens`;
+    : side === 'left' ? 'First lens' : 'Second lens';
   $('instruction').textContent = next === 'aim' ? 'Touch, drag to center the lens, then lift.'
-    : next === 'processing' ? 'Finding the edge around the selected point.'
+    : next === 'processing' ? ''
     : next === 'markers'
     ? `Touch and drag to white dot ${capture.markers.length + 1} of 4. Lift to set.`
-    : next === 'result' ? 'Perspective-corrected outline. Compare it with the real lens.'
-    : next === 'live' ? 'The edge appears in green. Press and drag the target if it misses.'
-    : 'Put one lens on the sheet, title upright. Keep four dots visible.';
+    : '';
   if (next === 'idle' || next === 'starting') setStage('empty');
   if (next === 'live') setStage('camera');
   if (next === 'markers' || next === 'aim' || next === 'processing') setStage('review');
   if (next === 'result') setStage('result');
+  if (next === 'pair') setStage('pair');
   if (next !== 'aim' && next !== 'markers') targetPointer = null;
   requestAnimationFrame(syncAimOverlay);
-  primary.hidden = next === 'markers' || next === 'aim';
-  primary.disabled = next === 'starting' || next === 'processing' || (next === 'live' && controllerButton.disabled);
-  primary.textContent = next === 'idle' ? 'Start camera'
-    : next === 'starting' ? 'Opening camera…'
-    : next === 'live' ? controllerButton.disabled ? 'Finding the lens edge…' : 'Capture outline'
-    : next === 'processing' ? 'Finding the lens edge…'
-    : next === 'result' ? side === 'left' && !captures.right?.measurement ? 'Scan right lens' : 'Scan another lens'
-    : '';
-  photoLabel.hidden = next === 'markers' || next === 'result' || next === 'starting' || next === 'processing' || next === 'aim';
-  secondary.hidden = next === 'idle' || next === 'starting' || next === 'processing';
-  secondary.textContent = next === 'live' ? 'Stop camera' : next === 'result' ? 'Correct dots' : 'Retake';
-  $('studio-link').hidden = next !== 'result' || !captures.left?.measurement || !captures.right?.measurement;
-  if (message) status.textContent = message;
+  const shutter = ['idle', 'starting', 'live'].includes(next);
+  primary.hidden = ['markers', 'aim', 'processing'].includes(next);
+  primary.classList.toggle('shutter', shutter);
+  primary.disabled = next === 'idle' || next === 'starting' || next === 'processing' || (next === 'live' && controllerButton.disabled);
+  primary.innerHTML = shutter ? '<span class="shutter-core" aria-hidden="true"></span>' : next === 'pair' ? 'Fit frame' : 'Confirm';
+  primary.setAttribute('aria-label', shutter ? 'Capture lens' : next === 'pair' ? 'Confirm both lenses and fit frame' : 'Confirm lens');
+  photoLabel.hidden = !shutter;
+  $('camera-retry').hidden = next !== 'idle';
+  $('empty').textContent = next === 'idle' ? 'Camera unavailable. Retry or use a photo.' : 'Opening camera…';
+  secondary.hidden = !['markers', 'aim', 'result'].includes(next);
+  secondary.textContent = 'Retry';
+  status.textContent = message || '';
 }
 
 function stopCamera() {
@@ -159,11 +189,11 @@ function stopCamera() {
 async function startCamera() {
   stopCamera();
   const generation = captureGeneration;
-  setPhase('starting', 'Allow camera access when your phone asks.');
+  setPhase('starting');
   try {
     await controller.start();
     if (generation !== captureGeneration) return;
-    setPhase('live', 'Center the lens. Its outline will appear in green.');
+    setPhase('live');
     fitCamera();
   } catch (error) {
     if (generation !== captureGeneration) return;
@@ -193,22 +223,31 @@ function renderReview(capture) {
   });
 }
 
-function drawResult(capture) {
+function drawResult(capture, pathId = 'result-path') {
   const points = capture.rectifiedContour;
   const xs = points.map(point => point[0]);
   const ys = points.map(point => point[1]);
   const minX = Math.min(...xs), minY = Math.min(...ys);
   const spanX = Math.max(...xs) - minX, spanY = Math.max(...ys) - minY;
-  const scale = Math.min(270 / spanX, 170 / spanY);
+  const scale = Math.min(240 / spanX, 145 / spanY);
   if (!Number.isFinite(scale) || scale <= 0) throw new Error('Could not draw this outline. Retake the lens photo.');
-  const offsetX = (320 - spanX * scale) / 2;
-  const offsetY = (220 - spanY * scale) / 2;
-  const path = $('result-path');
+  const offsetX = 20 + (240 - spanX * scale) / 2;
+  const offsetY = 15 + (150 - spanY * scale) / 2;
+  const path = $(pathId);
   path.setAttribute('fill', 'none');
-  path.setAttribute('stroke', '#255c3d');
-  path.setAttribute('stroke-width', '3');
+  path.setAttribute('stroke', '#e5efdc');
+  path.setAttribute('stroke-width', '2');
   path.setAttribute('d', points.map(([x, y], index) =>
     `${index ? 'L' : 'M'}${(offsetX + (x - minX) * scale).toFixed(2)},${(offsetY + (y - minY) * scale).toFixed(2)}`).join(' ') + ' Z');
+  const right = offsetX + spanX * scale, bottom = offsetY + spanY * scale;
+  const horizontalY = bottom + 19, verticalX = right + 20;
+  const centerX = (offsetX + right) / 2, centerY = (offsetY + bottom) / 2;
+  const widthLabel = `${capture.measurement.width.toFixed(1)} mm`;
+  const heightLabel = `${capture.measurement.height.toFixed(1)} mm`;
+  $(pathId.replace('-path', '-dimensions')).innerHTML =
+    `<path class="dimension-line" d="M${offsetX},${bottom + 4}V${horizontalY + 4} M${right},${bottom + 4}V${horizontalY + 4} M${offsetX},${horizontalY}H${right} M${offsetX + 4},${horizontalY - 3}L${offsetX},${horizontalY}L${offsetX + 4},${horizontalY + 3} M${right - 4},${horizontalY - 3}L${right},${horizontalY}L${right - 4},${horizontalY + 3} M${right + 4},${offsetY}H${verticalX + 4} M${right + 4},${bottom}H${verticalX + 4} M${verticalX},${offsetY}V${bottom} M${verticalX - 3},${offsetY + 4}L${verticalX},${offsetY}L${verticalX + 3},${offsetY + 4} M${verticalX - 3},${bottom - 4}L${verticalX},${bottom}L${verticalX + 3},${bottom - 4}"/>` +
+    `<text class="dimension-label" x="${centerX}" y="${horizontalY + 15}" text-anchor="middle">${widthLabel}</text>` +
+    `<text class="dimension-label" transform="translate(${verticalX + 14} ${centerY}) rotate(-90)" text-anchor="middle">${heightLabel}</text>`;
 }
 
 function validateLensContour(points, result) {
@@ -234,9 +273,8 @@ function completeMarkers(capture, automatic = false) {
     capture.measurement = measure(capture.rectifiedContour, 1);
     validateLensContour(capture.rectifiedContour, capture.measurement);
     drawResult(capture);
-    setPhase('result', automatic
-      ? 'Sheet dots found automatically. Check the outline against the real lens.'
-      : 'Sheet scale set. Check the outline against the real lens.');
+    setPhase('result');
+    validationSound();
   } catch (error) {
     if (error.code === 'INVALID_LENS_CONTOUR') {
       pendingPhoto?.bitmap?.close();
@@ -299,7 +337,10 @@ async function selectPhoto(file) {
     reviewContext.drawImage(pendingPhoto.bitmap, 0, 0);
     try { pendingPhoto.markers = detectSheetMarkers(reviewContext.getImageData(0, 0, canvas.width, canvas.height)); }
     catch { pendingPhoto.markers = null; }
-    setPhase('aim', 'Touch and drag to the middle of the lens. Lift to find its edge.');
+    if (pendingPhoto.markers?.length === 4) {
+      const center = pendingPhoto.markers.reduce((sum, point) => [sum[0] + point[0] / 4, sum[1] + point[1] / 4], [0, 0]);
+      await segmentPhotoAt(...center);
+    } else setPhase('aim', 'Press on the lens, drag to its center, then lift.');
   } catch (error) { setPhase('idle', `Could not open that photo: ${error.message}`); }
 }
 
@@ -307,7 +348,7 @@ async function segmentPhotoAt(x, y) {
   const photo = pendingPhoto;
   if (!photo) return;
   const generation = captureGeneration;
-  setPhase('processing', 'Finding the lens edge around the selected point…');
+  setPhase('processing', 'Measuring…');
   try {
     const markerWidth = photo.markers?.length === 4
       ? Math.hypot(photo.markers[1][0] - photo.markers[0][0], photo.markers[1][1] - photo.markers[0][1]) : null;
@@ -347,39 +388,63 @@ async function segmentPhotoAt(x, y) {
 
 controller = createLiveSegmentSession({
   video, overlay: $('camera-overlay'), status, captureButton: controllerButton,
-  apiFetch, side: 'lens', onCapture: acceptCapture,
+  apiFetch, side: 'lens', onCapture: acceptCapture, minimalStatus: true,
+  locateTarget(imageData) {
+    const markers = detectSheetMarkers(imageData);
+    if (markers?.length !== 4) return null;
+    const [x, y] = markers.reduce((sum, point) => [sum[0] + point[0] / 4, sum[1] + point[1] / 4], [0, 0]);
+    const halfWidth = Math.hypot(markers[1][0] - markers[0][0], markers[1][1] - markers[0][1]) * .34;
+    const halfHeight = Math.hypot(markers[3][0] - markers[0][0], markers[3][1] - markers[0][1]) * .37;
+    return [Math.max(0, (x - halfWidth) / imageData.width), Math.max(0, (y - halfHeight) / imageData.height),
+      Math.min(1, (x + halfWidth) / imageData.width), Math.min(1, (y + halfHeight) / imageData.height)];
+  },
 });
 
 new MutationObserver(() => {
   if (phase !== 'live') return;
   primary.disabled = controllerButton.disabled;
-  primary.textContent = controllerButton.disabled ? 'Finding the lens edge…' : 'Capture outline';
 }).observe(controllerButton, { attributes: true, attributeFilter: ['disabled'] });
 
+function showPair() {
+  for (const lens of ['left', 'right']) {
+    const capture = captures[lens];
+    if (!capture?.confirmed || !capture.measurement) return;
+    drawResult(capture, `${lens}-path`);
+  }
+  setPhase('pair');
+}
+
+function retryLens(lens = side) {
+  stopCamera();
+  captures[lens]?.bitmap?.close(); captures[lens] = null;
+  pendingPhoto?.bitmap?.close(); pendingPhoto = null;
+  side = lens;
+  void startCamera();
+}
+
 primary.addEventListener('click', () => {
-  if (phase === 'idle') void startCamera();
-  else if (phase === 'live') void controller.capture().catch(error => { status.textContent = error.message; });
-  else if (phase === 'result') {
-    const next = side === 'left' && !captures.right?.measurement ? 'right' : side;
-    if (next === side) { captures[side]?.bitmap?.close(); captures[side] = null; }
-    side = next;
-    setPhase('idle', 'Ready to scan the next lens.');
+  enableSound();
+  if (phase === 'live') {
+    primary.disabled = true;
+    void controller.capture().catch(error => {
+      if (phase === 'live') primary.disabled = controllerButton.disabled;
+      status.textContent = error.message;
+    });
+  } else if (phase === 'result') {
+    activeCapture().confirmed = true;
+    if (captures.left?.confirmed && captures.right?.confirmed) showPair();
+    else { side = captures.left?.confirmed ? 'right' : 'left'; void startCamera(); }
+  } else if (phase === 'pair') {
+    void openStudio();
   }
 });
-
-secondary.addEventListener('click', () => {
-  if (phase === 'live') { stopCamera(); setPhase('idle', 'Camera stopped.'); }
-  else if (phase === 'markers' || phase === 'aim') {
-    captures[side]?.bitmap?.close(); captures[side] = null;
-    pendingPhoto?.bitmap?.close(); pendingPhoto = null;
-    setPhase('idle', 'Ready to retake this lens.');
-  }
-  else if (phase === 'result') {
-    const capture = activeCapture();
-    capture.markers = []; capture.homography = null; capture.measurement = null;
-    renderReview(capture);
-    setPhase('markers', 'Touch and drag to the white dots 1 → 2 → 3 → 4.');
-  }
+secondary.addEventListener('click', () => retryLens());
+$('retry-left').addEventListener('click', () => retryLens('left'));
+$('retry-right').addEventListener('click', () => retryLens('right'));
+$('camera-retry').addEventListener('click', () => { enableSound(); void startCamera(); });
+photoLabel.addEventListener('click', enableSound);
+photoLabel.addEventListener('keydown', event => {
+  if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); enableSound(); $('photo-input').click(); }
 });
 
 function reviewPoint(event) {
@@ -392,6 +457,7 @@ function reviewPoint(event) {
 
 review.addEventListener('pointerdown', event => {
   if (phase !== 'markers' && phase !== 'aim') return;
+  enableSound();
   event.preventDefault();
   review.setPointerCapture(event.pointerId);
   targetPointer = { id: event.pointerId, point: reviewPoint(event) };
@@ -436,32 +502,21 @@ const asDataURL = file => new Promise((resolve, reject) => {
   reader.readAsDataURL(file);
 });
 
-$('studio-link').addEventListener('click', async event => {
-  event.preventDefault();
+async function openStudio() {
+  primary.disabled = true;
   try {
     const saved = await Promise.all(['left', 'right'].map(async lens => {
       const capture = captures[lens];
-      if (!capture?.measurement) throw new Error(`Scan the ${lens} lens first`);
+      if (!capture?.measurement || !capture.confirmed) throw new Error(`Confirm the ${lens} lens first`);
       return { side: lens, image: await asDataURL(capture.file),
         width: capture.width, height: capture.height,
         contour: capture.contour, markers: capture.markers };
     }));
     sessionStorage.setItem('optiframe-captures', JSON.stringify(saved));
     location.href = `/studio.html${location.hash}`;
-  } catch (error) { status.textContent = `${error.message}. Try again.`; }
-});
+  } catch (error) { status.textContent = `${error.message}. Try again.`; primary.disabled = false; }
+}
 
-Object.entries(sides).forEach(([name, button]) => button.addEventListener('click', () => {
-  if (name === side) return;
-  stopCamera();
-  pendingPhoto?.bitmap?.close(); pendingPhoto = null;
-  side = name;
-  const capture = activeCapture();
-  if (capture?.measurement) { drawResult(capture); setPhase('result', 'Measured outline. Compare it with the real lens.'); }
-  else if (capture) { renderReview(capture); setPhase('markers', 'Touch and drag to the white dots 1 → 2 → 3 → 4.'); }
-  else setPhase('idle', 'Ready to open the camera.');
-}));
-
-window.addEventListener('resize', () => { fitCamera(); syncAimOverlay(); });
+window.addEventListener('resize', () => { fitCamera(); fitReview(); syncAimOverlay(); });
 window.addEventListener('pagehide', stopCamera);
-setPhase('idle', 'Ready to open the camera.');
+void startCamera();

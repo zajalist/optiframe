@@ -1,0 +1,65 @@
+import unittest
+
+import cv2
+import numpy as np
+
+from preprocess import isolate_lens, restore_lens_mask, restore_best_lens_mask
+
+
+class LensPreprocessTests(unittest.TestCase):
+    def test_isolates_text_and_maps_edge_back_without_scaling(self):
+        source = np.full((400, 700, 3), 210, np.uint8)
+        cv2.putText(source, 'PRINTED PAGE', (15, 40), cv2.FONT_HERSHEY_SIMPLEX,
+                    1, (0, 0, 0), 2)
+        original = source.copy()
+        crop = isolate_lens(source, (380, 150, 580, 290))
+        self.assertEqual(crop.origin, (344, 114))
+        self.assertEqual(crop.box, (36, 36, 236, 176))
+        self.assertTrue(np.all(crop.image == 210))
+        mask = np.zeros(crop.image.shape[:2], np.uint8)
+        cv2.ellipse(mask, (136, 106), (80, 50), 0, 0, 360, 255, -1)
+        restored = restore_lens_mask(mask, crop)
+        ys, xs = np.nonzero(restored)
+        self.assertEqual((xs.min(), xs.max(), ys.min(), ys.max()), (400, 560, 170, 270))
+        self.assertTrue(np.array_equal(source, original))
+
+    def test_rejects_crop_rectangle_instead_of_making_a_fake_lens(self):
+        crop = isolate_lens(np.zeros((300, 400, 3), np.uint8), (100, 80, 300, 220))
+        with self.assertRaisesRegex(ValueError, 'boundary'):
+            restore_lens_mask(np.ones(crop.image.shape[:2], np.uint8), crop)
+
+    def test_ignores_disconnected_print_and_keeps_target_component(self):
+        crop = isolate_lens(np.zeros((400, 600, 3), np.uint8), (200, 140, 400, 260))
+        mask = np.zeros(crop.image.shape[:2], np.uint8)
+        cv2.rectangle(mask, (0, 0), (20, 190), 255, -1)
+        cv2.ellipse(mask, (136, 96), (60, 40), 0, 0, 360, 255, -1)
+        restored = restore_lens_mask(mask, crop)
+        self.assertEqual(restored[200, 300], 255)
+        self.assertEqual(restored[150, 170], 0)
+
+    def test_clamps_crop_at_image_boundary_without_changing_coordinates(self):
+        source = np.zeros((100, 150, 3), np.uint8)
+        crop = isolate_lens(source, (4, 5, 64, 75))
+        self.assertEqual(crop.origin, (0, 0))
+        self.assertEqual(crop.box, (4, 5, 64, 75))
+        self.assertFalse(np.shares_memory(crop.image, source))
+
+    def test_wrong_mask_size_and_missing_target_are_rejected(self):
+        crop = isolate_lens(np.zeros((100, 150, 3), np.uint8), (40, 25, 100, 75))
+        with self.assertRaisesRegex(ValueError, 'size'):
+            restore_lens_mask(np.zeros((10, 10), np.uint8), crop)
+        with self.assertRaisesRegex(ValueError, 'target'):
+            restore_lens_mask(np.zeros(crop.image.shape[:2], np.uint8), crop)
+
+    def test_skips_high_confidence_background_in_favor_of_closed_lens(self):
+        crop = isolate_lens(np.zeros((300, 400, 3), np.uint8), (100, 80, 300, 220))
+        background = np.ones(crop.image.shape[:2], np.uint8)
+        lens = np.zeros_like(background)
+        cv2.ellipse(lens, (136, 106), (70, 45), 0, 0, 360, 255, -1)
+        restored = restore_best_lens_mask(np.stack([background, lens]), np.array([.99, .8]), crop)
+        self.assertEqual(restored[150, 200], 255)
+        self.assertEqual(restored[50, 80], 0)
+
+
+if __name__ == '__main__':
+    unittest.main()

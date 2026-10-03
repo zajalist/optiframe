@@ -73,6 +73,14 @@ class LiveSegmentTests(unittest.TestCase):
         image[:] = 255
         self.assertEqual(live_quality(image, contour, box)['score'], 0)
 
+    def test_expected_target_failure_is_not_reported_as_gpu_outage(self):
+        with patch('segment.sam_mask', side_effect=ValueError('Lens edge reaches the capture boundary')):
+            response = self.client.post('/api/segment', headers=self.headers,
+                files={'image': ('frame.jpg', jpeg(), 'image/jpeg')},
+                data={'box': json.dumps([20, 15, 220, 145])})
+        self.assertEqual(response.status_code, 422)
+        self.assertIn('capture boundary', response.json()['detail'])
+
 
 if __name__ == '__main__':
     unittest.main()

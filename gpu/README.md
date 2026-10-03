@@ -2,7 +2,7 @@
 
 `POST /api/video-frames` accepts multipart `video` (MOV / MP4 supported by local OpenCV) and returns up to six evenly spaced JPEG photos. Limits: 100 MB, 60 seconds, 7200 frames, 4096 pixels per side and 12 megapixels. Photos are resized to at most 1600 pixels per side. Temporary uploads are deleted after extraction, including failures. Choose a thumbnail for either lens, set a lens box or matching empty-sheet photo, then use Propose edge. Video import provides no metric scale or accepted contour; calibrate and review the selected photo as usual.
 
-The PC has a CUDA-capable RTX 5070 with 12 GB VRAM. `segment.py` uses OpenCV CLAHE and aligned empty/lens photo differences, then optionally runs promptable SAM 2.1 small on CUDA. This produces **candidate contours**, never accepted lens dimensions.
+The PC has a CUDA-capable RTX 5070 with 12 GB VRAM. `segment.py` runs SAM 2.1 small on an isolated crop around the lens target, with 18% context padding. Raw lens pixels are preserved: surrounding text is excluded from the model input, while grid strokes visible through the lens remain intact to avoid erasing the rim. Candidate masks must contain the target and stay clear of the crop boundary, then map back to the original photo by integer translation. Calibration and review use the original image. Optional aligned empty/lens photo differences still use OpenCV CLAHE. These are **candidate contours**, never accepted lens dimensions.
 
 ```powershell
 python -m unittest discover -s gpu -p 'test_*.py' -v

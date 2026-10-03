@@ -43,7 +43,7 @@ function setup(fetcher, onCapture = async () => {}, options = {}) {
   }) };
   const session = createLiveSegmentSession({ video, overlay, status, captureButton,
     onCapture, apiFetch: fetcher, mediaDevices, side: 'left', intervalMs: 5,
-    startupTimeoutMs: options.startupTimeoutMs ?? 12000 });
+    startupTimeoutMs: options.startupTimeoutMs ?? 12000, locateTarget: options.locateTarget });
   return { session, video, overlay, status, captureButton, get stopped() { return stopped; } };
 }
 
@@ -110,6 +110,21 @@ test('a tap recentres the live prompt on the lens', async () => {
   fixture.overlay.handlers.pointerup({ clientX: 480, clientY: 240, pointerId: 1 });
   await pause(20);
   assert.ok(boxes.some(([left, , right]) => (left + right) / 2 > 400));
+  fixture.session.stop();
+});
+
+test('sheet detection locates an off-centre lens without a tap', async () => {
+  const boxes = [];
+  const fixture = setup(async (_path, options) => {
+    boxes.push(JSON.parse(options.body.get('box')));
+    return { ok: true, json: async () => result };
+  }, async () => {}, { locateTarget: () => [0.25, 0.15, 0.65, 0.45] });
+  await fixture.session.start();
+  await pause(15);
+  assert.deepEqual(boxes[0], [160, 72, 416, 216]);
+  fixture.session.setBoxNormalized([0.1, 0.2, 0.4, 0.5]);
+  await pause(15);
+  assert.deepEqual(boxes.at(-1), [64, 96, 256, 240]);
   fixture.session.stop();
 });
 

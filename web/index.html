@@ -3,43 +3,37 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#f6f7f5">
+  <meta name="theme-color" content="#101112">
   <title>OptiFrame — lens capture</title>
-  <link rel="stylesheet" href="/simple.css?v=5">
+  <link rel="stylesheet" href="/simple.css?v=10">
 </head>
 <body>
   <div class="app">
-    <header class="header">
-      <a class="brand" href="/" aria-label="OptiFrame home">OptiFrame</a>
-      <a class="sheet-link" href="/calibration-sheet.svg" target="_blank" rel="noopener">Calibration sheet</a>
-    </header>
+    <header class="header"><span class="brand">OptiFrame</span><a class="sheet-link" href="/calibration-sheet.svg" target="_blank" rel="noopener">Print sheet</a></header>
     <main class="capture">
       <div class="heading">
-        <div class="heading-top">
-          <span id="step-label" hidden aria-hidden="true"></span>
-          <div class="sides" role="group" aria-label="Select lens"><button id="side-left" type="button" aria-pressed="true">Left</button><button id="side-right" type="button" aria-pressed="false">Right</button></div>
-        </div>
-        <h1 id="headline">Scan left lens</h1>
-        <p id="instruction">Put one lens on the sheet, title upright. Keep four dots visible.</p>
+        <div class="heading-row"><h1 id="headline">First lens</h1><span id="step-label" aria-label="Capture progress">1 of 2</span></div>
+        <p id="instruction"></p>
       </div>
       <div class="stage" id="stage">
-        <div class="empty" id="empty">Camera off</div>
+        <div class="empty" id="empty">Opening camera…</div>
         <div class="camera-frame" id="camera-frame" hidden><video id="camera" playsinline muted autoplay aria-label="Live lens camera"></video><canvas id="camera-overlay" aria-label="Live lens outline"></canvas></div>
-        <canvas id="review-canvas" aria-label="Captured lens and calibration dots" hidden></canvas>
-        <svg id="result-svg" viewBox="0 0 320 220" role="img" aria-label="Measured lens outline" hidden><path id="result-path" d=""></path></svg>
+        <canvas id="review-canvas" aria-label="Captured lens. Press and drag for precise adjustment." hidden></canvas>
+        <svg id="result-svg" viewBox="0 0 320 220" role="img" aria-label="Measured lens outline" hidden><path id="result-path" d=""></path><g id="result-dimensions"></g></svg>
+        <div id="pair-results" hidden>
+          <section class="lens-result"><div class="lens-caption"><span>Left lens</span><button id="retry-left" type="button">Retry</button></div><svg id="left-svg" viewBox="0 0 320 220" role="img" aria-label="Left lens outline"><path id="left-path"></path><g id="left-dimensions"></g></svg></section>
+          <section class="lens-result"><div class="lens-caption"><span>Right lens</span><button id="retry-right" type="button">Retry</button></div><svg id="right-svg" viewBox="0 0 320 220" role="img" aria-label="Right lens outline"><path id="right-path"></path><g id="right-dimensions"></g></svg></section>
+        </div>
+        <label id="photo-label" class="photo-import" for="photo-input" aria-label="Use a photo" tabindex="0"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.5"/><path d="m4 18 6-6 4 4 3-3 4 4"/></svg><span>Photo</span><input id="photo-input" type="file" accept="image/*"></label>
+        <button id="camera-retry" type="button" hidden>Retry camera</button>
       </div>
       <div class="action-area">
-        <p id="status" role="status" aria-live="polite">Ready to open the camera.</p>
-        <button id="primary" class="primary" type="button">Start camera</button>
-        <div class="secondary">
-          <button id="secondary" type="button" hidden>Retake</button>
-          <label id="photo-label" for="photo-input">Use a photo<input id="photo-input" type="file" accept="image/*" capture="environment"></label>
-          <a id="studio-link" href="/studio.html" hidden>Frame builder</a>
-        </div>
+        <p id="status" role="status" aria-live="polite"></p>
+        <div class="controls"><button id="secondary" class="secondary" type="button" hidden>Retry</button><button id="primary" class="primary" type="button" disabled aria-label="Capture lens"><span class="shutter-core" aria-hidden="true"></span></button></div>
       </div>
     </main>
   </div>
   <button id="controller-capture" type="button" hidden disabled></button>
-  <script type="module" src="/simple.js?v=6"></script>
+  <script type="module" src="/simple.js?v=10"></script>
 </body>
 </html>

@@ -31,6 +31,7 @@ export function createLiveSegmentSession({
   video, overlay, status, captureButton, onCapture, apiFetch = fetch, side = 'lens',
   mediaDevices = navigator.mediaDevices, intervalMs = INTERVAL_MS,
   startupTimeoutMs = STARTUP_TIMEOUT_MS,
+  locateTarget = null, minimalStatus = false,
 }) {
   if (!video || !overlay || !status || !captureButton || typeof onCapture !== 'function')
     throw new TypeError('Live segmentation needs video, overlay, status, captureButton and onCapture');
@@ -54,10 +55,12 @@ export function createLiveSegmentSession({
   let lastTrackAt = 0;
   let legacyApi = false;
   let startupAbort = null;
+  let manualTarget = false;
+  let lastLocateAt = -Infinity;
   const trackingCanvas = document.createElement('canvas');
   const trackingContext = trackingCanvas.getContext('2d', { willReadFrequently: true });
 
-  function message(value) { status.textContent = value; }
+  function message(value, routine = false) { status.textContent = minimalStatus && routine ? '' : value; }
   function dimensions() {
     const width = video.videoWidth;
     const height = video.videoHeight;
@@ -107,6 +110,7 @@ export function createLiveSegmentSession({
           x1 - x0 >= 0.03 && y1 - y0 >= 0.03))
       throw new RangeError('Box must be inside the preview and at least 3% wide and high');
     box = [...value];
+    manualTarget = true;
     boxVersion++;
     request?.abort();
     trackingBase = null;
@@ -114,7 +118,7 @@ export function createLiveSegmentSession({
     best = null;
     captureButton.disabled = true;
     draw();
-    message('Tracking the lens you tapped. Hold steady.');
+    message('Tracking the lens you tapped. Hold steady.', true);
   }
   function pointer(event) {
     const rect = overlay.getBoundingClientRect();
@@ -266,6 +270,15 @@ export function createLiveSegmentSession({
       frame.width = width;
       frame.height = height;
       frame.getContext('2d').drawImage(video, 0, 0, width, height);
+      if (locateTarget && !manualTarget && performance.now() - lastLocateAt >= 700) {
+        lastLocateAt = performance.now();
+        try {
+          const found = locateTarget(frame.getContext('2d').getImageData(0, 0, width, height));
+          if (Array.isArray(found) && found.length === 4 && found.every(Number.isFinite) &&
+              found[0] >= 0 && found[1] >= 0 && found[2] <= 1 && found[3] <= 1 &&
+              found[2] - found[0] >= 0.03 && found[3] - found[1] >= 0.03) box = found;
+        } catch { /* Manual targeting remains available if sheet detection fails. */ }
+      }
       const promptVersion = boxVersion;
       const capturedAt = new Date().toISOString();
       const startedAt = performance.now();
@@ -296,10 +309,10 @@ export function createLiveSegmentSession({
         captureButton.disabled = false;
       }
       draw();
-      message(`Live edge · ${cadenceHz === null ? 'calibrating rate' : cadenceHz.toFixed(1) + ' updates/s'} · ${latencyMs} ms.`);
+      message('Lens found. Hold steady and capture.', true);
     } catch (error) {
       if (token === generation && error.name !== 'AbortError')
-        message(`No edge yet. Tap the lens, move closer, or use softer light. ${error.message}`);
+        message(`No lens edge yet. ${error.message}`);
     } finally {
       request = null;
       working = false;
@@ -309,11 +322,14 @@ export function createLiveSegmentSession({
 
   async function start() {
     stop();
+    manualTarget = false;
+    lastLocateAt = -Infinity;
+    box = [...centerBox];
     const token = generation;
     if (!mediaDevices?.getUserMedia) throw new Error('This browser does not expose a camera. Open in Safari or use a photo.');
     startupAbort = new AbortController();
     const signal = startupAbort.signal;
-    message('Opening camera… If no permission prompt appears, try Safari or use a photo.');
+    message('Opening camera…', true);
     try {
       const acquired = await boundedStartup(mediaDevices.getUserMedia({
         audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } },
@@ -330,7 +346,7 @@ export function createLiveSegmentSession({
       captureButton.disabled = true;
       draw();
       if (typeof requestAnimationFrame === 'function') animation = requestAnimationFrame(trackOnce);
-      message('Keep one lens centered. If the edge misses, press and drag the target onto it.');
+      message('Keep one lens centered. If the edge misses, press and drag the target onto it.', true);
       void sample(token);
     } catch (error) {
       if (token === generation) { stop(); message(`Camera unavailable: ${error.message}`); }
