@@ -2,3 +2,8 @@ Saved/
 node_modules/
 dist/
 .env*
+ios/*.xcodeproj/
+ios/.build/
+DerivedData/
+__pycache__/
+*.pyc
