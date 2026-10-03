@@ -15,7 +15,7 @@
 
 ## Architecture, kept small
 
-- **Phone UI:** one web page with wearer measurements, lens verification status, capture, contour correction, dimensions, and preview. Native camera input is enough for the first version; a custom live camera view is optional.
+- **Phone UI:** an installable mobile web app with wearer measurements, lens verification status, capture, contour correction, dimensions, and preview. Native camera input is enough for the first version; a custom live camera view is optional.
 - **Image processing:** OpenCV (browser or a small server endpoint) detects markers, rectifies the image, and extracts an initial contour. Decide client versus server after a quick phone performance test.
 - **AI:** one segmentation endpoint for hard images, accepting a user click or box and returning a mask for correction. The mathematical scale and final contour remain explicit.
 - **Geometry:** measured contour and optical-centre point for each lens + wearer pupil positions -> independently placed 2D paths -> closed front and rear retaining solids plus bridge -> print-bed layout -> STL export. Use existing geometry utilities if the chosen starter project has them.
@@ -32,6 +32,8 @@
 | 4. AI and presentation | Add AI segmentation to difficult photos, then polish the before/after story and demo. | Saved example where AI helps and user can correct it. |
 
 If the first capture cannot achieve a clean repeatable contour quickly, switch to manual trace over the rectified image. That preserves the end-to-end demo and still provides measured geometry.
+
+For difficult transparent lenses, test a two-shot capture on a printed pattern: empty sheet, then sheet with lens, aligned using markers. Use the difference as an edge proposal and retain manual correction. Do not spend the hackathon building a point-cloud or Gaussian-splat lens scanner.
 
 ## Live demo script (about 90 seconds)
 
