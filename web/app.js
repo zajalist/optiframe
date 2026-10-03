@@ -9,7 +9,7 @@ const apiFetch = (url, options = {}) => fetch(url, {
 const responseData = response => response.headers.get('content-type')?.includes('json')
   ? response.json() : response.text().then(detail => ({ detail }));
 
-import {distance,polygonArea,measure,sheetHomography,project,benchmark,pixelResolution,contourRepeatability} from './calibration.js';
+import {distance,polygonArea,measure,sheetHomography,project,benchmark,pixelResolution,contourRepeatability,normalizeLensOrientation,outlineProofSVG} from './calibration.js';
 
 class LensPanel {
   constructor(element) {
@@ -25,6 +25,7 @@ class LensPanel {
     this.scaleStatus = element.querySelector('.scale-status');
     this.centreStatus = element.querySelector('.centre-status');
     this.markerStatus = element.querySelector('.marker-status');
+    this.topStatus = element.querySelector('.top-status');
     this.videoFrames = element.querySelector('.video-frames');
     this.videoRequest = 0;
     this.photoVersion = 0;
@@ -38,6 +39,7 @@ class LensPanel {
     this.markerPoints = [];
     this.homography = null;
     this.opticalCentre = null;
+    this.topMark = null;
     this.mmPerPixel = null;
     this.box = null;
     this.mode = null;
@@ -54,15 +56,34 @@ class LensPanel {
       this.updateMeasurement();
     }));
     this.el.querySelector('.save-repeat').addEventListener('click',()=>{
-      if(!this.homography||!this.measurement){this.message('Rectify a contour with four markers first.');return;}
+      if(!this.homography||!this.measurement||!this.opticalCentre||!this.topMark){this.message('Rectify a contour and mark its optical centre and top first.');return;}
+      let outline;
+      try { outline = this.millimetreOutline(); }
+      catch (error) { this.message(error.message); return; }
+      if (!outline) { this.message('Review a contour with at least 12 points first.'); return; }
       this.el.querySelector('.repeat-width').value=this.measurement.width.toFixed(3);
       this.el.querySelector('.repeat-height').value=this.measurement.height.toFixed(3);
-      this.repeatOutline = this.points.map(point => project(point, this.homography));
+      this.repeatOutline = outline;
       this.repeatPhotoVersion = this.loadedPhotoVersion;
       this.el.querySelector('.evidence-confirmed').checked=false;
       invalidateFrameResult();
-      this.message('Dimensions and rectified outline saved. Load and rectify a new independent photo in the same top orientation to compare edge repeatability.');
+      this.message('Dimensions and top-aligned outline saved. Load and rectify a new independent photo, then mark its optical centre and top to compare edge repeatability.');
       this.updateMeasurement();
+    });
+    this.el.querySelector('.download-outline').addEventListener('click',()=>{
+      try {
+        if (!this.homography || !this.opticalCentre || !this.topMark) throw new Error('Four sheet markers, optical centre and top mark are needed for a 1:1 outline.');
+        const outline = this.millimetreOutline();
+        if (!outline) throw new Error('Review a contour with at least 12 points first.');
+        const svg = outlineProofSVG(outline, this.side);
+        const url = URL.createObjectURL(new Blob([svg], {type:'image/svg+xml'}));
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `optiframe-${this.side}-1-to-1-outline.svg`;
+        link.click();
+        setTimeout(()=>URL.revokeObjectURL(url),60_000);
+        this.message('1:1 outline downloaded. Print at 100%, verify its 50 mm line, and compare the real lens edge.');
+      } catch (error) { this.message(error.message); }
     });
     this.el.querySelector('.photo-input').addEventListener('change', event => this.loadPhoto(event.target.files[0]));
     this.el.querySelector('.evidence-confirmed').addEventListener('change', invalidateFrameResult);
@@ -72,7 +93,7 @@ class LensPanel {
     });
     this.el.querySelector('.zip-input').addEventListener('change', event => this.loadArchive(event.target.files[0]));
     this.el.querySelector('.video-input').addEventListener('change', event => this.loadVideo(event.target.files[0]));
-    for (const mode of ['trace', 'box', 'markers', 'scale', 'optical']) {
+    for (const mode of ['trace', 'box', 'markers', 'scale', 'optical', 'top']) {
       this.el.querySelector(`.${mode}`).addEventListener('click', () => this.setMode(this.mode === mode ? null : mode));
     }
     this.el.querySelector('.propose').addEventListener('click', () => this.propose());
@@ -194,6 +215,7 @@ class LensPanel {
       this.markerPoints = [];
       this.homography = null;
       this.opticalCentre = null;
+      this.topMark = null;
       this.mmPerPixel = null;
       this.el.querySelector('.evidence-confirmed').checked=false;
       this.history = [];
@@ -203,6 +225,7 @@ class LensPanel {
       this.scaleStatus.textContent = 'Scale not set';
       this.markerStatus.textContent = 'Four-marker perspective calibration recommended';
       this.centreStatus.textContent = 'Optical centre not set';
+      this.topStatus.textContent = 'Top of lens not marked';
       this.placeholder.hidden = true;
       this.render();
       this.message('Photo loaded. Add an empty sheet or draw a lens box, then propose the edge.');
@@ -213,12 +236,13 @@ class LensPanel {
 
   setMode(mode) {
     this.mode = mode;
-    for (const name of ['trace', 'box', 'markers', 'scale', 'optical']) this.el.querySelector(`.${name}`).classList.toggle('active', name === mode);
+    for (const name of ['trace', 'box', 'markers', 'scale', 'optical', 'top']) this.el.querySelector(`.${name}`).classList.toggle('active', name === mode);
     if (mode === 'trace') this.message('Tap around the outer lens edge in order. Tap Trace edge again when done.');
     if (mode === 'box') this.message('Drag a box around the lens to guide the GPU proposal.');
     if (mode === 'scale') this.message('Tap two ends of a known printed distance, then enter its length in mm.');
     if (mode === 'markers') this.message('Tap sheet markers in order: top-left, top-right, bottom-right, bottom-left. Printed span: 100 × 70 mm.');
     if (mode === 'optical') this.message('Tap the lens optical centre marked by the eye care provider.');
+    if (mode === 'top') this.message('Tap the physical top mark on this lens. Use the same marked point in every photo; the top mark sets frame orientation.');
   }
 
   point(event) {
@@ -268,8 +292,14 @@ class LensPanel {
       }
       this.render();
     } else if (this.mode === 'optical') {
+      if (this.topMark && distance(point, this.topMark) < 2) { this.message('Optical centre and top mark must be separate points.'); return; }
       this.opticalCentre = point;
       this.centreStatus.textContent = 'Optical centre set — verify this mark with the lens provider';
+      this.render();
+    } else if (this.mode === 'top') {
+      if (this.opticalCentre && distance(point, this.opticalCentre) < 2) { this.message('Top mark and optical centre must be separate points.'); return; }
+      this.topMark = point;
+      this.topStatus.textContent = 'Top marked — verify the physical mark on the lens';
       this.render();
     }
   }
@@ -326,22 +356,35 @@ class LensPanel {
   }
 
   updateMeasurement() {
-    const geometry = JSON.stringify([this.photoVersion, this.points, this.homography, this.mmPerPixel, this.opticalCentre]);
+    const geometry = JSON.stringify([this.photoVersion, this.points, this.homography, this.mmPerPixel, this.opticalCentre, this.topMark]);
     if (geometry !== this.evidenceGeometry) {
       this.invalidateEvidence();
       this.evidenceGeometry = geometry;
     }
     const transformed = this.homography ? this.points.map(point => project(point, this.homography)) : this.points;
-    const result = measure(transformed, this.homography ? 1 : this.mmPerPixel);
+    let normalized = null;
+    if ((this.homography || this.mmPerPixel) && this.opticalCentre && this.topMark) {
+      try {
+        const centre = this.homography ? project(this.opticalCentre, this.homography) : this.opticalCentre;
+        const top = this.homography ? project(this.topMark, this.homography) : this.topMark;
+        if (distance(centre, top) * (this.homography ? 1 : this.mmPerPixel) < 5)
+          throw new Error('Top mark must be at least 5 mm from the optical centre.');
+        normalized = this.millimetreOutline();
+        this.topStatus.textContent = normalized ? 'Top orientation set' : 'Top marked; review a contour with at least 12 points';
+      } catch (error) {
+        this.topStatus.textContent = error.message;
+      }
+    }
+    const result = measure(normalized || transformed, normalized || this.homography ? 1 : this.mmPerPixel);
     this.measurement=result;
     const fields=prefix=>({width:Number(this.el.querySelector('.'+prefix+'-width').value),height:Number(this.el.querySelector('.'+prefix+'-height').value)});
     this.caliperCheck=benchmark(result,fields('caliper'));
     this.repeatCheck=benchmark(result,fields('repeat'));
-    this.edgeRepeatCheck = this.homography && this.loadedPhotoVersion !== this.repeatPhotoVersion
-      ? contourRepeatability(this.repeatOutline, transformed) : {pass:false,error:null};
+    this.edgeRepeatCheck = this.homography && normalized && this.repeatOutline && this.loadedPhotoVersion !== this.repeatPhotoVersion
+      ? contourRepeatability(this.repeatOutline, normalized) : {pass:false,error:null};
     const describe=(name,c)=>name+': '+(c.error?(c.pass?'PASS':'FAIL')+' (width Δ '+c.error.width.toFixed(3)+', height Δ '+c.error.height.toFixed(3)+' mm)':'PENDING');
     this.el.querySelector('.benchmark-status').textContent=describe('Calipers',this.caliperCheck)+'. '+describe('Independent repeat',this.repeatCheck)+'. Target: each Δ ≤ 0.5 mm.';
-    this.el.querySelector('.benchmark-status').textContent += ' Edge repeatability: ' + (this.edgeRepeatCheck.error === null ? 'PENDING (save outline, then take another photo)' : (this.edgeRepeatCheck.pass ? 'PASS' : 'FAIL') + ' (symmetric max sampled edge distance '+this.edgeRepeatCheck.error.toFixed(3)+' mm; target ≤ 0.5 mm). Centroid translation only; keep the same top orientation. This is repeatability, not edge accuracy.');
+    this.el.querySelector('.benchmark-status').textContent += ' Edge repeatability: ' + (this.edgeRepeatCheck.error === null ? 'PENDING (save outline, then take another photo and mark its top)' : (this.edgeRepeatCheck.pass ? 'PASS' : 'FAIL') + ' (symmetric max sampled edge distance '+this.edgeRepeatCheck.error.toFixed(3)+' mm; target ≤ 0.5 mm). Outlines align by their marked optical centres and tops. This is repeatability, not edge accuracy.');
     const status=this.el.querySelector('.resolution-status');
     if(this.bitmap&&(this.homography||this.mmPerPixel)){
       const r=pixelResolution(this.points.length?this.points:[[this.canvas.width/2,this.canvas.height/2]],this.homography,this.mmPerPixel,this.bitmap.width/this.canvas.width,this.bitmap.height/this.canvas.height);
@@ -436,18 +479,31 @@ class LensPanel {
       ctx.beginPath(); ctx.moveTo(x - width * 6, y); ctx.lineTo(x + width * 6, y);
       ctx.moveTo(x, y - width * 6); ctx.lineTo(x, y + width * 6); ctx.stroke();
     }
+    if (this.topMark) {
+      const [x, y] = this.topMark;
+      ctx.strokeStyle = '#ffe77d'; ctx.lineWidth = width * 1.4;
+      ctx.beginPath(); ctx.moveTo(x, y - width * 7); ctx.lineTo(x - width * 5, y + width * 3);
+      ctx.lineTo(x + width * 5, y + width * 3); ctx.closePath(); ctx.stroke();
+      ctx.fillStyle = '#ffe77d'; ctx.font = `${Math.max(12, width * 6)}px sans-serif`;
+      ctx.fillText('TOP', x + width * 7, y + width * 2);
+    }
     this.updateMeasurement();
   }
 
   millimetreOutline() {
     if (this.points.length < 12 || (!this.mmPerPixel && !this.homography) || !this.opticalCentre) return null;
     const origin = this.homography ? project(this.opticalCentre, this.homography) : this.opticalCentre;
-    return this.points.map(point => {
+    const scale = this.homography ? 1 : this.mmPerPixel;
+    const contour = this.points.map(point => {
       const position = this.homography ? project(point, this.homography) : point;
-      const scale = this.homography ? 1 : this.mmPerPixel;
-      return [Number(((position[0] - origin[0]) * scale).toFixed(3)),
-              Number(((position[1] - origin[1]) * scale).toFixed(3))];
+      return [position[0] * scale, position[1] * scale];
     });
+    if (this.topMark) {
+      const top = this.homography ? project(this.topMark, this.homography) : this.topMark;
+      return normalizeLensOrientation(contour, origin.map(value => value * scale), top.map(value => value * scale))
+        .contour.map(([x, y]) => [Number(x.toFixed(3)), Number(y.toFixed(3))]);
+    }
+    return contour.map(([x, y]) => [Number((x - origin[0] * scale).toFixed(3)), Number((y - origin[1] * scale).toFixed(3))]);
   }
 }
 
@@ -528,8 +584,8 @@ async function makeFrame(preview, experimental = false) {
   try {
     if ([leftPanel, rightPanel].some(panel => panel.photoLoading))
       throw new Error('Wait for both selected photos to finish loading before previewing or exporting.');
-    if(!preview&&!experimental&&[leftPanel,rightPanel].some(p=>!p.homography||!p.caliperCheck?.pass||!p.repeatCheck?.pass||!p.edgeRepeatCheck?.pass||!p.el.querySelector('.evidence-confirmed').checked))
-      throw new Error('Checked export requires four markers, caliper/repeat width-height checks and saved-outline edge repeatability ≤ 0.5 mm for each lens, plus confirmed physical evidence. Use UNVERIFIED experimental export for a test.');
+    if(!preview&&!experimental&&[leftPanel,rightPanel].some(p=>!p.homography||!p.opticalCentre||!p.topMark||!p.caliperCheck?.pass||!p.repeatCheck?.pass||!p.edgeRepeatCheck?.pass||!p.el.querySelector('.evidence-confirmed').checked))
+      throw new Error('Checked export requires four markers, marked optical centre and top, caliper/repeat width-height checks and edge repeatability ≤ 0.5 mm for each lens, plus confirmed physical evidence. Use UNVERIFIED experimental export for a test.');
     const payload = framePayload();
     const snapshot = frameSnapshot(payload);
     makeFrame.pending = true;
@@ -562,7 +618,7 @@ async function makeFrame(preview, experimental = false) {
       link.download = experimental ? 'optiframe-UNVERIFIED-experimental-kit.zip' : 'optiframe-measurement-checked-kit.zip';
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
-      designStatus.textContent = (experimental ? 'UNVERIFIED experimental kit. ' : 'Measurement checks passed; physical fit unverified. ') + 'STL kit downloaded. Slice at 100% in millimetres, print a fit test and inspect lens retention before use.';
+      designStatus.textContent = (experimental ? `UNVERIFIED experimental kit. ${[leftPanel,rightPanel].some(panel=>!panel.topMark)?'At least one lens has no top mark, so orientation was inferred from its photo. ':''}` : 'Measurement checks passed; physical fit unverified. ') + 'STL kit downloaded. Slice at 100% in millimetres, print a fit test and inspect lens retention before use.';
     }
   } catch (error) { if (request === makeFrame.sequence) designStatus.textContent = error.message; }
   finally { if (request === makeFrame.sequence) makeFrame.pending = false; }

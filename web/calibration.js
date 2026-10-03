@@ -72,15 +72,12 @@ function pixelResolution(points,h,scale,sx,sy) {
 }
 function contourRepeatability(first, second) {
   if (!first || !second || first.length < 3 || second.length < 3) return {pass:false,error:null};
-  const centre = points => {
-    let area=0, x=0, y=0;
-    points.forEach((p,i)=>{const q=points[(i+1)%points.length], cross=p[0]*q[1]-q[0]*p[1];area+=cross;x+=(p[0]+q[0])*cross;y+=(p[1]+q[1])*cross;});
-    return Math.abs(area)>1e-8 ? [x/(3*area),y/(3*area)] : null;
-  };
-  const aCentre=centre(first),bCentre=centre(second);
-  if (!aCentre || !bCentre) return {pass:false,error:null};
-  const align=(points,c)=>points.map(p=>[p[0]-c[0],p[1]-c[1]]);
-  const a=align(first,aCentre), b=align(second,bCentre);
+  if (![...first,...second].every(point => Array.isArray(point) && point.length === 2 && point.every(Number.isFinite)))
+    return {pass:false,error:null};
+  // The caller has already centred each contour on its marked optical centre
+  // and aligned its physical top mark. Keep that origin: recentering would hide
+  // a misplaced optical-centre mark on an independent capture.
+  const a=first, b=second;
   const segmentDistance=(p,u,v)=>{
     const dx=v[0]-u[0],dy=v[1]-u[1],denom=dx*dx+dy*dy;
     const t=denom ? Math.max(0,Math.min(1,((p[0]-u[0])*dx+(p[1]-u[1])*dy)/denom)) : 0;
@@ -100,4 +97,56 @@ function contourRepeatability(first, second) {
   const error=Math.max(directed(a,b),directed(b,a));
   return {pass:Number.isFinite(error)&&error<=0.5+1e-9,error};
 }
-export {distance,polygonArea,measure,sheetHomography,project,benchmark,pixelResolution,contourRepeatability};
+
+// Coordinates are already rectified millimetres, with image Y increasing downward.
+// The user's two marks establish placement without changing the measured shape.
+function normalizeLensOrientation(points, opticalCentre, topMark) {
+  const validPoint = point => Array.isArray(point) && point.length === 2 && point.every(Number.isFinite);
+  if (!Array.isArray(points) || points.length < 3 || !points.every(validPoint) ||
+      !validPoint(opticalCentre) || !validPoint(topMark)) {
+    throw new Error('Lens contour, optical centre, and top mark must contain finite 2D millimetre coordinates.');
+  }
+  const dx = topMark[0] - opticalCentre[0];
+  const dy = topMark[1] - opticalCentre[1];
+  const length = Math.hypot(dx, dy);
+  if (length < 5) throw new Error('Top mark must be at least 5 mm from the optical centre.');
+  const topAngleRadians = Math.atan2(dx, -dy);
+  const cosine = -dy / length;
+  const sine = dx / length;
+  const rotate = point => {
+    const x = point[0] - opticalCentre[0];
+    const y = point[1] - opticalCentre[1];
+    return [cosine * x + sine * y, -sine * x + cosine * y];
+  };
+  return {
+    contour: points.map(rotate),
+    top: rotate(topMark),
+    topAngleRadians,
+    appliedRotationRadians: -topAngleRadians,
+  };
+}
+
+// A4 proof for comparing the actual loose lens against its measured contour.
+// SVG millimetre units preserve the geometry when printed without scaling.
+function outlineProofSVG(contour, side) {
+  if (!['left', 'right'].includes(side) || !Array.isArray(contour) || contour.length < 12 ||
+      !contour.every(point => Array.isArray(point) && point.length === 2 && point.every(Number.isFinite)))
+    throw new Error('A valid left or right contour with at least 12 points is needed.');
+  const xs = contour.map(point => point[0]);
+  const ys = contour.map(point => point[1]);
+  if (Math.min(...xs) < -90 || Math.max(...xs) > 90 || Math.min(...ys) < -95 || Math.max(...ys) > 95)
+    throw new Error('This outline exceeds the safe A4 print area.');
+  const path = contour.map(([x,y],index) => `${index ? 'L' : 'M'}${x.toFixed(3)} ${y.toFixed(3)}`).join(' ') + ' Z';
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="210mm" height="297mm" viewBox="0 0 210 297">
+<rect width="210" height="297" fill="white"/>
+<g fill="#161a18" font-family="Arial,sans-serif"><text x="15" y="20" font-size="6">OptiFrame · ${side.toUpperCase()} lens · 1:1 outline proof</text>
+<text x="15" y="29" font-size="3.5">Print at actual size / 100%, without fit-to-page scaling. Verify the 50 mm line first.</text>
+<text x="15" y="36" font-size="3.5">TOP ↑ · Align the loose lens orientation and optical mark with the drawing.</text></g>
+<g transform="translate(105 135)" fill="none" stroke="#111" stroke-width="0.2" stroke-linejoin="round"><path d="${path}"/>
+<path d="M-2 0 H2 M0 -2 V2" stroke-width="0.15"/></g>
+<g fill="#161a18" font-family="Arial,sans-serif" font-size="3.5"><text x="15" y="245">Scale check: exactly 50 mm</text><text x="15" y="278">Compare several points around the real edge. This is not a certified lens fit.</text></g>
+<path d="M15 253 H65 M15 251 V255 M65 251 V255" fill="none" stroke="#111" stroke-width="0.2"/>
+</svg>`;
+}
+
+export {distance,polygonArea,measure,sheetHomography,project,benchmark,pixelResolution,contourRepeatability,normalizeLensOrientation,outlineProofSVG};

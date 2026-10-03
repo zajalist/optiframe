@@ -1,94 +1,35 @@
 <!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#11242c">
-  <title>OptiFrame — lens measurement</title>
-  <link rel="stylesheet" href="/style.css">
-</head>
-<body>
-  <header>
-    <div class="brand"><span class="mark">◉</span> OPTIFRAME <span class="tag">CAPTURE LAB</span></div>
-    <p>Turn available lenses into a frame made for one person.</p>
-  </header>
-  <main>
-    <section class="intro">
-      <div><span class="eyebrow">01 / MEASURE</span><h1>Two lenses.<br><em>One made-to-fit frame.</em></h1></div>
-      <p>Load each lens photo or an iPhone capture ZIP. Compare the empty sheet, inspect the proposed edge, and calibrate the photo with four sheet markers. Every contour stays editable.</p>
-    </section>
-
-    <div class="notice">Print the <a href="/calibration-sheet.svg" target="_blank" rel="noopener">100 × 70 mm calibration sheet</a> at 100% and verify its dimensions with a ruler. Experimental prototype: check lens edge thickness and optical centres with an eye care professional. Print a fit test and verify both hinges before use.</div>
-
-    <section class="quick-ar-test" aria-labelledby="quick-ar-title">
-      <div><span class="eyebrow">FAST PHONE TEST / ANDROID</span><h2 id="quick-ar-title">Does AR depth work on your phone?</h2><p>Skip the lens forms. Open this in Android Chrome, tap Start, allow the camera, and scan an opaque object for 15 seconds.</p></div>
-      <a class="quick-ar-button" href="/android-ar.html">Test ARCore depth →</a>
-    </section>
-    <div class="panels">
-      <section class="lens-panel" data-side="left">
-        <div class="panel-head"><span class="eyebrow">LENS / LEFT</span><strong id="left-size">Awaiting capture</strong></div>
-        <div class="inputs">
-          <label>iPhone capture ZIP <input class="zip-input" type="file" accept=".zip,application/zip"></label>
-          <label>Lens video (max 60 s / 100 MB) <input class="video-input" type="file" accept="video/*,.mov,.mp4"></label>
-          <label>Lens photo <input class="photo-input" type="file" accept="image/*" capture="environment"></label>
-          <label>Empty sheet (optional) <input class="empty-input" type="file" accept="image/*" capture="environment"></label>
-        </div>
-        <div class="video-frames" aria-label="Choose a video photo" hidden></div>
-        <div class="canvas-wrap"><canvas aria-label="Left lens image and editable contour"></canvas><span class="canvas-placeholder">Add a capture to begin</span></div>
-        <div class="toolbar">
-          <button class="propose">Propose edge</button><button class="trace">Trace edge</button>
-          <button class="box">Set lens box</button><button class="markers">4 sheet markers</button><button class="scale">2-point scale</button><button class="optical">Set optical centre</button>
-          <button class="undo">Undo</button><button class="clear">Clear</button>
-        </div>
-        <select class="proposal-select" aria-label="Contour proposal" hidden></select>
-        <div class="scale-row"><label>Reference length <input class="reference-mm" type="number" min="1" step="0.1" value="50"> mm</label><span class="scale-status">Scale not set</span></div>
-        <p class="marker-status">Four-marker perspective calibration recommended</p>
-        <fieldset class="benchmark"><legend>Physical measurement benchmark</legend><p>Measure maximum horizontal width and vertical height with calipers, keeping the top mark orientation. Save a capture, then load a new independent photo to compare repeatability.</p><div class="benchmark-fields"><label>Caliper width (mm)<input class="benchmark-input caliper-width" type="number" min="0.01" step="0.01"></label><label>Caliper height (mm)<input class="benchmark-input caliper-height" type="number" min="0.01" step="0.01"></label><label>Independent capture width (mm)<input class="benchmark-input repeat-width" type="number" min="0.01" step="0.001"></label><label>Independent capture height (mm)<input class="benchmark-input repeat-height" type="number" min="0.01" step="0.001"></label></div><button class="save-repeat" type="button">Save dimensions + outline for repeat capture</button><p class="benchmark-status" role="status">Checks PENDING; target each discrepancy ≤ 0.5 mm.</p><p class="resolution-status">Pixel resolution awaits calibration.</p><label><input class="evidence-confirmed" type="checkbox"> I used real calipers, compared a different independently captured photo, and physically verified the printed 100 × 70 mm marker spans and 50 mm line.</label><p>Tap white marker centres 1–4. Print scaling, incorrect centres, tilt, lens curvature and height above the sheet can bias dimensions. A size check does not validate every edge point.</p></fieldset>
-        <p class="centre-status">Optical centre not set</p>
-        <p class="panel-status" role="status">Capture one lens at a time on the marked sheet.</p>
-      </section>
-
-      <section class="lens-panel" data-side="right">
-        <div class="panel-head"><span class="eyebrow">LENS / RIGHT</span><strong id="right-size">Awaiting capture</strong></div>
-        <div class="inputs">
-          <label>iPhone capture ZIP <input class="zip-input" type="file" accept=".zip,application/zip"></label>
-          <label>Lens video (max 60 s / 100 MB) <input class="video-input" type="file" accept="video/*,.mov,.mp4"></label>
-          <label>Lens photo <input class="photo-input" type="file" accept="image/*" capture="environment"></label>
-          <label>Empty sheet (optional) <input class="empty-input" type="file" accept="image/*" capture="environment"></label>
-        </div>
-        <div class="video-frames" aria-label="Choose a video photo" hidden></div>
-        <div class="canvas-wrap"><canvas aria-label="Right lens image and editable contour"></canvas><span class="canvas-placeholder">Add a capture to begin</span></div>
-        <div class="toolbar">
-          <button class="propose">Propose edge</button><button class="trace">Trace edge</button>
-          <button class="box">Set lens box</button><button class="markers">4 sheet markers</button><button class="scale">2-point scale</button><button class="optical">Set optical centre</button>
-          <button class="undo">Undo</button><button class="clear">Clear</button>
-        </div>
-        <select class="proposal-select" aria-label="Contour proposal" hidden></select>
-        <div class="scale-row"><label>Reference length <input class="reference-mm" type="number" min="1" step="0.1" value="50"> mm</label><span class="scale-status">Scale not set</span></div>
-        <p class="marker-status">Four-marker perspective calibration recommended</p>
-        <fieldset class="benchmark"><legend>Physical measurement benchmark</legend><p>Measure maximum horizontal width and vertical height with calipers, keeping the top mark orientation. Save a capture, then load a new independent photo to compare repeatability.</p><div class="benchmark-fields"><label>Caliper width (mm)<input class="benchmark-input caliper-width" type="number" min="0.01" step="0.01"></label><label>Caliper height (mm)<input class="benchmark-input caliper-height" type="number" min="0.01" step="0.01"></label><label>Independent capture width (mm)<input class="benchmark-input repeat-width" type="number" min="0.01" step="0.001"></label><label>Independent capture height (mm)<input class="benchmark-input repeat-height" type="number" min="0.01" step="0.001"></label></div><button class="save-repeat" type="button">Save dimensions + outline for repeat capture</button><p class="benchmark-status" role="status">Checks PENDING; target each discrepancy ≤ 0.5 mm.</p><p class="resolution-status">Pixel resolution awaits calibration.</p><label><input class="evidence-confirmed" type="checkbox"> I used real calipers, compared a different independently captured photo, and physically verified the printed 100 × 70 mm marker spans and 50 mm line.</label><p>Tap white marker centres 1–4. Print scaling, incorrect centres, tilt, lens curvature and height above the sheet can bias dimensions. A size check does not validate every edge point.</p></fieldset>
-        <p class="centre-status">Optical centre not set</p>
-        <p class="panel-status" role="status">Capture one lens at a time on the marked sheet.</p>
-      </section>
-    </div>
-    <section class="design"><span class="eyebrow">02 / DESIGN + EXPORT</span><h2>Place both lenses for the wearer</h2><p>Enter each measured monocular pupil distance and lens edge thickness. Mark each lens optical centre in its photo. Vertical offsets place those centres above or below a shared wearer baseline; positive means up. Confirm fitting heights with an eye care professional. The downloaded ZIP contains separate closed STL parts in millimetres.</p>
-      <div class="design-inputs">
-        <label>Left monocular PD <input id="left-pd" type="number" min="20" max="40" step="0.1" value="32"> mm</label>
-        <label>Right monocular PD <input id="right-pd" type="number" min="20" max="40" step="0.1" value="32"> mm</label>
-        <label>Left lens edge thickness <input id="left-edge-thickness" type="number" min="1" max="6" step="0.1" value="2.5"> mm</label>
-        <label>Right lens edge thickness <input id="right-edge-thickness" type="number" min="1" max="6" step="0.1" value="2.5"> mm</label>
-        <label>Left optical-centre height offset <input id="left-vertical-offset" type="number" min="-10" max="10" step="0.1" value="0"> mm</label>
-        <label>Right optical-centre height offset <input id="right-vertical-offset" type="number" min="-10" max="10" step="0.1" value="0"> mm</label>
-        <label>Temple length <input id="temple-length" type="number" min="90" max="180" step="1" value="130"> mm</label>
-        <label>Printer bed width <input id="bed-width" type="number" min="100" step="1" value="220"> mm</label>
-        <label>Printer bed depth <input id="bed-depth" type="number" min="100" step="1" value="220"> mm</label>
-      </div>
-      <div class="design-actions"><button id="preview-frame">Preview 3D assembly</button><button id="download-frame">Download measurement-checked STL kit</button><button id="download-experimental">Download UNVERIFIED experimental STL kit</button></div>
-      <p id="design-status" role="status">Both contours, scales and optical centres are required.</p>
-      <div id="viewer" aria-label="Rotatable 3D preview of full frame assembly"></div>
-    </section>
-  </main>
-  <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"}}</script>
-  <script type="module" src="/app.js"></script>
-</body>
-</html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#f7f7f3"><title>OptiFrame — measure lenses, make frames</title><link rel="stylesheet" href="/style.css"></head>
+<body><header class="site-header"><a class="brand" href="/" aria-label="OptiFrame home"><span class="brand-symbol" aria-hidden="true"></span>OptiFrame</a><a class="header-link" href="/calibration-sheet.svg" target="_blank" rel="noopener">Calibration sheet ↗</a></header>
+<main><section class="intro" aria-labelledby="page-title"><div><h1 id="page-title">A frame made for the lenses you have.</h1><p>Measure two loose lenses, place them for one wearer, then preview and export a printable frame.</p></div><div class="intro-note"><strong>Before you begin</strong><span>Print the <a href="/calibration-sheet.svg" target="_blank" rel="noopener">calibration sheet</a> at 100% and check it with a ruler. Photograph one lens at a time.</span></div></section>
+<section class="measure-section" aria-labelledby="measure-title"><div class="section-heading"><h2 id="measure-title">Measure the lenses</h2><span>Capture · outline · calibrate</span></div><div class="panels"><section class="lens-panel" data-side="left" aria-labelledby="left-heading">
+<div class="panel-head"><h3 id="left-heading">Left lens</h3><strong id="left-size">Awaiting capture</strong></div>
+<div class="capture-main"><label>Lens photo<input class="photo-input" type="file" accept="image/*" capture="environment"></label></div>
+<details class="source-options"><summary>Use video or iPhone scan instead</summary><div class="inputs"><label>iPhone capture ZIP<input class="zip-input" type="file" accept=".zip,application/zip"></label><label>Lens video (max 60 s / 100 MB)<input class="video-input" type="file" accept="video/*,.mov,.mp4"></label><label>Empty sheet photo, optional<input class="empty-input" type="file" accept="image/*" capture="environment"></label></div></details>
+<div class="video-frames" aria-label="Choose a video photo" hidden></div>
+<div class="canvas-wrap"><canvas aria-label="left lens image and editable contour"></canvas><span class="canvas-placeholder">Add a lens photo</span></div>
+<div class="toolbar primary-tools"><button class="propose" type="button">Propose outline</button><button class="markers" type="button">Four sheet markers</button><button class="optical" type="button">Optical centre</button><button class="top" type="button">Mark top</button></div>
+<select class="proposal-select" aria-label="Contour proposal" hidden></select>
+<div class="capture-state"><p class="top-status">Top orientation not set</p><p class="marker-status">Four-marker calibration not set</p><p class="centre-status">Optical centre not set</p></div>
+<details class="tool-options"><summary>Adjust outline or scale</summary><div class="toolbar"><button class="trace" type="button">Trace edge</button><button class="box" type="button">Set lens box</button><button class="scale" type="button">Two-point scale</button><button class="undo" type="button">Undo</button><button class="clear" type="button">Clear</button></div><div class="scale-row"><label>Reference length <input class="reference-mm" type="number" min="1" step="0.1" value="50"> mm</label><span class="scale-status">Scale not set</span></div></details>
+<details class="benchmark-details"><summary>Check measurements with calipers</summary><fieldset class="benchmark"><legend>Physical measurement check</legend><p>Measure maximum width and height with calipers. Save this outline, then compare an independent photo of the same lens.</p><div class="benchmark-fields"><label>Caliper width (mm)<input class="benchmark-input caliper-width" type="number" min="0.01" step="0.01"></label><label>Caliper height (mm)<input class="benchmark-input caliper-height" type="number" min="0.01" step="0.01"></label><label>Independent capture width (mm)<input class="benchmark-input repeat-width" type="number" min="0.01" step="0.001"></label><label>Independent capture height (mm)<input class="benchmark-input repeat-height" type="number" min="0.01" step="0.001"></label></div><button class="save-repeat" type="button">Save outline for repeat capture</button><button class="download-outline" type="button">Print 1:1 outline</button><p class="benchmark-status" role="status">Checks pending; target each discrepancy ≤ 0.5 mm.</p><p class="resolution-status">Pixel resolution awaits calibration.</p><label class="evidence-label"><input class="evidence-confirmed" type="checkbox"> I checked this lens with real calipers, a second photo, and verified sheet dimensions.</label><p>Measurement checks do not prove every edge point. Keep the same top orientation and verify the sheet’s printed size.</p></fieldset></details>
+<p class="panel-status" role="status">Start with a photo of the left lens on the calibration sheet.</p>
+</section><section class="lens-panel" data-side="right" aria-labelledby="right-heading">
+<div class="panel-head"><h3 id="right-heading">Right lens</h3><strong id="right-size">Awaiting capture</strong></div>
+<div class="capture-main"><label>Lens photo<input class="photo-input" type="file" accept="image/*" capture="environment"></label></div>
+<details class="source-options"><summary>Use video or iPhone scan instead</summary><div class="inputs"><label>iPhone capture ZIP<input class="zip-input" type="file" accept=".zip,application/zip"></label><label>Lens video (max 60 s / 100 MB)<input class="video-input" type="file" accept="video/*,.mov,.mp4"></label><label>Empty sheet photo, optional<input class="empty-input" type="file" accept="image/*" capture="environment"></label></div></details>
+<div class="video-frames" aria-label="Choose a video photo" hidden></div>
+<div class="canvas-wrap"><canvas aria-label="right lens image and editable contour"></canvas><span class="canvas-placeholder">Add a lens photo</span></div>
+<div class="toolbar primary-tools"><button class="propose" type="button">Propose outline</button><button class="markers" type="button">Four sheet markers</button><button class="optical" type="button">Optical centre</button><button class="top" type="button">Mark top</button></div>
+<select class="proposal-select" aria-label="Contour proposal" hidden></select>
+<div class="capture-state"><p class="top-status">Top orientation not set</p><p class="marker-status">Four-marker calibration not set</p><p class="centre-status">Optical centre not set</p></div>
+<details class="tool-options"><summary>Adjust outline or scale</summary><div class="toolbar"><button class="trace" type="button">Trace edge</button><button class="box" type="button">Set lens box</button><button class="scale" type="button">Two-point scale</button><button class="undo" type="button">Undo</button><button class="clear" type="button">Clear</button></div><div class="scale-row"><label>Reference length <input class="reference-mm" type="number" min="1" step="0.1" value="50"> mm</label><span class="scale-status">Scale not set</span></div></details>
+<details class="benchmark-details"><summary>Check measurements with calipers</summary><fieldset class="benchmark"><legend>Physical measurement check</legend><p>Measure maximum width and height with calipers. Save this outline, then compare an independent photo of the same lens.</p><div class="benchmark-fields"><label>Caliper width (mm)<input class="benchmark-input caliper-width" type="number" min="0.01" step="0.01"></label><label>Caliper height (mm)<input class="benchmark-input caliper-height" type="number" min="0.01" step="0.01"></label><label>Independent capture width (mm)<input class="benchmark-input repeat-width" type="number" min="0.01" step="0.001"></label><label>Independent capture height (mm)<input class="benchmark-input repeat-height" type="number" min="0.01" step="0.001"></label></div><button class="save-repeat" type="button">Save outline for repeat capture</button><button class="download-outline" type="button">Print 1:1 outline</button><p class="benchmark-status" role="status">Checks pending; target each discrepancy ≤ 0.5 mm.</p><p class="resolution-status">Pixel resolution awaits calibration.</p><label class="evidence-label"><input class="evidence-confirmed" type="checkbox"> I checked this lens with real calipers, a second photo, and verified sheet dimensions.</label><p>Measurement checks do not prove every edge point. Keep the same top orientation and verify the sheet’s printed size.</p></fieldset></details>
+<p class="panel-status" role="status">Start with a photo of the right lens on the calibration sheet.</p>
+</section></div></section>
+<section class="design" aria-labelledby="design-title"><div class="section-heading"><h2 id="design-title">Fit the wearer</h2><span>Position · preview · export</span></div><p>Use separately measured pupil distances and lens edge thicknesses. Mark each optical centre above before previewing.</p>
+<div class="design-inputs"><label>Left pupil distance <input id="left-pd" type="number" min="20" max="40" step="0.1" value="32"> <span>mm</span></label><label>Right pupil distance <input id="right-pd" type="number" min="20" max="40" step="0.1" value="32"> <span>mm</span></label><label>Left edge thickness <input id="left-edge-thickness" type="number" min="1" max="6" step="0.1" value="2.5"> <span>mm</span></label><label>Right edge thickness <input id="right-edge-thickness" type="number" min="1" max="6" step="0.1" value="2.5"> <span>mm</span></label></div>
+<details class="advanced-fit"><summary>More fitting and printer settings</summary><div class="design-inputs"><label>Left optical-centre height offset <input id="left-vertical-offset" type="number" min="-10" max="10" step="0.1" value="0"> <span>mm</span></label><label>Right optical-centre height offset <input id="right-vertical-offset" type="number" min="-10" max="10" step="0.1" value="0"> <span>mm</span></label><label>Temple length <input id="temple-length" type="number" min="90" max="180" step="1" value="130"> <span>mm</span></label><label>Printer bed width <input id="bed-width" type="number" min="100" step="1" value="220"> <span>mm</span></label><label>Printer bed depth <input id="bed-depth" type="number" min="100" step="1" value="220"> <span>mm</span></label></div><p>Positive height offsets place centres above the shared baseline. Confirm fitting heights and prescription suitability with an eye care professional.</p></details>
+<div class="design-actions"><button id="preview-frame" type="button">Preview frame</button><button id="download-frame" type="button">Download checked STL kit</button><button id="download-experimental" type="button">Download unverified kit</button></div><p id="design-status" role="status">Both lens outlines, scales, and optical centres are needed for a preview.</p><div id="viewer" aria-label="Rotatable 3D preview of full frame assembly"></div></section>
+<footer><span>OptiFrame is an experimental fabrication tool. Check each printed part and lens fit before wear.</span><a href="/android-ar.html">Test Android AR depth ↗</a></footer></main>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"}}</script><script type="module" src="/app.js"></script></body></html>

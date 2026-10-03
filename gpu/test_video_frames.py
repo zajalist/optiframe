@@ -144,7 +144,7 @@ context.invalidateFrameResult = () => {};
 vm.runInContext(fs.readFileSync('web/app.js','utf8').replace(/^import .*;$/m, '').split('const [leftPanel, rightPanel]')[0]+';globalThis.Panel=LensPanel', context);
 const panel = Object.create(context.Panel.prototype);
 Object.assign(panel,{photoVersion:0,proposalRequest:0,photoLoading:false,canvas:{},select:{replaceChildren(){}},
-  placeholder:{},scaleStatus:{},markerStatus:{},centreStatus:{},status:{},el:{querySelector:()=>({checked:false})},render(){}});
+  placeholder:{},scaleStatus:{},markerStatus:{},centreStatus:{},topStatus:{},status:{},el:{querySelector:()=>({checked:false})},render(){}});
 (async()=>{
   const first=panel.loadPhoto('old'); await Promise.resolve();
   assert.equal(await panel.loadPhoto('new'),true); oldBitmap.resolve(bitmap('old')); await first;

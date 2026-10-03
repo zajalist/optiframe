@@ -16,7 +16,7 @@ function harness() {
   const app=fs.readFileSync(new URL('./app.js',import.meta.url),'utf8').replace(/^import .*;$/m,'');
   vm.runInContext(app.split('const [leftPanel, rightPanel]')[0]+';globalThis.Panel=LensPanel',context);
   const panel=Object.create(context.Panel.prototype);
-  Object.assign(panel,{el:{querySelector:field},photoVersion:1,points:[[0,0],[50,0],[50,30],[0,30]],homography:[1,0,0,0,1,0,0,0],mmPerPixel:null,opticalCentre:[25,15],bitmap:null,size:{},photoLoading:false});
+  Object.assign(panel,{el:{querySelector:field},photoVersion:1,points:[[0,0],[50,0],[50,30],[0,30]],homography:[1,0,0,0,1,0,0,0],mmPerPixel:null,opticalCentre:[25,15],bitmap:null,size:{},topStatus:{textContent:''},photoLoading:false});
   context.panel=panel;
   vm.runInContext('const leftPanel=panel,rightPanel=panel;const designStatus={};globalThis.status=designStatus;'+app.slice(app.indexOf('function invalidateFrameResult()'),app.indexOf("document.getElementById('preview-frame')"))+';globalThis.payload=framePayload;globalThis.makeFrame=makeFrame;globalThis.invalidateFrameResult=invalidateFrameResult;',context);
   return {panel,field,context,designInput};
@@ -25,7 +25,7 @@ function harness() {
 test('geometry/calibration changes revoke confirmed evidence even when dimensions still pass',()=>{
   const {panel,field}=harness();
   panel.updateMeasurement();
-  for (const change of [()=>panel.points[0][0]+=0.1,()=>panel.points=panel.points.map(p=>[...p]).reverse(),()=>panel.homography=[1,0,0,0,1,0.01,0,0],()=>panel.mmPerPixel=0.1,()=>panel.opticalCentre=[24,15],()=>panel.photoVersion++]) {
+  for (const change of [()=>panel.points[0][0]+=0.1,()=>panel.points=panel.points.map(p=>[...p]).reverse(),()=>panel.homography=[1,0,0,0,1,0.01,0,0],()=>panel.mmPerPixel=0.1,()=>panel.opticalCentre=[24,15],()=>panel.topMark=[25,0],()=>panel.photoVersion++]) {
     field('.evidence-confirmed').checked=true;
     change();panel.updateMeasurement();
     assert.equal(field('.evidence-confirmed').checked,false);
@@ -38,6 +38,39 @@ test('unchanged repaint preserves confirmation; benchmark field editing can revo
   assert.equal(field('.evidence-confirmed').checked,true);
   panel.invalidateEvidence();assert.equal(field('.evidence-confirmed').checked,false);
   assert.equal(panel.caliperCheck.pass,false);assert.equal(panel.repeatCheck.pass,false);
+});
+
+test('two rotated photos align at the marked optical centre and top for edge repeatability',()=>{
+  const {panel}=harness();
+  panel.points=[[5,20],[9,12],[22,8],[42,9],[49,17],[50,30],[44,41],[30,45],[16,43],[7,37],[4,31],[4,25]];
+  panel.opticalCentre=[27,27];
+  panel.topMark=[27,7];
+  panel.loadedPhotoVersion=1;
+  panel.updateMeasurement();
+  panel.repeatOutline=panel.millimetreOutline();
+  panel.repeatPhotoVersion=1;
+  panel.points=panel.points.map(([x,y])=>[54-y,x]);
+  panel.opticalCentre=[27,27];
+  panel.topMark=[47,27];
+  panel.loadedPhotoVersion=2;
+  panel.updateMeasurement();
+  assert.equal(panel.edgeRepeatCheck.pass,true);
+  assert.ok(panel.edgeRepeatCheck.error<0.002);
+});
+
+test('a top mark too close to the optical centre gives guidance without crashing',()=>{
+  const {panel}=harness();
+  panel.topMark=[27,15];
+  assert.doesNotThrow(()=>panel.updateMeasurement());
+  assert.match(panel.topStatus.textContent,/at least 5 mm/);
+  assert.equal(panel.edgeRepeatCheck.pass,false);
+});
+
+test('checked STL needs a top mark even when other evidence passes',async()=>{
+  const {panel,context}=harness();
+  Object.assign(panel,{topMark:null,caliperCheck:{pass:true},repeatCheck:{pass:true},edgeRepeatCheck:{pass:true}});
+  await context.makeFrame(false,false);
+  assert.match(context.status.textContent,/marked optical centre and top/);
 });
 
 test('loading a photo blocks preview, checked export and experimental export',async()=>{
@@ -81,6 +114,21 @@ test('panel changes during one pending request discard its result without anothe
   assert.doesNotMatch(context.status.textContent, /outdated server result/);
 });
 
+test('marking a lens top invalidates an in-flight preview',async()=>{
+  const {panel,context}=harness();
+  panel.millimetreOutline=()=>Array.from({length:12},(_,index)=>[index,index]);
+  context.number=()=>2.5;
+  let resolve;
+  context.fetch=()=>new Promise(r=>resolve=r);
+  const pending=context.makeFrame(true);
+  panel.topMark=[25,0];
+  panel.updateMeasurement();
+  resolve({ok:false,headers:{get:()=> 'application/json'},json:async()=>({detail:'obsolete result'})});
+  await pending;
+  assert.match(context.status.textContent,/Design inputs changed/);
+  assert.doesNotMatch(context.status.textContent,/obsolete result/);
+});
+
 test('editing a shown preview marks it stale', () => {
   const {context} = harness();
   const badges = [];
@@ -117,7 +165,7 @@ test('pending archive owns loading state; a later photo or archive wins the race
     const first=deferred(),second=deferred();let requests=0;
     context.fetch=url=>url==='/api/import' ? (++requests===1?first.promise:second.promise) : Promise.resolve({blob:async()=>new Blob([url])});
     context.createImageBitmap=async()=>({width:80,height:60,close(){}});
-    Object.assign(panel,{side:'left',select:{replaceChildren(){}},placeholder:{},scaleStatus:{},markerStatus:{},centreStatus:{},status:{},canvas:{},render(){}});
+    Object.assign(panel,{side:'left',select:{replaceChildren(){}},placeholder:{},scaleStatus:{},markerStatus:{},centreStatus:{},topStatus:{},status:{},canvas:{},render(){}});
     const old=panel.loadArchive(new Blob(['A']));
     assert.equal(panel.photoLoading,true);assert.throws(()=>context.payload(),/finish loading/);
     const response=name=>({ok:true,headers:{get:()=> 'application/json'},json:async()=>({side:'left',image:name,frameCount:1})});
