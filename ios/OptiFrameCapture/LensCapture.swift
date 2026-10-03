@@ -244,7 +244,7 @@ final class LensCapture: NSObject, ObservableObject, ARSessionDelegate {
     private func processSegmentationFrame(_ frame: ARFrame) {
         // Processing state is confined to this queue; at most one request is in flight.
         guard let endpoint = segmentationURL, !segmentationPending,
-              frame.timestamp - lastSegmentationTime >= 0.75,
+              frame.timestamp - lastSegmentationTime >= 0.05,
               case .normal = frame.camera.trackingState else { return }
         lastSegmentationTime = frame.timestamp
         let generation = segmentationGeneration
