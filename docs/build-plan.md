@@ -11,14 +11,14 @@
 3. **Capture on phone.** Photograph one lens at a time. Four markers around it establish scale and perspective. Show a recapture prompt if markers are missing or image quality is poor.
 4. **Confirm contours.** Show the proposed outline over the original photo at high zoom. Let users correct it. Show width, height, optical-centre mark, and orientation for each lens independently.
 5. **Design.** Place each marked optical centre at that wearer's corresponding pupil position. Derive the bridge between independent rims, then set rim width, lens-edge thickness, temple span, and printer clearance. Flag lens or rim collisions and impossible bridge geometry. Preview both lenses inside the 3D assembly.
-6. **Validate and export.** Show optical verification status, placement measurements, repeat-capture discrepancy, and fit-coupon outcome. Export binary STL in millimetres; load it in a slicer.
+6. **Validate and export.** Show optical verification status, placement measurements, repeat-capture discrepancy, and fit-coupon outcome. Export one binary STL with all custom parts laid flat and separated on the selected printer bed. Import and slice that exact download without repair or resizing.
 
 ## Architecture, kept small
 
 - **Phone UI:** one web page with wearer measurements, lens verification status, capture, contour correction, dimensions, and preview. Native camera input is enough for the first version; a custom live camera view is optional.
 - **Image processing:** OpenCV (browser or a small server endpoint) detects markers, rectifies the image, and extracts an initial contour. Decide client versus server after a quick phone performance test.
 - **AI:** one segmentation endpoint for hard images, accepting a user click or box and returning a mask for correction. The mathematical scale and final contour remain explicit.
-- **Geometry:** measured contour and optical-centre point for each lens + wearer pupil positions -> independently placed 2D paths -> front and rear retaining rims plus bridge -> Three.js mesh -> STL export. Use existing geometry utilities if the chosen starter project has them.
+- **Geometry:** measured contour and optical-centre point for each lens + wearer pupil positions -> independently placed 2D paths -> closed front and rear retaining solids plus bridge -> print-bed layout -> STL export. Use existing geometry utilities if the chosen starter project has them.
 - **Storage:** local project JSON is enough for the demo. No accounts or database are needed.
 
 ## Time-boxed order of work
@@ -27,7 +27,7 @@
 | --- | --- | --- |
 | 0. Feasibility (first 2–3 h) | Pick provider-verified lenses, record one wearer's basic fitting measurements, test backgrounds, verify capture sheet, and make one repeatable capture. | Lens verification record, original photo, rectified image, caliper dimensions. |
 | 1. Measurement | Build capture, automatic outline, manual correction, independent L/R dimensions, and optical-centre marks. | Two different contour overlays and repeat-capture comparison. |
-| 2. Physical geometry | Align each lens to its wearer's pupil position; generate two rims, bridge, retaining lips, 3D preview, and STL. | Alignment view and slicer screenshot with correct dimensions. |
+| 2. Physical geometry | Align each lens to its wearer's pupil position; generate two rims, bridge, retaining lips, and closed printable solids. Arrange all custom parts on a selected bed and export STL. | Alignment view and a clean slicer preview of the downloaded file. |
 | 3. Fit loop | Print a short coupon; adjust clearance and thickness; print final front if time permits. | Photo/video of an actual lens being inserted and retained. |
 | 4. AI and presentation | Add AI segmentation to difficult photos, then polish the before/after story and demo. | Saved example where AI helps and user can correct it. |
 
@@ -39,7 +39,7 @@ If the first capture cannot achieve a clean repeatable contour quickly, switch t
 2. Show the wearer's separate pupil positions and the provider's lens-verification status.
 3. Capture each lens; show its overlaid outline, optical-centre mark, and measured dimensions.
 4. Correct one imperfect edge; show each lens move independently to align with the wearer's eyes.
-5. Show the resulting asymmetric frame, export STL, open it in a slicer, and show the physical fit coupon or assembly.
+5. Show the resulting asymmetric frame, download the STL, slice that downloaded file without adjustments, and show the physical fit coupon or assembly.
 6. End with measured errors and the optical checks that still require a professional.
 
 ## What to leave out
@@ -53,5 +53,5 @@ Gaussian splats, full 3D lens reconstruction, face scanning, automatic prescript
 - [ ] Two genuinely different measured contours feed the design.
 - [ ] Scale reference and dimensions are shown in millimetres.
 - [ ] AI-assisted contour is clearly labelled and editable.
-- [ ] 3D preview and a slicer-opened STL are shown.
+- [ ] The downloaded STL contains every custom printed part, correctly oriented and spaced, and slices without repair, scaling, or repositioning.
 - [ ] Real fit test, optical-centre placement, and measured errors are shown, including a failed/revised attempt if there was one.
