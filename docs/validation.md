@@ -43,9 +43,12 @@ If prescriptions are missing or a lens is unsuitable, do not label the pair read
 
 ## Export check
 
-- [ ] STL opens in a slicer.
-- [ ] Slicer dimensions match the app's millimetre dimensions.
-- [ ] No obvious non-manifold or missing surfaces.
+- [ ] The **downloaded** STL, not just the in-app preview, opens in a slicer.
+- [ ] It contains the front and every other custom printed part; required screws or other hardware are listed.
+- [ ] Each mesh is closed; the slicer reports no repair or missing surfaces.
+- [ ] Slicer dimensions match the app's millimetre dimensions without scaling.
+- [ ] Parts are flat on the bed, do not overlap or float, and fit the selected printer's build area without manual repositioning.
+- [ ] Slice completes with the chosen printer/material profile; inspect first layer, thin walls, unsupported regions, and estimated print time.
 - [ ] Final photo or short video shows the tested physical assembly.
 
 ## Scope of claim
