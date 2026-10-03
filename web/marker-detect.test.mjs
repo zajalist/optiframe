@@ -50,6 +50,27 @@ test('uses original pixels for the white dot in a downsampled phone photo', () =
   result.forEach((p, i) => near(p, points[i], 6));
 });
 
+test('finds markers connected to printed grid lines with dim white centres', () => {
+  const img = image();
+  const points = [[120, 120], [520, 120], [520, 400], [120, 400]];
+  for (const [x, y] of points) drawMarker(img, x, y);
+  for (let x = 120; x <= 520; x++) for (const y of [120, 400]) {
+    const i = (y * img.width + x) * 4;
+    img.data[i] = img.data[i + 1] = img.data[i + 2] = 55;
+  }
+  for (let y = 120; y <= 400; y++) for (const x of [120, 520]) {
+    const i = (y * img.width + x) * 4;
+    img.data[i] = img.data[i + 1] = img.data[i + 2] = 55;
+  }
+  for (const [x, y] of points) for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+    const i = ((y + dy) * img.width + x + dx) * 4;
+    img.data[i] = img.data[i + 1] = img.data[i + 2] = 145;
+  }
+  const result = detectSheetMarkers(img);
+  assert.ok(result);
+  result.forEach((p, i) => near(p, points[i]));
+});
+
 test('rejects incomplete sheet and solid dark distractors', () => {
   const img = image();
   [[120, 120], [520, 120], [520, 400]].forEach(([x, y]) => drawMarker(img, x, y));

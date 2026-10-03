@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('./live-segment.js', import.meta.url), 'utf8');
+test('live camera draws no prompt rectangle', () => {
+  assert.doesNotMatch(source, /context\.strokeRect/);
+});
 const { createLiveSegmentSession } = await import(`data:text/javascript,${encodeURIComponent(source)}`);
 
 function element() {
@@ -14,6 +17,7 @@ function element() {
     setPointerCapture() {},
     getContext() {
       return { clearRect() {}, strokeRect() {}, setLineDash() {}, beginPath() {},
+        save() {}, restore() {}, arc() {}, fill() {},
         moveTo() {}, lineTo() {}, closePath() {}, stroke() {}, drawImage() {},
         getImageData() { return { data: new Uint8ClampedArray(this.width * this.height * 4) }; } };
     },
@@ -85,7 +89,7 @@ test('sends one request at a time and invalidates stale prompts', async () => {
   await fixture.session.start();
   await pause(20);
   assert.equal(calls, 1);
-  assert.deepEqual(box, [128, 96, 512, 384]);
+  assert.deepEqual(box, [192, 153, 448, 327]);
   fixture.session.setBoxNormalized([0.1, 0.1, 0.9, 0.9]);
   resolveFirst({ ok: true, json: async () => result });
   await pause(15);
@@ -102,10 +106,26 @@ test('a tap recentres the live prompt on the lens', async () => {
     return { ok: true, json: async () => result };
   });
   await fixture.session.start();
-  fixture.overlay.handlers.pointerdown({ clientX: 480, clientY: 240, pointerId: 1 });
+  fixture.overlay.handlers.pointerdown({ clientX: 320, clientY: 240, pointerId: 1 });
   fixture.overlay.handlers.pointerup({ clientX: 480, clientY: 240, pointerId: 1 });
   await pause(20);
   assert.ok(boxes.some(([left, , right]) => (left + right) / 2 > 400));
+  fixture.session.stop();
+});
+
+test('dragging the precision target uses its release position', async () => {
+  const boxes = [];
+  const fixture = setup(async (_path, options) => {
+    boxes.push(JSON.parse(options.body.get('box')));
+    return { ok: true, json: async () => result };
+  });
+  await fixture.session.start();
+  fixture.overlay.handlers.pointerdown({ clientX: 160, clientY: 320, pointerType: 'touch', pointerId: 1 });
+  fixture.overlay.handlers.pointermove({ clientX: 480, clientY: 240, pointerType: 'touch', pointerId: 1 });
+  fixture.overlay.handlers.pointerup({ clientX: 480, clientY: 240, pointerType: 'touch', pointerId: 1 });
+  await pause(20);
+  assert.ok(boxes.some(([left, top, right, bottom]) =>
+    (left + right) / 2 > 400 && (top + bottom) / 2 < 220));
   fixture.session.stop();
 });
 
@@ -128,6 +148,21 @@ test('falls back once on 404 and selects the legacy SAM contour', async () => {
   const payload = await fixture.session.capture();
   assert.deepEqual(payload.contour, result.contour);
   assert.ok(payload.quality.score >= 0 && payload.quality.score <= 1);
+});
+
+test('falls back when the deployed service returns 405 for the new live route', async () => {
+  const routes = [];
+  const fixture = setup(async path => {
+    routes.push(path);
+    if (path === '/api/live-segment') return { status: 405, ok: false };
+    return { ok: true, json: async () => ({ width: 640, height: 480,
+      candidates: [{ method: 'sam2.1-hiera-small-cuda', contour: result.contour }] }) };
+  });
+  await fixture.session.start();
+  await pause(25);
+  assert.deepEqual(routes.slice(0, 2), ['/api/live-segment', '/api/segment']);
+  assert.equal(fixture.captureButton.disabled, false);
+  fixture.session.stop();
 });
 
 test('permission timeout lets the user retry and stops a late camera stream', async () => {

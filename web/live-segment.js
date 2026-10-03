@@ -4,7 +4,7 @@ const INTERVAL_MS = 50;
 const STARTUP_TIMEOUT_MS = 12000;
 
 const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
-const centerBox = [0.2, 0.2, 0.8, 0.8];
+const centerBox = [0.3, 0.32, 0.7, 0.68];
 
 function boundedStartup(operation, timeoutMs, signal, timeoutMessage, onLateResult = () => {}) {
   return new Promise((resolve, reject) => {
@@ -41,7 +41,7 @@ export function createLiveSegmentSession({
   let request = null;
   let generation = 0;
   let box = [...centerBox];
-  let dragStart = null;
+  let target = null;
   let latest = null;
   let best = null;
   let previousUpdateAt = null;
@@ -67,13 +67,25 @@ export function createLiveSegmentSession({
   function draw() {
     if (!overlay.width || !overlay.height) return;
     context.clearRect(0, 0, overlay.width, overlay.height);
-    const [x0, y0, x1, y1] = box;
-    context.strokeStyle = '#79d7ef';
-    context.lineWidth = 2;
-    context.setLineDash([8, 5]);
-    context.strokeRect(x0 * overlay.width, y0 * overlay.height,
-      (x1 - x0) * overlay.width, (y1 - y0) * overlay.height);
-    context.setLineDash([]);
+    if (target) {
+      const x = target[0] * overlay.width;
+      const y = target[1] * overlay.height;
+      context.save();
+      context.beginPath();
+      context.arc(x, y, 16, 0, Math.PI * 2);
+      context.fillStyle = '#10241bcc';
+      context.fill();
+      context.strokeStyle = '#e7f2de';
+      context.lineWidth = 2;
+      context.stroke();
+      context.beginPath();
+      context.moveTo(x - 8, y);
+      context.lineTo(x + 8, y);
+      context.moveTo(x, y - 8);
+      context.lineTo(x, y + 8);
+      context.stroke();
+      context.restore();
+    }
     if (!latest?.contour?.length) return;
     context.beginPath();
     latest.contour.forEach(([x, y], index) => {
@@ -102,35 +114,36 @@ export function createLiveSegmentSession({
     best = null;
     captureButton.disabled = true;
     draw();
-    message('Lens box set. Hold the lens steady while the edge updates.');
+    message('Tracking the lens you tapped. Hold steady.');
   }
   function pointer(event) {
     const rect = overlay.getBoundingClientRect();
+    const fingerOffset = event.pointerType === 'touch' ? 64 : 0;
     return [clamp((event.clientX - rect.left) / rect.width, 0, 1),
-      clamp((event.clientY - rect.top) / rect.height, 0, 1)];
+      clamp((event.clientY - rect.top - fingerOffset) / rect.height, 0, 1)];
   }
   overlay.addEventListener('pointerdown', event => {
     if (!stream) return;
-    dragStart = pointer(event);
+    target = pointer(event);
     overlay.setPointerCapture?.(event.pointerId);
+    draw();
+  });
+  overlay.addEventListener('pointermove', event => {
+    if (!stream || !target) return;
+    target = pointer(event);
+    draw();
   });
   overlay.addEventListener('pointerup', event => {
-    if (!dragStart) return;
-    const end = pointer(event);
-    const value = [Math.min(dragStart[0], end[0]), Math.min(dragStart[1], end[1]),
-      Math.max(dragStart[0], end[0]), Math.max(dragStart[1], end[1])];
-    dragStart = null;
-    if (value[2] - value[0] >= 0.03 && value[3] - value[1] >= 0.03)
-      setBoxNormalized(value);
-    else {
-      const halfWidth = Math.min(0.24, (box[2] - box[0]) / 2);
-      const halfHeight = Math.min(0.26, (box[3] - box[1]) / 2);
-      const x = clamp(end[0], halfWidth, 1 - halfWidth);
-      const y = clamp(end[1], halfHeight, 1 - halfHeight);
-      setBoxNormalized([x - halfWidth, y - halfHeight, x + halfWidth, y + halfHeight]);
-    }
+    if (!stream || !target) return;
+    const [tapX, tapY] = pointer(event);
+    target = null;
+    const halfWidth = 0.2;
+    const halfHeight = 0.18;
+    const x = clamp(tapX, halfWidth, 1 - halfWidth);
+    const y = clamp(tapY, halfHeight, 1 - halfHeight);
+    setBoxNormalized([x - halfWidth, y - halfHeight, x + halfWidth, y + halfHeight]);
   });
-  overlay.addEventListener('pointercancel', () => { dragStart = null; });
+  overlay.addEventListener('pointercancel', () => { target = null; draw(); });
 
   function grayFrame(source) {
     if (!trackingContext) return null;
@@ -228,7 +241,7 @@ export function createLiveSegmentSession({
   async function segmentFrame(body, signal, frame, prompt) {
     let response = await apiFetch(legacyApi ? '/api/segment' : '/api/live-segment',
       { method: 'POST', body, signal });
-    if (!legacyApi && response.status === 404) {
+    if (!legacyApi && (response.status === 404 || response.status === 405)) {
       legacyApi = true;
       response = await apiFetch('/api/segment', { method: 'POST', body, signal });
     }
@@ -283,7 +296,7 @@ export function createLiveSegmentSession({
         captureButton.disabled = false;
       }
       draw();
-      message(`Live edge · ${cadenceHz === null ? 'calibrating rate' : cadenceHz.toFixed(1) + ' updates/s'} · ${latencyMs} ms. Tap the lens or drag a tighter box.`);
+      message(`Live edge · ${cadenceHz === null ? 'calibrating rate' : cadenceHz.toFixed(1) + ' updates/s'} · ${latencyMs} ms.`);
     } catch (error) {
       if (token === generation && error.name !== 'AbortError')
         message(`No edge yet. Tap the lens, move closer, or use softer light. ${error.message}`);
@@ -317,7 +330,7 @@ export function createLiveSegmentSession({
       captureButton.disabled = true;
       draw();
       if (typeof requestAnimationFrame === 'function') animation = requestAnimationFrame(trackOnce);
-      message('Center the lens inside the box. Tap it or drag a tighter box if no edge appears.');
+      message('Keep one lens centered. If the edge misses, press and drag the target onto it.');
       void sample(token);
     } catch (error) {
       if (token === generation) { stop(); message(`Camera unavailable: ${error.message}`); }
@@ -343,6 +356,7 @@ export function createLiveSegmentSession({
     video.srcObject = null;
     latest = null;
     best = null;
+    target = null;
     previousUpdateAt = null;
     cadenceHz = null;
     captureButton.disabled = true;

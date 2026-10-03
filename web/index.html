@@ -3,27 +3,27 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#f7f7f3">
+  <meta name="theme-color" content="#f6f7f5">
   <title>OptiFrame — lens capture</title>
-  <link rel="stylesheet" href="/simple.css?v=2">
+  <link rel="stylesheet" href="/simple.css?v=5">
 </head>
 <body>
   <div class="app">
     <header class="header">
-      <a class="brand" href="/" aria-label="OptiFrame home"><span class="brand-mark" aria-hidden="true"></span>OptiFrame</a>
-      <a class="sheet-link" href="/calibration-sheet.svg" target="_blank" rel="noopener">Print sheet ↗</a>
+      <a class="brand" href="/" aria-label="OptiFrame home">OptiFrame</a>
+      <a class="sheet-link" href="/calibration-sheet.svg" target="_blank" rel="noopener">Calibration sheet</a>
     </header>
     <main class="capture">
       <div class="heading">
         <div class="heading-top">
-          <span id="step-label">01 / CAPTURE</span>
+          <span id="step-label" hidden aria-hidden="true"></span>
           <div class="sides" role="group" aria-label="Select lens"><button id="side-left" type="button" aria-pressed="true">Left</button><button id="side-right" type="button" aria-pressed="false">Right</button></div>
         </div>
         <h1 id="headline">Scan left lens</h1>
         <p id="instruction">Put one lens on the sheet, title upright. Keep four dots visible.</p>
       </div>
       <div class="stage" id="stage">
-        <div class="empty" id="empty"><span class="empty-shape" aria-hidden="true"></span><span>Camera preview</span></div>
+        <div class="empty" id="empty">Camera off</div>
         <div class="camera-frame" id="camera-frame" hidden><video id="camera" playsinline muted autoplay aria-label="Live lens camera"></video><canvas id="camera-overlay" aria-label="Live lens outline"></canvas></div>
         <canvas id="review-canvas" aria-label="Captured lens and calibration dots" hidden></canvas>
         <svg id="result-svg" viewBox="0 0 320 220" role="img" aria-label="Measured lens outline" hidden><path id="result-path" d=""></path></svg>
@@ -34,12 +34,12 @@
         <div class="secondary">
           <button id="secondary" type="button" hidden>Retake</button>
           <label id="photo-label" for="photo-input">Use a photo<input id="photo-input" type="file" accept="image/*" capture="environment"></label>
-          <a id="studio-link" href="/studio.html" hidden>Frame builder ↗</a>
+          <a id="studio-link" href="/studio.html" hidden>Frame builder</a>
         </div>
       </div>
     </main>
   </div>
   <button id="controller-capture" type="button" hidden disabled></button>
-  <script type="module" src="/simple.js?v=2"></script>
+  <script type="module" src="/simple.js?v=6"></script>
 </body>
 </html>

@@ -12,6 +12,17 @@ export function detectSheetMarkers(imageData) {
     dark[y * w + x] = value < 110 ? 1 : 0;
   }
 
+  // The printed grid touches marker squares in phone photographs. Remove
+  // one-pixel grid strokes before connected-component search so a marker is
+  // not absorbed into the whole sheet border.
+  const eroded = new Uint8Array(dark.length);
+  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+    let filled = 1;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++)
+      filled &= dark[(y + dy) * w + x + dx];
+    eroded[y * w + x] = filled;
+  }
+  dark.set(eroded);
   const queue = new Int32Array(w * h), candidates = [];
   const maxSide = Math.max(12, Math.min(w, h) * 0.14);
   for (let seed = 0; seed < dark.length; seed++) {
@@ -47,7 +58,7 @@ export function detectSheetMarkers(imageData) {
     for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
       centreBright = Math.max(centreBright, sample(nativeX + ox * centreRadius, nativeY + oy * centreRadius));
     }
-    if (centreBright < 165) continue;
+    if (centreBright < 125) continue;
     let ringDark = 0;
     const radius = Math.max(1.5, side * step * 0.23);
     for (let n = 0; n < 8; n++) {
