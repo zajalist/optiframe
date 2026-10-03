@@ -22,9 +22,10 @@ The core proof is **verified lenses + wearer measurements -> two independent len
 
 - [Research and evidence](docs/research.md) — optical and physical constraints, source evidence, and decisions.
 - [Lens capture pipeline](docs/lens-capture-pipeline.md) — low-cost kit, transparent-edge extraction, point-cloud decision, and test gates.
+- [Capture-mode experiments](docs/capture-mode-experiments.md) — Android ARCore/WebXR depth, multi-view silhouette clouds, SiteSplat comparison, and selection gates.
 - [Hackathon build plan](docs/build-plan.md) — scope, architecture, order of work, and demo.
 - [Validation protocol](docs/validation.md) — concrete checks and pass/fail evidence.
 
 ## Status
 
-Research and build plan only. No measurement accuracy or lens fit is claimed until it is tested with the actual lenses and printer.
+The [iPhone ARKit capture app](ios/README.md) and [local GPU contour-proposal service](gpu/README.md) are under construction. They are not yet an end-to-end frame generator. No measurement accuracy or lens fit is claimed until the actual lenses and printer pass the [validation protocol](docs/validation.md).
