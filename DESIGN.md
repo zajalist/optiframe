@@ -183,7 +183,7 @@ The scanner and guide use the platform system stack recorded in their tokens. Sc
 
 ## Layout
 
-Welcome is a vertically scrolling editorial page. Desktop outer margins begin at 5%; several sections use 7% padding. The hero combines a left text block with a large right image. Below it, two-column principle, process, and preparation sections alternate reading and visual emphasis. The process is a numbered list divided by rules, not a grid of cards.
+Welcome is a vertically scrolling editorial page. Desktop outer margins begin at 5%; several sections use 7% padding. The hero combines a left text block with a large right image. Below it, process and reference-sheet sections provide the practical steps. The process is a numbered list divided by rules, not a grid of cards.
 
 At 1100px and below the hero and section gaps tighten. At 760px and below sections become a single column, gutters become 6%, secondary header links hide, and the hero image moves below the copy. Its mobile crop intentionally enlarges the optical object. At 1600px and above gutters incorporate a centered 1500px content measure. The 380px override adjusts the smallest hero composition. These values are recorded as breakpoints in the sidecar.
 
@@ -193,7 +193,7 @@ Tutorial is optional and opens on request. Its native dialog is centered on larg
 
 ## Elevation & Depth
 
-Welcome depth comes from the illuminated object image, graphite field, tonal shifts, and thin rules. Its primary surfaces have no card shadows. The hero image uses `mix-blend-mode: lighten`; the generated illustration is captioned as a frame concept.
+Welcome depth comes from the illuminated object image, graphite field, tonal shifts, and thin rules. Its primary surfaces have no card shadows. The hero image uses `mix-blend-mode: lighten`; the image alt text identifies the generated frame concept.
 
 Glass controls combine translucent white fill, a reflective gradient, a bright upper bevel, a darker lower edge, and restrained lift shadows. Primary landing and secondary controls receive frosted backgrounds when standard or WebKit backdrop filtering is supported; the guide uses a stronger blur, inset highlight, and dialog shadow. Opaque colors are declared first, and reduced-transparency preferences disable filtering. Exact shadows, filter declarations, focus, and motion values live in `.impeccable/design.json`.
 
@@ -211,7 +211,7 @@ Tutorial lens silhouettes are the two distinct captured contours from `gpu/fixtu
 
 ### Welcome actions and navigation
 
-The translucent primary glass pill uses an inline arrow and directs users into the scanner. Secondary document and scanner navigation actions have frosted fills; the hero guide trigger is also a pill. Other inline guide links retain their text treatment. Primary hover brightens its translucent fill and reflective gradient; pill presses scale slightly. Keyboard focus uses a visible accent outline, with a darker blue outline on the neutral white section. The wordmark and scanner link stay available on mobile. Same-site scanner and home links preserve a session access fragment.
+The translucent primary glass pill uses a plain text label and directs users into the scanner. Secondary document and scanner navigation actions have frosted fills; the hero guide trigger is also a pill. Other inline guide links retain their text treatment. Primary hover brightens its translucent fill and reflective gradient; pill presses scale slightly. Keyboard focus uses a visible accent outline, with a darker blue outline on the neutral white section. The wordmark and scanner link stay available on mobile. Same-site scanner and home links preserve a session access fragment.
 
 ### Scanner stage and controls
 
@@ -239,3 +239,7 @@ The SVG diagram is decorative to assistive technology because nearby copy convey
 - **Don't** replace the two lens contours with a symmetric generic glasses icon in instructional diagrams.
 - **Don't** imply proven millimetre accuracy, validated physical fit, or certified eyewear through claims or imagery.
 - **Don't** blur the camera image or measurement overlays, or import the landing page's editorial layout into the scanner.
+## Copy restraint
+
+Keep controls text-only, without decorative arrows. Do not add slogans, floating captions, process ribbons, or repeated calls to action. Keep instructions in the capture/printing guides and preserve only necessary measurement and error guidance in the scanner.
+

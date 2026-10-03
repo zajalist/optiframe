@@ -7,10 +7,10 @@
   <meta name="description" content="Capture two recovered lenses, review their outlines, and generate an experimental printable frame around their individual shapes.">
   <title>OptiFrame — A new frame for the lenses already here.</title>
   <link rel="stylesheet" href="/assets/fonts.css">
-  <link rel="stylesheet" href="/welcome.css?v=14">
+  <link rel="stylesheet" href="/welcome.css?v=15">
   <link rel="stylesheet" href="/tutorial.css?v=14">
   <link rel="stylesheet" href="/glass.css?v=14">
-  <script src="/tutorial.js?v=1" defer></script>
+  <script src="/tutorial.js?v=15" defer></script>
   <script src="/welcome.js?v=1" type="module"></script>
 </head>
 <body>
@@ -18,9 +18,9 @@
   <header class="site-header">
     <a class="wordmark" href="/welcome.html" data-preserve-access aria-label="OptiFrame home"><svg viewBox="0 0 44 25" aria-hidden="true"><path d="M2 12.5C2 5.4 5.2 2 11.5 2S21 5.4 21 12.5 17.8 23 11.5 23 2 19.6 2 12.5Zm21 0C23 5.4 26.2 2 32.5 2S42 5.4 42 12.5 38.8 23 32.5 23 23 19.6 23 12.5Zm-2 0h2"/></svg><span>OptiFrame</span></a>
     <nav aria-label="Main navigation">
-      <a class="nav-process" href="#process">The process</a>
+      <a class="nav-process" href="#process">Process</a>
       <button class="nav-guide" type="button" data-tutorial="printing">Printing guide</button>
-      <a class="nav-scan" href="/" data-preserve-access>Open scanner <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></a>
+      <a class="nav-scan" href="/" data-preserve-access>Open scanner</a>
     </nav>
   </header>
 
@@ -28,41 +28,31 @@
     <section class="hero" aria-labelledby="hero-title">
       <div class="hero-copy">
         <h1 id="hero-title">A new frame.<br>For the lenses<br><span>already here.</span></h1>
-        <p>Two recovered lenses. Their own shapes.<br>A printable frame designed around both.</p>
         <div class="hero-actions">
-          <a class="button button-primary" href="/" data-preserve-access>Scan your lenses <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></a>
-          <button class="text-action" type="button" data-tutorial="capture"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m10 8 6 4-6 4V8Z"/></svg>How it works</button>
+          <a class="button button-primary" href="/" data-preserve-access>Scan lenses</a>
+          <button class="text-action" type="button" data-tutorial="capture">Capture guide</button>
         </div>
       </div>
       <figure class="hero-object">
-        <img id="hero-image" alt="Concept illustration of an eyeglass frame made around two differently shaped lenses" fetchpriority="high" width="1536" height="1024" hidden>
-        <figcaption>Frame concept <span>Generated illustration</span></figcaption>
+        <img id="hero-image" alt="Generated concept illustration of an eyeglass frame made around two differently shaped lenses" fetchpriority="high" width="1536" height="1024" hidden>
       </figure>
-      <div class="hero-foot"><span>Recovered lenses → measured outlines → printed parts</span><a href="#process" aria-label="Explore the process"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v16m-6-6 6 6 6-6"/></svg></a></div>
-    </section>
-
-    <section class="principle" aria-labelledby="principle-title">
-      <h2 id="principle-title">Different lenses.<br><span>One considered frame.</span></h2>
-      <div class="principle-copy"><p>Start with what you have. OptiFrame keeps each lens’s individual outline and uses the wearer’s separate left and right pupil positions to generate a frame.</p><p>Built for local eye-care providers and humanitarian teams exploring a second life for recovered lenses.</p></div>
     </section>
 
     <section class="process" id="process" aria-labelledby="process-title">
-      <div class="process-intro"><h2 id="process-title">From loose lenses<br>to a frame kit.</h2><p>A camera, a printed reference, and a few careful checks.</p><button class="text-action dark-action" type="button" data-tutorial="capture">Open the capture walkthrough <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button></div>
+      <div class="process-intro"><h2 id="process-title">Capture. Check. Print.</h2><button class="text-action dark-action" type="button" data-tutorial="capture">Capture guide</button></div>
       <ol class="process-steps">
-        <li><span class="step-number" aria-hidden="true">01</span><div><h3>Capture each lens.</h3><p>Photograph each lens on the printed reference sheet. Capture the left and right lenses separately, with optical centres and top orientation marked by an eye-care provider.</p><a class="inline-link" href="/calibration-sheet.svg" target="_blank" rel="noopener">Get the reference sheet <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 18 18 6M6 6h12v12"/></svg></a></div></li>
+        <li><span class="step-number" aria-hidden="true">01</span><div><h3>Capture each lens.</h3><p>Photograph each lens on the printed reference sheet. Capture the left and right lenses separately, with optical centres and top orientation marked by an eye-care provider.</p><a class="inline-link" href="/calibration-sheet.svg" target="_blank" rel="noopener">Print sheet</a></div></li>
         <li><span class="step-number" aria-hidden="true">02</span><div><h3>Check the outlines.</h3><p>Review the proposed contours. Check dimensions with a ruler or calipers and an independent capture before using them to build a frame.</p></div></li>
-        <li><span class="step-number" aria-hidden="true">03</span><div><h3>Build around the wearer.</h3><p>Add pupil positions, fitting offsets, and lens edge thicknesses. Inspect the 3D assembly, then export individual STL parts or a single build plate.</p><button class="inline-link" type="button" data-tutorial="printing">Explore the printing guide <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button></div></li>
+        <li><span class="step-number" aria-hidden="true">03</span><div><h3>Build around the wearer.</h3><p>Add pupil positions, fitting offsets, and lens edge thicknesses. Inspect the 3D assembly, then export individual STL parts or a single build plate.</p><button class="inline-link" type="button" data-tutorial="printing">Printing guide</button></div></li>
       </ol>
     </section>
 
     <section class="prepare" aria-labelledby="prepare-title">
-      <div class="reference-sheet"><img src="/calibration-sheet.svg" alt="Printable calibration sheet with four reference markers" loading="lazy" width="900" height="636"><span>Print at actual size. Verify with a ruler.</span></div>
-      <div class="prepare-copy"><h2 id="prepare-title">Good measurements<br>start on paper.</h2><p>The four marker centres form a 100 × 70 mm reference. Check the printed dimensions, keep the sheet flat, and photograph the whole reference with the lens.</p><a class="button button-outline" href="/calibration-sheet.svg" target="_blank" rel="noopener">Open reference sheet <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 18 18 6M6 6h12v12"/></svg></a></div>
+      <div class="reference-sheet"><img src="/calibration-sheet.svg" alt="Printable calibration sheet with four reference markers" loading="lazy" width="900" height="636"></div>
+      <div class="prepare-copy"><h2 id="prepare-title">Print reference</h2><p>The four marker centres form a 100 × 70 mm reference. Check the printed dimensions, keep the sheet flat, and photograph the whole reference with the lens.</p><a class="button button-outline" href="/calibration-sheet.svg" target="_blank" rel="noopener">Print sheet</a></div>
     </section>
-
-    <section class="start" aria-labelledby="start-title"><div><h2 id="start-title">Start with<br>your first lens.</h2><p>Capture the shape. Take the next step.</p></div><a class="button button-primary" href="/" data-preserve-access>Open the scanner <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></a></section>
-    <aside class="research-note" aria-label="Prototype limitations"><p>OptiFrame is an experimental frame-making tool. Real-lens measurement accuracy and physical fit still need validation. An eye-care professional must check prescription suitability, optical alignment, and wearer fit before use.</p></aside>
+    <aside class="research-note" aria-label="Prototype limitations"><p>Prototype. Verify measurements and printed fit. An eye-care provider must check lens suitability and optical alignment.</p></aside>
   </main>
-  <footer class="site-footer"><a class="wordmark" href="/welcome.html" data-preserve-access>OptiFrame</a><span>Another possibility for the lenses already here.</span><a href="#main">Back to top <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20V4m-6 6 6-6 6 6"/></svg></a></footer>
+  <footer class="site-footer"><a class="wordmark" href="/welcome.html" data-preserve-access>OptiFrame</a></footer>
 </body>
 </html>

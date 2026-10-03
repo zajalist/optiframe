@@ -291,7 +291,7 @@ function completeMarkers(capture, automatic = false) {
     capture.measurement = null;
     capture.rectifiedContour = null;
     renderReview(capture);
-    setPhase('markers', `${error.message}. Drag to the white dots in order 1 → 2 → 3 → 4.`);
+    setPhase('markers', `${error.message}. Drag to white dots 1, 2, 3, 4.`);
   }
 }
 
@@ -316,7 +316,7 @@ async function acceptCapture({ file, contour, width, height }) {
   catch { capture.markers = []; }
   if (capture.markers.length === 4) { completeMarkers(capture, true); return; }
   renderReview(capture);
-  setPhase('markers', 'Touch and drag to each white dot in order 1 → 2 → 3 → 4.');
+  setPhase('markers', 'Drag to white dots 1, 2, 3, 4.');
 }
 
 async function selectPhoto(file) {

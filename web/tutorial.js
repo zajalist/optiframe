@@ -79,7 +79,7 @@
     dialog.innerHTML = `<div class="oft-shell">
       <header class="oft-header"><span class="oft-guide-name"></span><span class="oft-count" aria-label="Step progress"></span><button type="button" class="oft-close" aria-label="Close guide"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12 M6 18 18 6"/></svg></button></header>
       <div class="oft-visual"></div>
-      <div class="oft-copy"><h2 id="oft-title" class="oft-title" tabindex="-1"></h2><p id="oft-description" class="oft-description"></p><a class="oft-sheet-link" href="/calibration-sheet.svg" target="_blank" rel="noopener">Open calibration sheet<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 12 12 4 M4 4h8v8"/></svg></a></div>
+      <div class="oft-copy"><h2 id="oft-title" class="oft-title" tabindex="-1"></h2><p id="oft-description" class="oft-description"></p><a class="oft-sheet-link" href="/calibration-sheet.svg" target="_blank" rel="noopener">Print sheet</a></div>
       <footer class="oft-footer"><nav class="oft-dots" aria-label="Guide steps"></nav><div class="oft-actions"><button type="button" class="oft-back">Back</button><button type="button" class="oft-next">Next</button></div></footer>
     </div>`;
     document.body.append(dialog);
