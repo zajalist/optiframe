@@ -57,7 +57,9 @@ For the prototype, a **two-part retaining rim** is the simplest geometry worth t
 
 Printer fit is machine- and material-dependent. Prusa's guidance explicitly recommends tolerances for mating parts and says there is no universal value; it cites roughly 0.2 mm printer accuracy as a starting point, with warping and shrinkage still relevant. This supports an adjustable clearance parameter and a coupon, not a universal tolerance claim. [Prusa dimensional-fit guidance](https://help.prusa3d.com/article/modeling-with-3d-printing-in-mind_164135)
 
-For web delivery, Three.js can preview and export binary STL. STL has no built-in units, so the app should label dimensions as millimetres and export coordinates consistently in millimetres. [Three.js STLExporter](https://threejs.org/docs/pages/STLExporter.html)
+For web delivery, Three.js can preview and export binary STL. STL has no built-in units or print settings, so the app should label dimensions as millimetres and export coordinates consistently in millimetres. A visualization mesh is not sufficient: every printed part must be a closed manifold solid, and disconnected parts must be separated and laid flat without collisions. Prusa's modeling guide identifies manifold geometry as a slicer requirement; its slicer guide calls out orientation, spacing, floating parts, and supports. [Three.js STLExporter](https://threejs.org/docs/pages/STLExporter.html), [Prusa modeling guide](https://help.prusa3d.com/article/modeling-with-3d-printing-in-mind_164135), [PrusaSlicer first-print guide](https://help.prusa3d.com/article/first-print-with-prusaslicer-3-0-0_1079761)
+
+**Decision:** the primary download is a single binary STL containing the front, retainers, and any other custom printed parts as separate, non-overlapping shells arranged at `z=0` for the selected print bed. The user should not need to repair geometry, rescale, rotate, or manually separate parts. A printer-specific 3MF can be added later; universal ready-to-run G-code cannot be promised without a known printer, filament, and slicer profile.
 
 ## 6. Physical validation beats a prettier render
 
@@ -69,7 +71,7 @@ A compelling evidence chain is: calibration sheet verified -> each lens contour 
 - Two captures of each lens agree on width and height within 0.5 mm; otherwise recapture or edit.
 - Measured width and height are within 0.5 mm of caliper measurements on selected test lenses; report actual errors, including failures.
 - Lens seats in a coupon without visible forced bending and does not fall out under a gentle handling test.
-- Exported STL opens in a slicer at the expected millimetre dimensions and contains a printable, closed mesh.
+- Downloaded STL contains all custom printed parts, opens in a slicer at the expected millimetre dimensions, fits the chosen bed, and slices without repair or manually moving parts.
 
 These gates are ambitious targets. The observed results should be recorded in [validation.md](validation.md), not silently assumed.
 
@@ -80,6 +82,7 @@ These gates are ambitious targets. The observed results should be recorded in [v
 | Transparent edge cannot be reliably segmented | Try alternate lighting; use a manual contour editor; keep AI proposal optional. |
 | Lens is curved or sits above marker plane | Photograph farther away and near-perpendicular; compare with calipers; choose modest-curve demo lenses. |
 | Lens slips or is squeezed | Print a short rim coupon and tune clearance and lip geometry before a whole frame. |
+| Assembly geometry looks good but STL cannot print | Check mesh closure, part spacing and bed fit; import and slice the actual downloaded file before demo. |
 | Available lenses do not match the person's prescription | Reject the pair for that recipient; a new frame cannot fix lens power. |
 | Optical centres cannot align while rims and bridge fit | Flag the geometry as infeasible; choose another lens pair or have the provider revise the fitting plan. |
 | Different lens powers or optical centres | Preserve lens identity, left/right/top and centre markings; have a provider verify any wearable pair. |
