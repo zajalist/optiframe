@@ -1,4 +1,12 @@
 [hidden]{display:none!important}
+html:has(body.home){height:100%;overflow:hidden}
+body.home{height:100vh;height:100dvh;display:grid;grid-template-rows:auto minmax(0,1fr);overflow:hidden}
+.home main{min-height:0}
+.home .hero{height:100%;min-height:0;padding-top:clamp(24px,6vh,74px)}
+.home .hero-object{height:100%;top:0}
+.home .hero h1{font-size:clamp(42px,min(6.4vw,11dvh),96px)}
+@media(max-width:760px){.home .hero{display:grid;grid-template-rows:auto minmax(0,1fr);padding:24px 6% 12px}.home .hero h1{font-size:clamp(36px,9.2vw,60px)}.home .hero-object{height:100%;min-height:0;margin-top:0}.home .hero-actions{margin-top:20px}}
+@media(max-height:500px){.home .site-header{height:60px}.home .hero{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:minmax(0,1fr);padding-top:12px}.home .hero h1{font-size:clamp(27px,5vw,42px)}.home .hero-object{position:relative;width:100%;right:auto;margin:0;grid-column:2;grid-row:1}.home .hero-object img{width:140%;margin-left:-35%}.home .hero-actions{margin-top:12px;gap:8px}.home .button,.home .text-action{min-height:44px;font-size:12px}}
 .hero-object{background:var(--ink)}
 .hero-object img{mix-blend-mode:lighten}
 :root{color-scheme:dark;--ink:#191a1c;--paper:#f2f2f2;--muted:#b9bdc5;--accent:#e5eaf2;--line:#41454d;--body-font:Manrope,"Segoe UI",sans-serif;scroll-behavior:smooth;scroll-padding-top:30px}

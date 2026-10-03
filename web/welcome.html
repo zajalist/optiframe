@@ -7,18 +7,17 @@
   <meta name="description" content="Capture two recovered lenses, review their outlines, and generate an experimental printable frame around their individual shapes.">
   <title>OptiFrame — A new frame for the lenses already here.</title>
   <link rel="stylesheet" href="/assets/fonts.css">
-  <link rel="stylesheet" href="/welcome.css?v=15">
+  <link rel="stylesheet" href="/welcome.css?v=18">
   <link rel="stylesheet" href="/tutorial.css?v=14">
   <link rel="stylesheet" href="/glass.css?v=14">
   <script src="/tutorial.js?v=15" defer></script>
   <script src="/welcome.js?v=1" type="module"></script>
 </head>
-<body>
+<body class="home">
   <a class="skip-link" href="#main">Skip to content</a>
   <header class="site-header">
     <a class="wordmark" href="/welcome.html" data-preserve-access aria-label="OptiFrame home"><svg viewBox="0 0 44 25" aria-hidden="true"><path d="M2 12.5C2 5.4 5.2 2 11.5 2S21 5.4 21 12.5 17.8 23 11.5 23 2 19.6 2 12.5Zm21 0C23 5.4 26.2 2 32.5 2S42 5.4 42 12.5 38.8 23 32.5 23 23 19.6 23 12.5Zm-2 0h2"/></svg><span>OptiFrame</span></a>
     <nav aria-label="Main navigation">
-      <a class="nav-process" href="#process">Process</a>
       <button class="nav-guide" type="button" data-tutorial="printing">Printing guide</button>
       <a class="nav-scan" href="/" data-preserve-access>Open scanner</a>
     </nav>
@@ -37,22 +36,6 @@
         <img id="hero-image" alt="Generated concept illustration of an eyeglass frame made around two differently shaped lenses" fetchpriority="high" width="1536" height="1024" hidden>
       </figure>
     </section>
-
-    <section class="process" id="process" aria-labelledby="process-title">
-      <div class="process-intro"><h2 id="process-title">Capture. Check. Print.</h2><button class="text-action dark-action" type="button" data-tutorial="capture">Capture guide</button></div>
-      <ol class="process-steps">
-        <li><span class="step-number" aria-hidden="true">01</span><div><h3>Capture each lens.</h3><p>Photograph each lens on the printed reference sheet. Capture the left and right lenses separately, with optical centres and top orientation marked by an eye-care provider.</p><a class="inline-link" href="/calibration-sheet.svg" target="_blank" rel="noopener">Print sheet</a></div></li>
-        <li><span class="step-number" aria-hidden="true">02</span><div><h3>Check the outlines.</h3><p>Review the proposed contours. Check dimensions with a ruler or calipers and an independent capture before using them to build a frame.</p></div></li>
-        <li><span class="step-number" aria-hidden="true">03</span><div><h3>Build around the wearer.</h3><p>Add pupil positions, fitting offsets, and lens edge thicknesses. Inspect the 3D assembly, then export individual STL parts or a single build plate.</p><button class="inline-link" type="button" data-tutorial="printing">Printing guide</button></div></li>
-      </ol>
-    </section>
-
-    <section class="prepare" aria-labelledby="prepare-title">
-      <div class="reference-sheet"><img src="/calibration-sheet.svg" alt="Printable calibration sheet with four reference markers" loading="lazy" width="900" height="636"></div>
-      <div class="prepare-copy"><h2 id="prepare-title">Print reference</h2><p>The four marker centres form a 100 × 70 mm reference. Check the printed dimensions, keep the sheet flat, and photograph the whole reference with the lens.</p><a class="button button-outline" href="/calibration-sheet.svg" target="_blank" rel="noopener">Print sheet</a></div>
-    </section>
-    <aside class="research-note" aria-label="Prototype limitations"><p>Prototype. Verify measurements and printed fit. An eye-care provider must check lens suitability and optical alignment.</p></aside>
   </main>
-  <footer class="site-footer"><a class="wordmark" href="/welcome.html" data-preserve-access>OptiFrame</a></footer>
 </body>
 </html>

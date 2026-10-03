@@ -215,7 +215,11 @@ The translucent primary glass pill uses a plain text label and directs users int
 
 ### Scanner stage and controls
 
-The stage is the largest available region. A compact heading, step label, and instruction identify the next task. A circular shutter captures; the regular primary action confirms or advances in later states. Disabled actions fade, active shutter presses scale the inner disk, and keyboard focus remains visible. Photo import and camera retry are compact stage controls. Pair previews preserve left and right identities.
+The stage is the largest available region. A compact heading identifies the lens. Stable, supported camera evidence triggers capture; there is no live shutter. The primary action confirms or advances in later states. Photo import and camera retry remain compact stage controls. One actionable capture cue appears at a time. Pair previews preserve left and right identities.
+
+### Phone fitting
+
+The landing page is a single viewport with the frame concept and scanner/guide actions. Fitting is a separate viewport sequence: summary, measurement source, pupil distances, edge thicknesses, left/right marks, fitting settings, actual assembly and print preparation. Use the platform font, neutral paper background and rounded silver controls. Dimensions sit within the lens silhouettes. Keep necessary measurement provenance and errors concise; do not add explanatory panels or decorative arrows. Numeric fields adapt to the software keyboard. Optional detailed physical verification remains in the advanced studio.
 
 ### Optional tutorial
 

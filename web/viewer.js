@@ -11,9 +11,11 @@ export function showSTL(buffer, element) {
     active.controls.dispose();
     active.renderer.dispose();
     active.resize.disconnect();
+    active.intersection?.disconnect();
+    document.removeEventListener('visibilitychange', active.invalidate);
     active.scene.traverse(object => { object.geometry?.dispose(); object.material?.dispose(); });
-    element.replaceChildren();
   }
+  element.replaceChildren();
   element.classList.add('active');
   element.style.position = 'relative';
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -32,25 +34,22 @@ export function showSTL(buffer, element) {
     geometry.setIndex(part.faces.flat());
     geometry.computeVertexNormals();
     const lens = part.kind === 'lens';
-    group.add(new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({
-      color: lens ? 0x79d7ef : part.name.includes('retainer') ? 0xf7ad70 : 0xc9eb64,
-      metalness: 0.08, roughness: 0.55, side: THREE.DoubleSide,
-      transparent: lens, opacity: lens ? 0.3 : 1, depthWrite: !lens,
-    })));
+    const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({
+      color: lens ? 0xc9deed : part.name.includes('retainer') ? 0x535e6e : 0x252c38,
+      metalness: 0.18, roughness: 0.34, side: THREE.DoubleSide,
+      transparent: lens, opacity: lens ? 0.22 : 1, depthWrite: !lens,
+    }));
+    mesh.userData.partName = part.name;
+    mesh.userData.kind = part.kind;
+    group.add(mesh);
   }
-  for (const [x, y, z] of assembly.opticalCentres) {
-    const geometry = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(x - 2, y, z - 0.05), new THREE.Vector3(x + 2, y, z - 0.05),
-      new THREE.Vector3(x, y - 2, z - 0.05), new THREE.Vector3(x, y + 2, z - 0.05),
-    ]);
-    group.add(new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ color: 0xff7bb5 })));
-  }
+
   const box = new THREE.Box3().setFromObject(group);
   const centre = box.getCenter(new THREE.Vector3());
   group.position.copy(centre).multiplyScalar(-1);
   const span = box.getSize(new THREE.Vector3()).length();
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x24404a, 2));
-  const light = new THREE.DirectionalLight(0xffffff, 2.5);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8090a5, 2.6));
+  const light = new THREE.DirectionalLight(0xffffff, 3.4);
   light.position.set(-50, 80, -90);
   scene.add(light);
   const controls = new OrbitControls(camera, renderer.domElement);
@@ -66,14 +65,13 @@ export function showSTL(buffer, element) {
     controls.target.set(0, 0, 0);
     camera.position.copy(new THREE.Vector3(front ? 0 : 0.65, front ? 0 : 0.4, -1).normalize().multiplyScalar(distance));
     controls.update();
+    invalidate();
   };
   const toolbar = document.createElement('div');
-  toolbar.style.cssText = 'position:absolute;left:10px;right:10px;top:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center';
-  const legend = document.createElement('span');
-  legend.textContent = 'Orange: retainers · Blue: flat lens placeholders · Pink: optical centres';
-  legend.style.cssText = 'font-size:12px;color:#e7ede8;background:#0a1a20d9;padding:6px;border-radius:6px';
-  toolbar.appendChild(legend);
-  for (const [label, front] of [['Assembly', false], ['Front', true]]) {
+  toolbar.className = 'frame-views';
+  toolbar.setAttribute('role', 'group');
+  toolbar.setAttribute('aria-label', 'Frame view');
+  for (const [label, front] of [['3D', false], ['Front', true]]) {
     const button = document.createElement('button');
     button.type = 'button';
     button.textContent = label;
@@ -81,19 +79,58 @@ export function showSTL(buffer, element) {
     button.addEventListener('click', () => setView(front));
     toolbar.appendChild(button);
   }
+  let exploded = false;
+  const parts = document.createElement('button');
+  parts.type = 'button';
+  parts.textContent = 'Parts';
+  parts.setAttribute('aria-pressed', 'false');
+  parts.addEventListener('click', () => {
+    exploded = !exploded;
+    parts.setAttribute('aria-pressed', String(exploded));
+    group.children.forEach(mesh => {
+      const name = mesh.userData.partName;
+      mesh.position.set(0, 0, 0);
+      if (exploded && name.includes('retainer')) mesh.position.z = 18;
+      if (exploded && mesh.userData.kind === 'lens') mesh.position.z = 9;
+      if (exploded && name.includes('temple')) mesh.position.x = name.startsWith('left') ? -15 : 15;
+    });
+    invalidate();
+  });
+  toolbar.appendChild(parts);
   element.appendChild(toolbar);
-  setView(false);
   const resize = new ResizeObserver(() => {
     camera.aspect = Math.max(1, element.clientWidth) / Math.max(1, element.clientHeight);
     camera.updateProjectionMatrix();
     renderer.setSize(element.clientWidth, element.clientHeight);
+    invalidate();
   });
   resize.observe(element);
-  const current = { renderer, controls, resize, scene, animation: 0 };
+  let visible = true;
+  const current = { renderer, controls, resize, scene, animation: 0, invalidate };
   active = current;
-  const animate = () => {
-    current.animation = requestAnimationFrame(animate);
-    if (!document.hidden) { controls.update(); renderer.render(scene, camera); }
-  };
-  animate();
+  function invalidate() {
+    if (current.animation || !visible || document.hidden || active !== current) return;
+    current.animation = requestAnimationFrame(() => {
+      current.animation = 0;
+      if (!visible || document.hidden || active !== current) return;
+      controls.update();
+      renderer.render(scene, camera);
+    });
+  }
+  controls.addEventListener('change', invalidate);
+  document.addEventListener('visibilitychange', invalidate);
+  current.intersection = typeof IntersectionObserver === 'function' ? new IntersectionObserver(entries => {
+    visible = entries[0].isIntersecting;
+    if (visible) invalidate();
+  }) : null;
+  current.intersection?.observe(element);
+  renderer.domElement.addEventListener('webglcontextlost', event => {
+    event.preventDefault();
+    const notice = document.createElement('p');
+    notice.className = 'frame-error';
+    notice.textContent = '3D paused. Update the preview to retry.';
+    element.appendChild(notice);
+  });
+  setView(false);
+  invalidate();
 }

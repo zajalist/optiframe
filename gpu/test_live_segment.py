@@ -12,7 +12,7 @@ from segment import app, live_quality
 
 def jpeg(width=240, height=160):
     image = np.full((height, width, 3), 125, np.uint8)
-    cv2.rectangle(image, (40, 30), (190, 130), (200, 200, 200), 2)
+    cv2.ellipse(image, (120, 80), (65, 45), 0, 0, 360, (200, 200, 200), 2)
     return cv2.imencode('.jpg', image)[1].tobytes()
 
 
@@ -38,6 +38,7 @@ class LiveSegmentTests(unittest.TestCase):
         result = response.json()
         self.assertEqual((result['width'], result['height']), (240, 160))
         self.assertGreater(len(result['contour']), 8)
+        self.assertTrue(result['presence']['detected'])
         self.assertGreaterEqual(result['quality']['score'], 0)
         self.assertLessEqual(result['quality']['score'], 1)
         self.assertIn('proposal-only', result['measurementStatus'])
@@ -76,7 +77,7 @@ class LiveSegmentTests(unittest.TestCase):
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.json()['detail'], 'GPU segmentation unavailable')
 
-    def test_quality_is_deterministic_and_penalizes_glare(self):
+    def test_quality_is_deterministic_and_blank_has_no_detail(self):
         image = np.full((100, 100, 3), 120, np.uint8)
         contour = [[20, 20], [80, 20], [80, 80], [20, 80]]
         box = (10, 10, 90, 90)

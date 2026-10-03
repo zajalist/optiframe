@@ -1,3 +1,5 @@
+import { createAutoCaptureGate } from './auto-capture.js?v=18';
+import { createCaptureGuidance, frameBrightness, optimizeCameraTrack } from './capture-guidance.js?v=18';
 // Live camera proposals are only inputs to the existing photo review flow.
 const MAX_SIDE = 1280;
 const INTERVAL_MS = 50;
@@ -33,6 +35,7 @@ export function createLiveSegmentSession({
   startupTimeoutMs = STARTUP_TIMEOUT_MS,
   requestTimeoutMs = 8000, maxResultAgeMs = 2000,
   locateTarget = null, minimalStatus = false,
+  autoCapture = false, calibrateFrame = null,
 }) {
   if (!video || !overlay || !status || !captureButton || typeof onCapture !== 'function')
     throw new TypeError('Live segmentation needs video, overlay, status, captureButton and onCapture');
@@ -59,11 +62,16 @@ export function createLiveSegmentSession({
   let startupAbort = null;
   let manualTarget = false;
   let lastLocateAt = -Infinity;
+  let frameId = 0;
+  const autoGate = createAutoCaptureGate();
+  const guidance = createCaptureGuidance();
+  let autoState = 'searching';
   const trackingCanvas = document.createElement('canvas');
   const trackingContext = trackingCanvas.getContext('2d', { willReadFrequently: true });
 
   function message(value, routine = false) { status.textContent = minimalStatus && routine ? '' : value; }
-  function clearResult() {
+  function clearResult(preserveGate = false) {
+    if (!preserveGate) autoGate.invalidate();
     clearTimeout(resultExpiry);
     resultExpiry = null;
     latest = null;
@@ -122,6 +130,7 @@ export function createLiveSegmentSession({
       throw new RangeError('Box must be inside the preview and at least 3% wide and high');
     box = [...value];
     manualTarget = true;
+    autoGate.invalidate();
     boxVersion++;
     request?.abort();
     trackingBase = null;
@@ -139,6 +148,7 @@ export function createLiveSegmentSession({
   }
   overlay.addEventListener('pointerdown', event => {
     if (!stream) return;
+    autoGate.invalidate();
     target = pointer(event);
     overlay.setPointerCapture?.(event.pointerId);
     draw();
@@ -279,6 +289,7 @@ export function createLiveSegmentSession({
     request = job.abort;
     try {
       const [width, height] = dimensions();
+      const mediaTime = video.currentTime;
       const frame = document.createElement('canvas');
       frame.width = width;
       frame.height = height;
@@ -305,6 +316,27 @@ export function createLiveSegmentSession({
       const data = await boundedStartup(segmentFrame(body, job.abort.signal, frame, prompt),
         requestTimeoutMs, job.abort.signal, 'Connection is slow. Retrying…');
       if (token !== generation || promptVersion !== boxVersion) return;
+      const sampledId = Number.isFinite(mediaTime) ? mediaTime : ++frameId;
+      let calibration = null;
+      let brightness = null;
+      if (autoCapture && calibrateFrame) {
+        try {
+          const pixels = frame.getContext('2d').getImageData(0, 0, width, height);
+          brightness = frameBrightness(pixels);
+          calibration = calibrateFrame(pixels, data.contour || []);
+        }
+        catch { /* Missing or unstable calibration cannot qualify for capture. */ }
+      }
+      if (data.presence?.detected === false || (autoCapture && data.presence?.detected !== true)) {
+        clearResult(true);
+        const decision = autoGate.update({ presence: data.presence, quality: data.quality, brightness, calibration, sampledAt: startedAt,
+          now: performance.now(), id: sampledId, dragging: Boolean(target) });
+        autoState = decision.state;
+        const advice = guidance.update({ calibration, width, height, quality: data.quality, presence: data.presence,
+          brightness, latencyMs: performance.now() - startedAt, now: performance.now(), state: autoState });
+        message(advice.message);
+        return;
+      }
       if (data.width !== width || data.height !== height || !Array.isArray(data.contour) || data.contour.length < 3 ||
           !data.contour.every(point => Array.isArray(point) && point.length === 2 && point.every(Number.isFinite) &&
             point[0] >= 0 && point[0] <= width && point[1] >= 0 && point[1] <= height) ||
@@ -321,9 +353,10 @@ export function createLiveSegmentSession({
       previousUpdateAt = updatedAt;
       latest = { ...data, offset: [0, 0] };
       try { trackingBase = grayFrame(frame); } catch { trackingBase = null; }
-      if (!best || updatedAt - best.sampledAt > maxResultAgeMs / 2 || data.quality.score >= best.quality.score) {
+      if (autoCapture || !best || updatedAt - best.sampledAt > maxResultAgeMs / 2 || data.quality.score >= best.quality.score) {
         best = { blob, contour: data.contour.map(point => [...point]),
-          width, height, quality: data.quality, capturedAt, latencyMs, sampledAt: startedAt };
+          width, height, quality: data.quality, capturedAt, latencyMs, sampledAt: startedAt,
+          markers: calibration?.markers?.map(point => [...point]) };
         captureButton.disabled = false;
       }
       clearTimeout(resultExpiry);
@@ -333,7 +366,15 @@ export function createLiveSegmentSession({
         message('Connection interrupted. Retrying…');
       }, Math.max(0, maxResultAgeMs - (updatedAt - startedAt)));
       draw();
-      message('Lens found. Hold steady and capture.', true);
+      if (autoCapture) {
+        const advice = guidance.update({ calibration, width, height, quality: data.quality, presence: data.presence,
+          brightness, latencyMs, now: updatedAt, state: autoState });
+        const decision = autoGate.update({ ...data, quality: advice.ready ? data.quality : null, calibration, sampledAt: startedAt,
+          now: updatedAt, id: sampledId, dragging: Boolean(target) });
+        autoState = decision.state;
+        message(decision.state === 'remove' ? 'Remove the first lens' : advice.message);
+        if (decision.capture) await capture(best, true);
+      } else message('Lens found. Hold steady and capture.', true);
     } catch (error) {
       if (token === generation && error.name !== 'AbortError') {
         clearResult();
@@ -350,8 +391,10 @@ export function createLiveSegmentSession({
     }
   }
 
-  async function start() {
+  async function start({ requireRemoval = false } = {}) {
     stop();
+    autoGate.reset({ requireRemoval });
+    autoState = requireRemoval ? 'remove' : 'searching';
     manualTarget = false;
     lastLocateAt = -Infinity;
     box = [...centerBox];
@@ -367,6 +410,7 @@ export function createLiveSegmentSession({
       late => late.getTracks().forEach(track => track.stop()));
       if (token !== generation) { acquired.getTracks().forEach(track => track.stop()); return; }
       stream = acquired;
+      void optimizeCameraTrack(acquired.getVideoTracks?.()[0]);
       video.srcObject = stream;
       await boundedStartup(video.play(), startupTimeoutMs, signal,
         'Camera preview timed out. Close other camera apps and try again.');
@@ -386,6 +430,9 @@ export function createLiveSegmentSession({
     }
   }
   function stop() {
+    autoGate.reset();
+    guidance.reset();
+    autoState = 'searching';
     generation++;
     startupAbort?.abort();
     startupAbort = null;
@@ -411,15 +458,15 @@ export function createLiveSegmentSession({
     captureButton.disabled = true;
     context.clearRect(0, 0, overlay.width, overlay.height);
   }
-  async function capture() {
-    if (!best || performance.now() - best.sampledAt > maxResultAgeMs) {
+  async function capture(selected = best, qualified = false) {
+    if (autoCapture && !qualified) throw new Error('Hold steady for automatic capture');
+    if (!selected || performance.now() - selected.sampledAt > maxResultAgeMs) {
       clearResult();
       throw new Error('Wait for a fresh lens outline');
     }
     if (capturePending) throw new Error('Capture is already in progress');
     capturePending = true;
     captureButton.disabled = true;
-    const selected = best;
     const token = generation;
     const payload = {
       file: new File([selected.blob], `${side}-live.jpg`, { type: 'image/jpeg' }),
@@ -427,11 +474,15 @@ export function createLiveSegmentSession({
       width: selected.width, height: selected.height,
       quality: selected.quality, capturedAt: selected.capturedAt,
       latencyMs: selected.latencyMs, source: 'live-segmentation',
+      markers: selected.markers,
     };
     try {
       await onCapture(payload);
       if (token === generation) stop();
       return payload;
+    } catch (error) {
+      if (token === generation) autoGate.reset();
+      throw error;
     } finally {
       capturePending = false;
       if (stream && best) captureButton.disabled = false;

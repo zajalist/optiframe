@@ -1,0 +1,58 @@
+.fit-flow{height:100dvh;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f0f2f5;color:#20242a}
+.fit-flow .fit-source{display:none!important}
+.fit-flow>.site-header{height:64px;width:100%;padding:8px 20px;border:0;background:rgba(255,255,255,.7);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
+.fit-flow .site-header .brand-symbol{display:none}
+.fit-flow .site-header .brand{font-size:16px}
+.fit-flow .site-header [hidden]{display:none!important}
+.fit-shell{height:calc(var(--fit-height,100dvh) - 64px);width:min(100%,680px);padding:18px 24px max(16px,env(safe-area-inset-bottom));display:grid;grid-template-rows:auto minmax(0,1fr) auto auto;gap:12px;margin:0 auto;overflow:hidden}
+.fit-heading{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.fit-heading h1{font:650 clamp(24px,5vw,30px)/1.15 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:-.025em;margin:0}
+.fit-progress{font-size:13px;color:#59616d;white-space:nowrap;font-variant-numeric:tabular-nums}
+.fit-body{min-height:0;display:flex;flex-direction:column;justify-content:center;gap:20px;overflow:hidden}
+.fit-note{color:#505965;font-size:14px;line-height:1.45;margin:0;max-width:50ch}
+.fit-message{color:#703c35;font-size:13px;line-height:1.35;margin:0;max-height:70px;overflow:auto}
+.fit-message:empty{display:none}
+.fit-navigation{display:flex;gap:12px;padding-top:8px}
+.fit-flow button,.fit-flow .fit-link{font-family:inherit}
+.fit-navigation button{min-height:52px;border-radius:30px;padding:12px 22px;border:1px solid rgba(255,255,255,.9);box-shadow:0 4px 16px rgba(28,37,49,.06);background:rgba(255,255,255,.6);color:#252b32;font-size:16px;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
+.fit-navigation .fit-next{flex:1;background:#293340;color:#fff;border-color:transparent;font-weight:600}
+.fit-navigation .fit-next:disabled{background:#d5d9df;color:#59616d;opacity:1;box-shadow:none}
+.fit-fields{display:grid;grid-template-columns:1fr;gap:22px;max-width:100%;margin:0}
+.fit-fields label{display:grid;grid-template-columns:1fr auto;align-items:center;gap:7px;color:#4b5562;font-size:14px;font-weight:500;min-width:0}
+.fit-fields input{grid-row:2;grid-column:1;min-width:0;width:100%;min-height:62px;font-size:26px;font-weight:500;font-variant-numeric:tabular-nums;border-radius:12px;border:1px solid #c7ced7;background:rgba(255,255,255,.75);padding:10px 14px;color:#202630;box-shadow:none}
+.fit-fields label span{grid-row:2;grid-column:2;font-size:14px;padding-left:6px}
+.fit-fields input:focus{outline:2px solid #51677e;outline-offset:2px}
+.fit-methods{border:0;padding:0;margin:0;display:grid;gap:12px}
+.fit-methods legend{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+.fit-methods label{display:flex;align-items:center;gap:12px;padding:18px;background:rgba(255,255,255,.75);border:1px solid #cbd2db;border-radius:16px;font-size:16px;min-height:62px}
+.fit-methods input,.fit-check input{accent-color:#344556;width:20px;height:20px;flex-shrink:0}
+.fit-file{display:grid;gap:8px;font-size:14px}
+.fit-file input{font-size:14px}
+.fit-check{display:flex;align-items:center;gap:10px;font-size:14px;line-height:1.4}
+.fit-pair{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:center}
+.fit-pair figure{margin:0;min-width:0}
+.fit-pair figcaption{font-size:14px;color:#59616d;margin-bottom:12px;text-align:center}
+.fit-pair svg{width:100%;max-height:290px;overflow:visible}
+.fit-pair path{fill:rgba(255,255,255,.7);stroke:#344150;stroke-width:.65}
+.fit-pair text{font-family:inherit;font-size:4px;fill:#293340;text-anchor:middle;dominant-baseline:middle}
+.fit-link{display:block;align-self:center;min-height:44px;padding:10px 16px;font-size:14px;color:#36485d;text-align:center;background:transparent;border:0;text-decoration:none}
+.fit-flow .fit-body>.lens-panel{min-height:0;flex:1;border:0;padding:0;background:transparent;display:flex;flex-direction:column}
+.fit-flow .fit-body>.lens-panel>:not(.canvas-wrap){display:none!important}
+.fit-flow .fit-body .canvas-wrap{flex:1;min-height:80px;height:auto;padding:0;border:1px solid #ced5de;background:#e2e6eb;border-radius:16px}
+.fit-flow .fit-body .canvas-wrap canvas{position:absolute;inset:0;margin:auto;object-fit:contain;max-height:100%;max-width:100%;width:auto;height:auto}
+.fit-mark-modes{display:flex;gap:8px}
+.fit-mark-modes button{min-height:44px;flex:1;border:1px solid #c4cdd7;border-radius:24px;font-size:14px;background:rgba(255,255,255,.55);color:#344150}
+.fit-mark-modes [aria-pressed=true]{background:#344150;color:#fff;border-color:transparent}
+.fit-nudges{display:flex;gap:6px}
+.fit-nudges button{min-height:44px;flex:1;min-width:0;border:1px solid #cad2dd;background:rgba(255,255,255,.6);color:#344150;border-radius:24px;font-size:13px;padding:8px}
+.fit-flow #viewer{flex:1;min-height:160px;height:auto;width:100%;border:0;border-radius:18px;background:#e5e9ee}
+.fit-flow #design-status{margin:0;font-size:13px;line-height:1.4;max-height:70px;overflow:auto;color:#515e6c}
+.fit-flow #design-status:empty{display:none}
+.fit-flow .viewer-empty{font-size:14px;max-width:30ch}
+.fit-shell[data-step="6"] .fit-fields{gap:12px}
+.fit-shell.is-keyboard .fit-fields label:not(:focus-within),.fit-shell.is-keyboard .fit-note{display:none}
+.fit-shell.is-keyboard .fit-body{justify-content:start;gap:8px}
+.fit-shell.is-keyboard .fit-fields{gap:8px}
+@media(max-height:720px){.fit-shell{gap:8px;padding:12px 18px max(10px,env(safe-area-inset-bottom))}.fit-body{gap:12px}.fit-fields{gap:14px}.fit-fields input{min-height:50px;font-size:22px}.fit-heading h1{font-size:24px}.fit-navigation button{min-height:48px}.fit-note{font-size:13px}}
+@media(max-height:500px){.fit-flow>.site-header{height:48px}.fit-shell{height:calc(var(--fit-height,100dvh) - 48px);padding-top:6px;gap:6px}.fit-heading h1{font-size:20px}.fit-fields{grid-template-columns:1fr 1fr;gap:10px}.fit-fields label{font-size:12px}.fit-fields input{min-height:42px;font-size:20px}.fit-body{gap:6px}.fit-body>.fit-note{font-size:12px}.fit-navigation button{min-height:44px;padding:8px 16px}.fit-methods{grid-template-columns:1fr 1fr;gap:8px}.fit-methods label{min-height:44px;padding:10px;font-size:14px}.fit-flow #viewer{min-height:70px}.fit-pair svg{max-height:110px}}
+@media(prefers-reduced-motion:no-preference){.fit-navigation button,.fit-mark-modes button{transition:background-color .15s ease,color .15s ease}}

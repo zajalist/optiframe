@@ -22,9 +22,10 @@ function harness({ cameraError = null, storageError = null, deferReads = false }
   }
   const $ = id => { if (!nodes.has(id)) nodes.set(id, element()); return nodes.get(id); };
   let starts = 0, sounds = 0, callbacks;
+  const startOptions = [];
   const ellipse = Array.from({ length: 80 }, (_, i) => [500 + 250 * Math.cos(i * Math.PI / 40), 350 + 200 * Math.sin(i * Math.PI / 40)]);
   const payload = { file: { name: 'lens.jpg' }, contour: ellipse, width: 1000, height: 700 };
-  const controller = { async start() { starts++; if (cameraError) throw new Error(cameraError); $('controller-capture').disabled = false; },
+  const controller = { async start(options) { starts++; startOptions.push(options); if (cameraError) throw new Error(cameraError); $('controller-capture').disabled = false; },
     stop() {}, async capture() { return callbacks.onCapture(payload); } };
   class AudioContext {
     state = 'suspended'; currentTime = 0;
@@ -52,7 +53,7 @@ function harness({ cameraError = null, storageError = null, deferReads = false }
     requestAnimationFrame: callback => callback(), fetch() {}, sessionStorage: { setItem(key,value) { if(storageError) throw new Error(storageError); storage.set(key,value); } },
   });
   vm.runInContext(source, context);
-  return { $, body, payload, context, storage, location, pendingReads, get starts() { return starts; }, get sounds() { return sounds; },
+  return { $, body, payload, context, storage, location, pendingReads, startOptions, get starts() { return starts; }, get sounds() { return sounds; },
     accept: value => callbacks.onCapture(value), click: id => $(id).handlers.click?.({ preventDefault() {} }) };
 }
 
@@ -71,8 +72,8 @@ test('camera requests access on load and a failed request keeps photo import and
 
 async function confirmPair(app) {
   await tick();
-  app.click('primary'); await tick(); app.click('primary'); await tick();
-  app.click('primary'); await tick(); app.click('primary');
+  await app.accept(app.payload); app.click('primary'); await tick();
+  await app.accept(app.payload); app.click('primary');
 }
 
 test('confirmed pair transfers actual photos, pixel contours and calibration to studio with access key', async () => {
@@ -123,7 +124,10 @@ test('guided capture requires both confirmations, displays both contours, and re
   const app = harness();
   await tick();
   assert.equal(app.body.dataset.phase, 'live');
-  app.click('primary');
+  assert.equal(app.$('primary').hidden, true);
+  assert.equal(app.$('photo-label').hidden, false);
+  app.click('photo-label'); // Unlock optional sound with a real user gesture.
+  await app.accept(app.payload);
   await tick();
   assert.equal(app.body.dataset.phase, 'result');
   assert.equal(app.sounds, 1);
@@ -139,7 +143,9 @@ test('guided capture requires both confirmations, displays both contours, and re
   assert.equal(app.starts, 2);
   assert.equal(app.body.dataset.phase, 'live');
   assert.equal(app.$('headline').textContent, 'Second lens');
-  app.click('primary');
+  assert.equal(app.startOptions[1].requireRemoval, true);
+  assert.equal(app.$('primary').hidden, true);
+  await app.accept(app.payload);
   await tick();
   assert.equal(app.body.dataset.phase, 'result');
   assert.equal(app.$('pair-results').hidden, true);
@@ -154,7 +160,7 @@ test('guided capture requires both confirmations, displays both contours, and re
   app.click('retry-left');
   await tick();
   assert.equal(app.$('headline').textContent, 'First lens');
-  app.click('primary');
+  await app.accept(app.payload);
   await tick();
   app.click('primary');
   assert.equal(app.body.dataset.phase, 'pair');

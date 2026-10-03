@@ -217,7 +217,7 @@ test('capture handoff preserves both independently sized contours through studio
     sessionStorage:{getItem:()=>JSON.stringify(transfer),removeItem(){removed=true;}},
     fetch:async()=>({blob:async()=>new Blob(['photo'])}),
     document:{body:{classList:{add(){}}},getElementById:()=>({}),querySelector:()=>({})}});
-  vm.runInContext(app.slice(app.indexOf('async function importSimpleCaptures()'),app.indexOf('void importSimpleCaptures();')),context);
+  vm.runInContext(app.slice(app.indexOf('async function importSimpleCaptures()'),app.indexOf('const capturesReady =')),context);
   await vm.runInContext('importSimpleCaptures()',context);
   assert.equal(removed,true);
   for(const panel of [left,right]) {

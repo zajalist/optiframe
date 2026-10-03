@@ -1,4 +1,4 @@
-import { createLiveSegmentSession } from './live-segment.js?v=14';
+import { createLiveSegmentSession } from './live-segment.js?v=18';
 import { sheetHomography, project, measure } from './calibration.js';
 import { detectSheetMarkers } from './marker-detect.js?v=9';
 
@@ -167,13 +167,12 @@ function setPhase(next, message) {
   if (next === 'pair') setStage('pair');
   if (next !== 'aim' && next !== 'markers') targetPointer = null;
   requestAnimationFrame(syncAimOverlay);
-  const shutter = ['idle', 'starting', 'live'].includes(next);
-  primary.hidden = ['markers', 'aim', 'processing'].includes(next);
-  primary.classList.toggle('shutter', shutter);
-  primary.disabled = next === 'idle' || next === 'starting' || next === 'processing' || (next === 'live' && controllerButton.disabled);
-  primary.innerHTML = shutter ? '<span class="shutter-core" aria-hidden="true"></span>' : next === 'pair' ? 'Fit frame' : 'Confirm';
-  primary.setAttribute('aria-label', shutter ? 'Capture lens' : next === 'pair' ? 'Confirm both lenses and fit frame' : 'Confirm lens');
-  photoLabel.hidden = !shutter;
+  const cameraPhase = ['idle', 'starting', 'live'].includes(next);
+  primary.hidden = !['result', 'pair'].includes(next);
+  primary.disabled = false;
+  primary.textContent = next === 'pair' ? 'Fit frame' : 'Confirm';
+  primary.setAttribute('aria-label', next === 'pair' ? 'Confirm both lenses and fit frame' : 'Confirm lens');
+  photoLabel.hidden = !cameraPhase;
   $('camera-retry').hidden = next !== 'idle';
   $('empty').textContent = next === 'idle' ? 'Camera unavailable. Retry or use a photo.' : 'Opening camera…';
   secondary.hidden = !['markers', 'aim', 'result'].includes(next);
@@ -186,12 +185,12 @@ function stopCamera() {
   controller?.stop();
 }
 
-async function startCamera() {
+async function startCamera(requireRemoval = false) {
   stopCamera();
   const generation = captureGeneration;
   setPhase('starting');
   try {
-    await controller.start();
+    await controller.start({ requireRemoval });
     if (generation !== captureGeneration) return;
     setPhase('live');
     fitCamera();
@@ -295,7 +294,7 @@ function completeMarkers(capture, automatic = false) {
   }
 }
 
-async function acceptCapture({ file, contour, width, height }) {
+async function acceptCapture({ file, contour, width, height, markers }) {
   const generation = captureGeneration;
   const capturedSide = side;
   const bitmap = await createImageBitmap(file);
@@ -304,7 +303,7 @@ async function acceptCapture({ file, contour, width, height }) {
   const capture = {
     file, bitmap, width: bitmap.width, height: bitmap.height,
     contour: contour.map(([x, y]) => [x * scaleX, y * scaleY]),
-    markers: [], homography: null, measurement: null, rectifiedContour: null,
+    markers: markers?.map(([x, y]) => [x * scaleX, y * scaleY]) || [], homography: null, measurement: null, rectifiedContour: null,
   };
   captures[side]?.bitmap?.close();
   captures[side] = capture;
@@ -312,7 +311,7 @@ async function acceptCapture({ file, contour, width, height }) {
   review.width = capture.width;
   review.height = capture.height;
   reviewContext.drawImage(bitmap, 0, 0, capture.width, capture.height);
-  try { capture.markers = detectSheetMarkers(reviewContext.getImageData(0, 0, capture.width, capture.height)) || []; }
+  try { if (capture.markers.length !== 4) capture.markers = detectSheetMarkers(reviewContext.getImageData(0, 0, capture.width, capture.height)) || []; }
   catch { capture.markers = []; }
   if (capture.markers.length === 4) { completeMarkers(capture, true); return; }
   renderReview(capture);
@@ -397,6 +396,13 @@ async function segmentPhotoAt(x, y) {
 controller = createLiveSegmentSession({
   video, overlay: $('camera-overlay'), status, captureButton: controllerButton,
   apiFetch, side: 'lens', onCapture: acceptCapture, minimalStatus: true,
+  autoCapture: true,
+  calibrateFrame(imageData, contour) {
+    const markers = detectSheetMarkers(imageData);
+    if (markers?.length !== 4) return null;
+    const homography = sheetHomography(markers);
+    return { markers, contour: contour.map(point => project(point, homography)) };
+  },
   locateTarget(imageData) {
     const markers = detectSheetMarkers(imageData);
     if (markers?.length !== 4) return null;
@@ -407,11 +413,6 @@ controller = createLiveSegmentSession({
       Math.min(1, (x + halfWidth) / imageData.width), Math.min(1, (y + halfHeight) / imageData.height)];
   },
 });
-
-new MutationObserver(() => {
-  if (phase !== 'live') return;
-  primary.disabled = controllerButton.disabled;
-}).observe(controllerButton, { attributes: true, attributeFilter: ['disabled'] });
 
 function showPair() {
   for (const lens of ['left', 'right']) {
@@ -432,16 +433,10 @@ function retryLens(lens = side) {
 
 primary.addEventListener('click', () => {
   enableSound();
-  if (phase === 'live') {
-    primary.disabled = true;
-    void controller.capture().catch(error => {
-      if (phase === 'live') primary.disabled = controllerButton.disabled;
-      status.textContent = error.message;
-    });
-  } else if (phase === 'result') {
+  if (phase === 'result') {
     activeCapture().confirmed = true;
     if (captures.left?.confirmed && captures.right?.confirmed) showPair();
-    else { side = captures.left?.confirmed ? 'right' : 'left'; void startCamera(); }
+    else { side = captures.left?.confirmed ? 'right' : 'left'; void startCamera(true); }
   } else if (phase === 'pair') {
     void openStudio();
   }

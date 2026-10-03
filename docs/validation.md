@@ -112,6 +112,18 @@ The same downloaded plate completed generic slicing with a 220 × 220 mm bed, 0.
 
 The shared glass-control stylesheet preserves the capture JavaScript, keeps blur off camera/measurement surfaces, and includes opaque and reduced-transparency fallbacks. The 70 web regression tests passed again. Public GPU health reported CUDA and a loaded model; eight HTTPS segmentation requests on the same 139,286-byte dark-lens JPEG all returned HTTP 200 and a 132-point contour. Median request latency was 156.8 ms; the maximum was 662.4 ms including connection setup. These desktop HTTP timings exclude iPhone camera encoding, rendering and mobile networking. Physical iPhone camera operation still requires the user's device test.
 
+## Automatic capture and fitting release — 3 October 2026
+
+The `edge-supported-lens-v3` pipeline adds shape and distributed boundary evidence before treating a SAM mask as a lens candidate. Actual SAM runs accepted both supplied lens images and rejected blank images, grid/text scenes and the rendered empty capture sheet, including nine sheet/resolution/prompt variations. This is a conservative edge-presence gate, not an object classifier: a printed oval or another curved object may still pass. Low-contrast or rectangular real lenses can be rejected.
+
+Automatic capture requires at least four distinct completed camera frames over 1.1 seconds, fresh responses, visible calibration, bounded contour motion, usable sharpness and image scale. Empty/stale frames reset the gate. Second-lens rearming needs sustained edge absence with usable sharpness/brightness and visible calibration. It does not establish physical lens identity; occlusion can still rearm the same lens.
+
+Bright white paper no longer suppresses a well-supported lens solely because pixels are clipped. The browser supplies distance, lighting, stability and background guidance, and requests continuous focus/exposure/white balance only when the camera advertises them. Slow responses are labelled slow processing, never inferred overheating. The native face flow reads the actual iOS thermal state.
+
+Local validation: **98 web tests and 51 Python tests passed**, including 27 Python subtests. Public endpoint processing of both supplied photos again generated seven preview meshes and five STL parts plus the build plate; all serialized STLs reloaded as watertight. Preview and export took about 2 seconds in this desktop request. A warm eight-request HTTPS benchmark measured median 175.9 ms, maximum 614.8 ms; these are not phone camera-to-screen timings. The first segmentation after a service restart took 7.5 seconds to load the model.
+
+The web fitting wizard consumes the real native 21-sample export format and labels whether TrueDepth hardware was available. Repeatability thresholds and capability metadata do not establish pupil measurement accuracy. The iOS simulator workflow and actual device validation are recorded separately in `docs/face-fitting.md`.
+
 ## Scope of claim
 
 The demo can claim a measured contour, wearer-specific geometric placement, and a tested mechanical fit only when the checks above are filled in. A prescription-ready or standards-compliant wearable frame needs professional optical and safety assessment.

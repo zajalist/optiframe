@@ -6,7 +6,7 @@ const source = await readFile(new URL('./live-segment.js', import.meta.url), 'ut
 test('live camera draws no prompt rectangle', () => {
   assert.doesNotMatch(source, /context\.strokeRect/);
 });
-const { createLiveSegmentSession } = await import(`data:text/javascript,${encodeURIComponent(source)}`);
+const { createLiveSegmentSession } = await import('./live-segment.js');
 
 function element() {
   const handlers = {};
@@ -28,7 +28,7 @@ function setup(fetcher, onCapture = async () => {}, options = {}) {
   globalThis.document = {
     createElement() {
       return { width: 0, height: 0, getContext: () => ({ drawImage() {},
-        getImageData: () => ({ data: new Uint8ClampedArray(160 * 120 * 4) }) }),
+        getImageData: () => ({ data: new Uint8ClampedArray(160 * 120 * 4).fill(180) }) }),
         toBlob(callback) { callback(new Blob(['frame'], { type: 'image/jpeg' })); } };
     },
   };
@@ -44,13 +44,45 @@ function setup(fetcher, onCapture = async () => {}, options = {}) {
   const session = createLiveSegmentSession({ video, overlay, status, captureButton,
     onCapture, apiFetch: fetcher, mediaDevices, side: 'left', intervalMs: 5,
     startupTimeoutMs: options.startupTimeoutMs ?? 12000, locateTarget: options.locateTarget,
-    requestTimeoutMs: options.requestTimeoutMs ?? 8000, maxResultAgeMs: options.maxResultAgeMs ?? 2000 });
+    requestTimeoutMs: options.requestTimeoutMs ?? 8000, maxResultAgeMs: options.maxResultAgeMs ?? 2000,
+    autoCapture: options.autoCapture, calibrateFrame: options.calibrateFrame });
   return { session, video, overlay, status, captureButton, get stopped() { return stopped; } };
 }
 
 const result = { width: 640, height: 480, contour: [[10, 10], [100, 10], [100, 100]],
   quality: { score: 0.7 }, method: 'sam2.1-hiera-small-cuda' };
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+const autoOutline = Array.from({length: 80}, (_, i) => [50 + 25 * Math.cos(i * Math.PI / 40), 35 + 20 * Math.sin(i * Math.PI / 40)]);
+const autoOptions = {autoCapture: true, calibrateFrame: () => ({markers: [[80,50],[560,50],[560,386],[80,386]], contour: autoOutline})};
+
+test('automatic mode stays live without an outline for absent or legacy presence', async () => {
+  for (const presence of [undefined, {detected:false}]) {
+    let captured = 0;
+    const fixture = setup(async () => ({ok:true,json:async()=>({...result,presence,contour:presence?[]:result.contour})}),
+      async()=>{captured++;}, autoOptions);
+    await fixture.session.start(); await pause(20);
+    assert.equal(captured,0); assert.equal(fixture.captureButton.disabled,true);
+    assert.equal(fixture.status.textContent,''); assert.equal(fixture.session.active,true);
+    await assert.rejects(fixture.session.capture(),/automatic capture/);
+    fixture.session.stop();
+  }
+});
+
+test('automatic capture uses the qualifying current frame and waits for actual stability', async () => {
+  let calls = 0, captured = null, last;
+  const fixture = setup(async () => {
+    calls++;
+    last = {...result, presence:{detected:true}, contour:result.contour.map(([x,y])=>[x + calls/100,y]), quality:{score:calls===1?.95:.7,sharpness:180}};
+    return {ok:true,json:async()=>last};
+  }, async value => {captured = value;}, autoOptions);
+  await fixture.session.start(); await pause(700);
+  assert.equal(captured,null);
+  await pause(600);
+  assert.ok(captured); assert.deepEqual(captured.contour,last.contour);
+  assert.equal(captured.quality.score,.7); assert.equal(fixture.session.active,false);
+  assert.deepEqual(captured.markers,autoOptions.calibrateFrame().markers);
+});
 
 test('captures the same JPEG and contour as the best completed segmentation', async () => {
   let sent = 0;

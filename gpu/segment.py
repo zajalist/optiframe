@@ -22,6 +22,7 @@ from fastapi.staticfiles import StaticFiles
 from PIL import Image
 from starlette.formparsers import MultiPartException
 from preprocess import isolate_lens, restore_best_lens_mask
+from presence import lens_presence, absent
 
 app = FastAPI(title="OptiFrame contour proposals")
 _model = None
@@ -185,14 +186,15 @@ def live_quality(image: np.ndarray, contour: list[list[int]],
     sharpness = float(cv2.Laplacian(roi, cv2.CV_64F).var())
     clipped = glare_fraction(image, box)
     polygon = np.asarray(contour, dtype=np.float32)
-    area = abs(float(cv2.contourArea(polygon)))
+    area = abs(float(cv2.contourArea(polygon))) if len(polygon) >= 3 else 0.0
     box_area = (x1 - x0) * (y1 - y0)
     coverage = area / box_area if box_area else 0.0
-    # Favor a clear edge, moderate clipping, and a contour that occupies the prompt.
+    # Rank edge detail and useful coverage. Raw clipped pixels include white
+    # paper (also visible through clear lenses), so they cannot be a glare gate.
+    # Presence independently requires a supported boundary around the lens.
     sharpness_part = min(1.0, sharpness / 250.0)
     coverage_part = min(1.0, coverage / 0.25) if coverage <= 0.85 else 0.0
-    glare_part = max(0.0, 1.0 - clipped / 0.08)
-    score = round(sharpness_part * coverage_part * glare_part, 4)
+    score = round(sharpness_part * coverage_part, 4)
     return {"score": score, "sharpness": round(sharpness, 2),
             "clippedFraction": round(clipped, 5), "coverage": round(coverage, 4)}
 
@@ -277,10 +279,10 @@ def health() -> dict:
         import torch
     except ImportError:
         return {"cuda": False, "gpu": None, "modelLoaded": _model is not None,
-                "pipeline": "sheet-aware-lens-crop-v2"}
+                "pipeline": "edge-supported-lens-v3"}
     return {"cuda": torch.cuda.is_available(), "gpu": torch.cuda.get_device_name(0)
             if torch.cuda.is_available() else None, "modelLoaded": _model is not None,
-            "pipeline": "sheet-aware-lens-crop-v2"}
+            "pipeline": "edge-supported-lens-v3"}
 
 
 @app.post("/api/import")
@@ -377,8 +379,9 @@ def segment(image: UploadFile = File(...), empty: UploadFile | None = File(None)
                 raise ValueError("Empty-sheet image exceeds 24 MB")
             base = decode(empty_bytes)
             rough = contour_from_mask(difference_mask(photo, base))
-            if rough:
-                candidates.append({"method": "aligned-image-difference", "contour": rough})
+            presence = lens_presence(photo, rough)
+            if presence["detected"]:
+                candidates.append({"method": "aligned-image-difference", "contour": rough, "presence": presence})
                 if not given_box:
                     x, y, bw, bh = cv2.boundingRect(np.array(rough, dtype=np.int32))
                     pad = int(0.08 * max(bw, bh))
@@ -387,8 +390,9 @@ def segment(image: UploadFile = File(...), empty: UploadFile | None = File(None)
         if use_gpu and given_box:
             try:
                 proposal = contour_from_mask(sam_mask(photo, given_box))
-                if proposal:
-                    candidates.append({"method": "sam2.1-hiera-small-cuda", "contour": proposal})
+                presence = lens_presence(photo, proposal)
+                if presence["detected"]:
+                    candidates.append({"method": "sam2.1-hiera-small-cuda", "contour": proposal, "presence": presence})
             except ValueError as error:
                 if not candidates:
                     raise
@@ -397,11 +401,11 @@ def segment(image: UploadFile = File(...), empty: UploadFile | None = File(None)
                 logging.exception("SAM2 proposal failed")
                 candidates.append({"method": "sam2.1-hiera-small-cuda",
                                    "error": "GPU proposal unavailable; review the photo contour"})
-        if not candidates:
-            raise ValueError("Provide an empty-sheet image or a box around the lens")
+        if not any(candidate.get("contour") for candidate in candidates):
+            raise ValueError("No supported lens edge. Place one lens on the sheet and retry.")
         return {"width": w, "height": h, "candidates": candidates,
                 "clippedFraction": glare_fraction(photo, given_box or (0, 0, w, h)),
-                "preprocessing": "sheet-aware-lens-crop-v2",
+                "preprocessing": "edge-supported-lens-v3",
                 "measurementStatus": "proposal-only; scale and contour review required"}
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
@@ -419,13 +423,19 @@ def live_segment(image: UploadFile = File(...), box: str = Form(...)) -> dict:
         if max(w, h) > 1600 or w * h > 2_600_000:
             raise ValueError("Live frame exceeds 1600 pixels per side or 2.6 megapixels")
         parsed = parse_lens_box(box, w, h)
-        contour = contour_from_mask(sam_mask(photo, tuple(parsed)))
-        if len(contour) < 3:
-            raise ValueError("No lens contour found in the box")
+        try:
+            contour = contour_from_mask(sam_mask(photo, tuple(parsed)))
+            presence = lens_presence(photo, contour)
+        except ValueError:
+            # A valid frame without a supported target is a normal live state.
+            contour, presence = [], absent()
+        if not presence["detected"]:
+            contour = []
         return {"width": w, "height": h, "contour": contour,
+                "presence": presence,
                 "quality": live_quality(photo, contour, tuple(parsed)),
                 "method": "sam2.1-hiera-small-cuda",
-                "preprocessing": "sheet-aware-lens-crop-v2",
+                "preprocessing": "edge-supported-lens-v3",
                 "measurementStatus": "proposal-only; review contour and calibrate sheet scale"}
     except (ValueError, TypeError, json.JSONDecodeError) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error

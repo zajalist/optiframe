@@ -10,8 +10,10 @@ const responseData = response => response.headers.get('content-type')?.includes(
 
 import {distance,polygonArea,measure,sheetHomography,project,benchmark,pixelResolution,contourRepeatability,normalizeLensOrientation,outlineProofSVG} from './calibration.js';
 import {createLiveSegmentSession} from './live-segment.js';
+import {createPreviewScheduler} from './preview-scheduler.js';
 
 let activeLivePanel = null;
+let automaticPreview = null;
 
 class LensPanel {
   constructor(element) {
@@ -145,7 +147,7 @@ class LensPanel {
     this.canvas.addEventListener('pointerdown', event => this.pointerDown(event));
     this.canvas.addEventListener('pointermove', event => this.pointerMove(event));
     this.canvas.addEventListener('pointerup', event => this.pointerUp(event));
-    this.canvas.addEventListener('pointercancel', () => { this.dragStart = null; this.render(); });
+    this.canvas.addEventListener('pointercancel', () => { this.dragStart = null; this.dragMark = null; this.render(); });
   }
 
   message(text) { this.status.textContent = text; }
@@ -297,6 +299,13 @@ class LensPanel {
   pointerDown(event) {
     if (!this.bitmap || !this.mode) return;
     const point = this.point(event);
+    if (this.guidedWizard && ['optical', 'top'].includes(this.mode)) {
+      this.dragMark = this.mode === 'optical' ? 'opticalCentre' : 'topMark';
+      this[this.dragMark] = point;
+      this.canvas.setPointerCapture(event.pointerId);
+      this.render();
+      return;
+    }
     if (this.mode === 'box') {
       this.dragStart = point;
       this.canvas.setPointerCapture(event.pointerId);
@@ -348,6 +357,7 @@ class LensPanel {
   }
 
   pointerMove(event) {
+    if (this.dragMark) { this[this.dragMark] = this.point(event); this.render(); return; }
     if (this.mode === 'trace' && this.dragVertex !== null) {
       this.points[this.dragVertex] = this.point(event);
       this.render();
@@ -359,6 +369,7 @@ class LensPanel {
   }
 
   pointerUp(event) {
+    if (this.dragMark) { this[this.dragMark] = this.point(event); this.dragMark = null; this.render(); return; }
     if (this.mode === 'trace' && this.dragVertex !== null) {
       this.points[this.dragVertex] = this.point(event);
       this.dragVertex = null;
@@ -531,9 +542,9 @@ class LensPanel {
       ctx.lineWidth = width;
       ctx.stroke();
     };
-    drawPath(this.points, '#c9eb64', true);
+    drawPath(this.points, this.guidedWizard ? '#b8ddff' : '#c9eb64', true);
     if (this.points.length < 100) {
-      ctx.fillStyle = '#c9eb64';
+      ctx.fillStyle = this.guidedWizard ? '#b8ddff' : '#c9eb64';
       this.points.forEach(([x, y]) => { ctx.beginPath(); ctx.arc(x, y, width * 1.5, 0, Math.PI * 2); ctx.fill(); });
     }
     const box = this.previewBox || this.box;
@@ -601,6 +612,8 @@ async function importSimpleCaptures() {
       panel.points = item.contour.map(([x,y]) => [x * sx, y * sy]);
       panel.markerPoints = item.markers.map(([x,y]) => [x * sx, y * sy]);
       panel.homography = sheetHomography(panel.markerPoints);
+      if (Array.isArray(item.opticalCentre) && item.opticalCentre.length === 2 && item.opticalCentre.every(Number.isFinite)) panel.opticalCentre = [item.opticalCentre[0] * sx, item.opticalCentre[1] * sy];
+      if (Array.isArray(item.topMark) && item.topMark.length === 2 && item.topMark.every(Number.isFinite)) panel.topMark = [item.topMark[0] * sx, item.topMark[1] * sy];
       panel.markerStatus.textContent = 'Perspective calibrated from camera capture';
       panel.render();
       panel.guidedCapture = true;
@@ -611,7 +624,15 @@ async function importSimpleCaptures() {
     sessionStorage.removeItem('optiframe-captures');
   } catch (error) { document.querySelector('#design-status').textContent = `Capture transfer failed: ${error.message}`; }
 }
-void importSimpleCaptures();
+const capturesReady = importSimpleCaptures();
+try {
+  const savedFit = JSON.parse(sessionStorage.getItem('optiframe-fit-inputs') || 'null');
+  sessionStorage.removeItem('optiframe-fit-inputs');
+  if (savedFit && typeof savedFit === 'object') for (const [id, value] of Object.entries(savedFit)) {
+    const input = document.getElementById(id);
+    if (input?.matches('.design-inputs input') && typeof value === 'string') input.value = value;
+  }
+} catch { /* Missing or blocked session storage leaves manual fields available. */ }
 const designStatus = document.querySelector('#design-status');
 const number = id => {
   const input = document.getElementById(id);
@@ -630,13 +651,14 @@ function invalidateFrameResult() {
     viewer.setAttribute('aria-label', 'Stale 3D preview. Rebuild after input changes.');
     const badge = document.createElement('div');
     badge.className = 'preview-stale-badge';
-    badge.textContent = 'PREVIEW OUTDATED — rebuild before exporting';
+    badge.textContent = 'Updating fit';
     badge.style.cssText = 'position:absolute;left:10px;right:10px;bottom:10px;z-index:2;padding:10px;background:#621e22;color:white;font-weight:700;border-radius:6px;text-align:center';
     viewer.appendChild(badge);
   }
   if (showingPreview || makeFrame.pending)
     designStatus.textContent = 'Design inputs changed. Rebuild the 3D assembly preview or generate a new STL.';
   makeFrame.pending = false;
+  automaticPreview?.schedule();
 }
 
 function frameSnapshot(payload) {
@@ -686,6 +708,7 @@ function framePayload() {
 }
 
 async function makeFrame(preview, experimental = false) {
+  automaticPreview?.cancel();
   const request = makeFrame.sequence = (makeFrame.sequence || 0) + 1;
   try {
     if ([leftPanel, rightPanel].some(panel => panel.photoLoading))
@@ -708,7 +731,7 @@ async function makeFrame(preview, experimental = false) {
     const blob = await response.blob();
     if (!isCurrentFrameRequest(request, snapshot)) return;
     if (preview) {
-      const { showSTL } = await import('./viewer.js');
+      const { showSTL } = await import('./viewer.js?v=18');
       if (!isCurrentFrameRequest(request, snapshot)) return;
       const buffer = await blob.arrayBuffer();
       if (!isCurrentFrameRequest(request, snapshot)) return;
@@ -716,7 +739,7 @@ async function makeFrame(preview, experimental = false) {
       showSTL(buffer, viewer);
       viewer.dataset.stale = 'false';
       viewer.setAttribute('aria-label', 'Rotatable 3D preview of current frame assembly');
-      designStatus.textContent = '3D assembly preview. Rotate or pinch to inspect both lenses, retainers and temples. Optical curvature is not measured.';
+      designStatus.textContent = 'Frame preview. Lens curvature is not measured.';
     } else {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -733,4 +756,9 @@ async function makeFrame(preview, experimental = false) {
 document.getElementById('preview-frame').addEventListener('click', () => makeFrame(true));
 document.getElementById('download-frame').addEventListener('click', () => makeFrame(false));
 document.getElementById('download-experimental').addEventListener('click', () => makeFrame(false, true));
-export { distance, polygonArea, measure, sheetHomography, project };
+automaticPreview = createPreviewScheduler({
+  snapshot: () => JSON.stringify(framePayload()),
+  shouldRender: () => !document.body.classList.contains('fit-flow') || document.getElementById('viewer').offsetParent !== null,
+  render: () => makeFrame(true),
+});
+export { distance, polygonArea, measure, sheetHomography, project, leftPanel, rightPanel, capturesReady, framePayload, makeFrame };
