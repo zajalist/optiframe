@@ -5,3 +5,4 @@
 
 
 .benchmark input[type="checkbox"]{width:auto;display:inline-block;margin-right:6px;vertical-align:middle}
+.quick-ar-test{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:22px;margin:0 0 24px;border:2px solid #cde969;border-radius:16px;background:#193529}.quick-ar-test h2{margin:7px 0;font-size:1.4rem}.quick-ar-test p{margin:0;line-height:1.45;color:#d4e6d7;max-width:620px}.quick-ar-button{display:inline-block;flex:none;text-decoration:none;background:#cde969;color:#10272b;padding:16px 20px;border-radius:10px;font-weight:800;min-height:52px;text-align:center}.quick-ar-button:hover,.quick-ar-button:focus-visible{background:#e5fa9f}@media(max-width:650px){.quick-ar-test{display:block}.quick-ar-button{display:block;margin-top:18px}}

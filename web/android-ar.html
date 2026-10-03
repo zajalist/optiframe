@@ -18,28 +18,28 @@
   <header><div class="brand"><span class="mark">◉</span> OPTIFRAME <span class="tag">ANDROID LAB</span></div></header>
   <main>
     <span class="eyebrow">EXPERIMENT / WEBXR DEPTH</span>
-    <h1>Test phone depth.</h1>
-    <p>Use Android Chrome on an ARCore depth supported phone, with Google Play Services for AR enabled. Open this page over HTTPS or forwarded localhost.</p>
-    <div class="notice">Transparent lenses may return the background depth. These points are experimental scene samples, never a measured lens outline or printable frame input. <a href="/">Continue with lens photos</a>.</div>
-    <ol>
-      <li>Keep the lens upright in a fixed stand, with a patterned board behind it. First test an opaque object to check depth.</li>
-      <li>Start 0.5–1 m away. Move the phone slowly in a small arc for 15 seconds.</li>
-      <li>Download both files. Repeat with an empty stand; record the phone, lens, board offset and caliper measurements.</li>
-    </ol>
+    <h1>Does AR depth work here?</h1>
+    <p>On an Android phone, open this page in Chrome. Tap Start, allow the camera, and slowly scan an opaque object for 15 seconds. No lens setup is needed for this first check.</p>
     <div id="overlay">
       <div class="controls">
         <div class="toolbar">
-          <button id="start" disabled>Check device…</button>
+          <button id="start" class="propose" disabled>Checking ARCore…</button>
           <button id="stop" disabled>Stop capture</button>
           <button id="json" disabled>Download depth + poses JSON</button>
           <button id="ply" disabled>Download points PLY</button>
         </div>
         <p id="status" role="status" aria-live="polite">Checking secure context and immersive AR support…</p>
-        <a href="/">Photo capture fallback</a>
+        <a href="/">Back to lens photos</a>
         <canvas id="depth-preview" width="32" height="24" aria-label="Sampled depth heatmap; brighter means nearer"></canvas>
       </div>
     </div>
-    <p>Capture stops after 15 seconds or 60 depth frames. Exports stay on this phone until you download them. Starting again replaces the previous capture. Save files before another scan.</p>
+    <p><strong>What counts as working:</strong> the button becomes “Start 15-second AR scan,” the camera opens, the frame count rises, and you can download a nonempty PLY file after the scan. A camera launch alone does not prove depth is available.</p>
+    <details><summary>Next: test a transparent lens</summary><ol>
+      <li>Keep the lens upright in a fixed stand, with a patterned board behind it. Start 0.5–1 m away and move slowly in a small arc.</li>
+      <li>Download both JSON and PLY after each scan. Repeat with the empty stand and record the phone model, lens, board offset and caliper measurements.</li>
+      <li>Compare the lens and empty-stand clouds. Transparent lenses may return background depth. These points are experimental and do not feed the printable frame.</li>
+    </ol></details>
+    <p>Capture stops after 15 seconds or 60 depth frames. Starting again replaces the previous capture, so save both files first.</p>
     <details><summary>Device and capture diagnostics</summary><pre id="diagnostics"></pre></details>
   </main>
   <script src="/android-ar.js" defer></script>
