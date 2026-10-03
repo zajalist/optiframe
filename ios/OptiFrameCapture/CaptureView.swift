@@ -41,6 +41,9 @@ struct CaptureView: View {
                 }
                 .buttonStyle(.bordered)
                 .disabled(capture.frameCount == 0)
+                Button("New lens") { capture.newLens() }
+                    .buttonStyle(.bordered)
+                    .disabled(capture.frameCount == 0)
             }
         }
         .padding()
