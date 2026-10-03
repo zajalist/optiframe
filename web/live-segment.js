@@ -1,13 +1,36 @@
 // Live camera proposals are only inputs to the existing photo review flow.
 const MAX_SIDE = 1280;
 const INTERVAL_MS = 50;
+const STARTUP_TIMEOUT_MS = 12000;
 
 const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
 const centerBox = [0.2, 0.2, 0.8, 0.8];
 
+function boundedStartup(operation, timeoutMs, signal, timeoutMessage, onLateResult = () => {}) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (callback, value) => {
+      if (settled) return false;
+      settled = true;
+      clearTimeout(timer);
+      signal.removeEventListener('abort', cancel);
+      callback(value);
+      return true;
+    };
+    const cancel = () => finish(reject, new DOMException('Camera start cancelled', 'AbortError'));
+    const timer = setTimeout(() => finish(reject, new Error(timeoutMessage)), timeoutMs);
+    signal.addEventListener('abort', cancel, { once: true });
+    if (signal.aborted) cancel();
+    Promise.resolve(operation).then(value => {
+      if (!finish(resolve, value)) onLateResult(value);
+    }, error => { finish(reject, error); });
+  });
+}
+
 export function createLiveSegmentSession({
   video, overlay, status, captureButton, onCapture, apiFetch = fetch, side = 'lens',
   mediaDevices = navigator.mediaDevices, intervalMs = INTERVAL_MS,
+  startupTimeoutMs = STARTUP_TIMEOUT_MS,
 }) {
   if (!video || !overlay || !status || !captureButton || typeof onCapture !== 'function')
     throw new TypeError('Live segmentation needs video, overlay, status, captureButton and onCapture');
@@ -30,6 +53,7 @@ export function createLiveSegmentSession({
   let trackingBase = null;
   let lastTrackAt = 0;
   let legacyApi = false;
+  let startupAbort = null;
   const trackingCanvas = document.createElement('canvas');
   const trackingContext = trackingCanvas.getContext('2d', { willReadFrequently: true });
 
@@ -98,6 +122,13 @@ export function createLiveSegmentSession({
     dragStart = null;
     if (value[2] - value[0] >= 0.03 && value[3] - value[1] >= 0.03)
       setBoxNormalized(value);
+    else {
+      const halfWidth = Math.min(0.24, (box[2] - box[0]) / 2);
+      const halfHeight = Math.min(0.26, (box[3] - box[1]) / 2);
+      const x = clamp(end[0], halfWidth, 1 - halfWidth);
+      const y = clamp(end[1], halfHeight, 1 - halfHeight);
+      setBoxNormalized([x - halfWidth, y - halfHeight, x + halfWidth, y + halfHeight]);
+    }
   });
   overlay.addEventListener('pointercancel', () => { dragStart = null; });
 
@@ -252,9 +283,10 @@ export function createLiveSegmentSession({
         captureButton.disabled = false;
       }
       draw();
-      message(`Live edge · ${cadenceHz === null ? 'calibrating rate' : cadenceHz.toFixed(1) + ' updates/s'} · ${latencyMs} ms. Drag to refine the lens box.`);
+      message(`Live edge · ${cadenceHz === null ? 'calibrating rate' : cadenceHz.toFixed(1) + ' updates/s'} · ${latencyMs} ms. Tap the lens or drag a tighter box.`);
     } catch (error) {
-      if (token === generation && error.name !== 'AbortError') message(error.message);
+      if (token === generation && error.name !== 'AbortError')
+        message(`No edge yet. Tap the lens, move closer, or use softer light. ${error.message}`);
     } finally {
       request = null;
       working = false;
@@ -265,31 +297,39 @@ export function createLiveSegmentSession({
   async function start() {
     stop();
     const token = generation;
-    if (!mediaDevices?.getUserMedia) throw new Error('Camera access requires a secure browser context');
-    message('Opening camera…');
+    if (!mediaDevices?.getUserMedia) throw new Error('This browser does not expose a camera. Open in Safari or use a photo.');
+    startupAbort = new AbortController();
+    const signal = startupAbort.signal;
+    message('Opening camera… If no permission prompt appears, try Safari or use a photo.');
     try {
-      const acquired = await mediaDevices.getUserMedia({
+      const acquired = await boundedStartup(mediaDevices.getUserMedia({
         audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } },
-      });
+      }), startupTimeoutMs, signal, 'Camera permission timed out. Open in Safari or use a photo.',
+      late => late.getTracks().forEach(track => track.stop()));
       if (token !== generation) { acquired.getTracks().forEach(track => track.stop()); return; }
       stream = acquired;
       video.srcObject = stream;
-      await video.play();
+      await boundedStartup(video.play(), startupTimeoutMs, signal,
+        'Camera preview timed out. Close other camera apps and try again.');
       if (token !== generation) return;
       if (!video.videoWidth || !video.videoHeight) throw new Error('Camera has no video frames');
       [overlay.width, overlay.height] = dimensions();
       captureButton.disabled = true;
       draw();
       if (typeof requestAnimationFrame === 'function') animation = requestAnimationFrame(trackOnce);
-      message('Center the lens inside the box, or drag a tighter box over the preview.');
+      message('Center the lens inside the box. Tap it or drag a tighter box if no edge appears.');
       void sample(token);
     } catch (error) {
       if (token === generation) { stop(); message(`Camera unavailable: ${error.message}`); }
       throw error;
+    } finally {
+      if (token === generation) startupAbort = null;
     }
   }
   function stop() {
     generation++;
+    startupAbort?.abort();
+    startupAbort = null;
     clearTimeout(timer);
     timer = null;
     request?.abort();

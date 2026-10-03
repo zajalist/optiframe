@@ -20,7 +20,7 @@ function element() {
   };
 }
 
-function setup(fetcher, onCapture = async () => {}) {
+function setup(fetcher, onCapture = async () => {}, options = {}) {
   globalThis.document = {
     createElement() {
       return { width: 0, height: 0, getContext: () => ({ drawImage() {},
@@ -29,16 +29,17 @@ function setup(fetcher, onCapture = async () => {}) {
     },
   };
   const video = { videoWidth: 640, videoHeight: 480, srcObject: null,
-    play: async () => {}, pause() {} };
+    play: options.play || (async () => {}), pause() {} };
   const overlay = element();
   const status = element();
   const captureButton = element();
   let stopped = 0;
-  const mediaDevices = { getUserMedia: async () => ({
+  const mediaDevices = options.mediaDevices || { getUserMedia: async () => ({
     getTracks: () => [{ stop() { stopped++; } }],
   }) };
   const session = createLiveSegmentSession({ video, overlay, status, captureButton,
-    onCapture, apiFetch: fetcher, mediaDevices, side: 'left', intervalMs: 5 });
+    onCapture, apiFetch: fetcher, mediaDevices, side: 'left', intervalMs: 5,
+    startupTimeoutMs: options.startupTimeoutMs ?? 12000 });
   return { session, video, overlay, status, captureButton, get stopped() { return stopped; } };
 }
 
@@ -94,6 +95,20 @@ test('sends one request at a time and invalidates stale prompts', async () => {
   assert.equal(fixture.stopped, 1);
 });
 
+test('a tap recentres the live prompt on the lens', async () => {
+  const boxes = [];
+  const fixture = setup(async (_path, options) => {
+    boxes.push(JSON.parse(options.body.get('box')));
+    return { ok: true, json: async () => result };
+  });
+  await fixture.session.start();
+  fixture.overlay.handlers.pointerdown({ clientX: 480, clientY: 240, pointerId: 1 });
+  fixture.overlay.handlers.pointerup({ clientX: 480, clientY: 240, pointerId: 1 });
+  await pause(20);
+  assert.ok(boxes.some(([left, , right]) => (left + right) / 2 > 400));
+  fixture.session.stop();
+});
+
 test('falls back once on 404 and selects the legacy SAM contour', async () => {
   const routes = [];
   const fixture = setup(async path => {
@@ -113,4 +128,52 @@ test('falls back once on 404 and selects the legacy SAM contour', async () => {
   const payload = await fixture.session.capture();
   assert.deepEqual(payload.contour, result.contour);
   assert.ok(payload.quality.score >= 0 && payload.quality.score <= 1);
+});
+
+test('permission timeout lets the user retry and stops a late camera stream', async () => {
+  let resolvePermission;
+  let calls = 0;
+  let lateStops = 0;
+  const fixture = setup(async () => ({ ok: true, json: async () => result }),
+    async () => {}, { startupTimeoutMs: 8, mediaDevices: {
+      getUserMedia() {
+        calls++;
+        if (calls === 1) return new Promise(resolve => { resolvePermission = resolve; });
+        return Promise.resolve({ getTracks: () => [{ stop() {} }] });
+      },
+    } });
+  await assert.rejects(fixture.session.start(), /permission timed out/i);
+  assert.match(fixture.status.textContent, /permission timed out/i);
+  assert.equal(fixture.session.active, false);
+  resolvePermission({ getTracks: () => [{ stop() { lateStops++; } }] });
+  await pause(1);
+  assert.equal(lateStops, 1);
+  await fixture.session.start();
+  assert.equal(fixture.session.active, true);
+  fixture.session.stop();
+});
+
+test('stopping during pending permission cancels startup and releases a late stream', async () => {
+  let resolvePermission;
+  let lateStops = 0;
+  const fixture = setup(async () => ({ ok: true, json: async () => result }),
+    async () => {}, { mediaDevices: { getUserMedia: () => new Promise(resolve => {
+      resolvePermission = resolve;
+    }) } });
+  const starting = fixture.session.start();
+  fixture.session.stop();
+  await assert.rejects(starting, { name: 'AbortError' });
+  resolvePermission({ getTracks: () => [{ stop() { lateStops++; } }] });
+  await pause(1);
+  assert.equal(lateStops, 1);
+  assert.equal(fixture.session.active, false);
+});
+
+test('preview timeout closes the acquired camera stream', async () => {
+  const fixture = setup(async () => ({ ok: true, json: async () => result }),
+    async () => {}, { startupTimeoutMs: 8, play: () => new Promise(() => {}) });
+  await assert.rejects(fixture.session.start(), /preview timed out/i);
+  assert.equal(fixture.stopped, 1);
+  assert.equal(fixture.video.srcObject, null);
+  assert.equal(fixture.session.active, false);
 });

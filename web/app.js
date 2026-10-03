@@ -582,6 +582,31 @@ class LensPanel {
 }
 
 const [leftPanel, rightPanel] = panels.map(panel => new LensPanel(panel));
+async function importSimpleCaptures() {
+  if (typeof sessionStorage === 'undefined') return;
+  let raw;
+  try { raw = sessionStorage.getItem('optiframe-captures'); }
+  catch { return; }
+  if (!raw) return;
+  try {
+    const saved = JSON.parse(raw);
+    for (const item of saved) {
+      const panel = item.side === 'left' ? leftPanel : item.side === 'right' ? rightPanel : null;
+      if (!panel || !Array.isArray(item.contour) || !Array.isArray(item.markers)) throw new Error('Invalid capture transfer');
+      const photo = await fetch(item.image).then(response => response.blob());
+      if (!await panel.loadPhoto(photo)) throw new Error('Transferred photo could not be opened');
+      const sx = panel.canvas.width / item.width, sy = panel.canvas.height / item.height;
+      panel.points = item.contour.map(([x,y]) => [x * sx, y * sy]);
+      panel.markerPoints = item.markers.map(([x,y]) => [x * sx, y * sy]);
+      panel.homography = sheetHomography(panel.markerPoints);
+      panel.markerStatus.textContent = 'Perspective calibrated from camera capture';
+      panel.render();
+      panel.message('Capture imported. Mark the optical centre and physical top before building the frame.');
+    }
+    sessionStorage.removeItem('optiframe-captures');
+  } catch (error) { document.querySelector('#design-status').textContent = `Capture transfer failed: ${error.message}`; }
+}
+void importSimpleCaptures();
 const designStatus = document.querySelector('#design-status');
 const number = id => {
   const input = document.getElementById(id);

@@ -1,42 +1,45 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#f7f7f3"><title>OptiFrame — measure lenses, make frames</title><link rel="stylesheet" href="/style.css"></head>
-<body><header class="site-header"><a class="brand" href="/" aria-label="OptiFrame home"><span class="brand-symbol" aria-hidden="true"></span>OptiFrame</a><a class="header-link" href="/calibration-sheet.svg" target="_blank" rel="noopener">Calibration sheet ↗</a></header>
-<main><section class="intro" aria-labelledby="page-title"><div><h1 id="page-title">Lens capture</h1><p>Use the <a href="/calibration-sheet.svg" target="_blank" rel="noopener">calibration sheet</a> printed at 100%. Check its 50 mm line before scanning.</p></div></section>
-<nav class="capture-modes" aria-label="Capture modes"><a class="capture-mode selected" href="#measure-title" aria-current="page"><strong>Live outline</strong><span>Camera · edge · dimensions</span></a><a class="capture-mode" href="/android-ar.html"><strong>Depth scan</strong><span>ARCore · point cloud</span></a></nav>
-<section class="measure-section" id="measure-title" aria-label="Measure the lenses"><div class="panels"><section class="lens-panel" data-side="left" aria-labelledby="left-heading">
-<div class="panel-head"><h2 id="left-heading">Left lens</h2><strong id="left-size">Awaiting capture</strong></div>
-<div class="live-actions"><button class="live-start" type="button">Start camera</button><button class="live-capture" type="button" disabled>Capture outline</button></div>
-<div class="live-stage" hidden><video playsinline muted autoplay aria-label="Live left lens camera"></video><canvas aria-label="Live left lens segmentation overlay"></canvas></div><p class="live-status" role="status">Camera ready when you are.</p>
-<div class="capture-main"><label>Lens photo<input class="photo-input" type="file" accept="image/*" capture="environment"></label></div>
-<details class="source-options"><summary>Use video or iPhone scan instead</summary><div class="inputs"><label>iPhone capture ZIP<input class="zip-input" type="file" accept=".zip,application/zip"></label><label>Lens video (max 60 s / 100 MB)<input class="video-input" type="file" accept="video/*,.mov,.mp4"></label><label>Empty sheet photo, optional<input class="empty-input" type="file" accept="image/*" capture="environment"></label></div></details>
-<div class="video-frames" aria-label="Choose a video photo" hidden></div>
-<div class="canvas-wrap"><canvas aria-label="left lens image and editable contour"></canvas><span class="canvas-placeholder">Add a lens photo</span></div>
-<div class="toolbar primary-tools"><button class="propose" type="button">Propose outline</button><button class="markers" type="button">Four sheet markers</button><button class="optical" type="button">Optical centre</button><button class="top" type="button">Mark top</button></div>
-<select class="proposal-select" aria-label="Contour proposal" hidden></select>
-<div class="capture-state"><p class="top-status">Top orientation not set</p><p class="marker-status">Four-marker calibration not set</p><p class="centre-status">Optical centre not set</p></div>
-<section class="outline-review" aria-label="Left measured outline" hidden><div class="outline-review-head"><h3>Measured outline</h3><span class="outline-review-note"></span></div><svg viewBox="0 0 300 190" role="img" aria-label="Rectified left lens contour"><path class="outline-review-path" d=""></path><path class="outline-review-cross" d=""></path></svg><p class="outline-review-size"></p></section>
-<details class="tool-options"><summary>Adjust outline or scale</summary><div class="toolbar"><button class="trace" type="button">Trace edge</button><button class="box" type="button">Set lens box</button><button class="scale" type="button">Two-point scale</button><button class="undo" type="button">Undo</button><button class="clear" type="button">Clear</button></div><div class="scale-row"><label>Reference length <input class="reference-mm" type="number" min="1" step="0.1" value="50"> mm</label><span class="scale-status">Scale not set</span></div></details>
-<details class="benchmark-details"><summary>Check measurements with calipers</summary><fieldset class="benchmark"><legend>Physical measurement check</legend><p>Measure maximum width and height with calipers. Save this outline, then compare an independent photo of the same lens.</p><div class="benchmark-fields"><label>Caliper width (mm)<input class="benchmark-input caliper-width" type="number" min="0.01" step="0.01"></label><label>Caliper height (mm)<input class="benchmark-input caliper-height" type="number" min="0.01" step="0.01"></label><label>Independent capture width (mm)<input class="benchmark-input repeat-width" type="number" min="0.01" step="0.001"></label><label>Independent capture height (mm)<input class="benchmark-input repeat-height" type="number" min="0.01" step="0.001"></label></div><button class="save-repeat" type="button">Save outline for repeat capture</button><button class="download-outline" type="button">Print 1:1 outline</button><p class="benchmark-status" role="status">Checks pending; target each discrepancy ≤ 0.5 mm.</p><p class="resolution-status">Pixel resolution awaits calibration.</p><label class="evidence-label"><input class="evidence-confirmed" type="checkbox"> I checked this lens with real calipers, a second photo, and verified sheet dimensions.</label><p>Measurement checks do not prove every edge point. Keep the same top orientation and verify the sheet’s printed size.</p></fieldset></details>
-<p class="panel-status" role="status">Start with a photo of the left lens on the calibration sheet.</p>
-</section><section class="lens-panel" data-side="right" aria-labelledby="right-heading">
-<div class="panel-head"><h2 id="right-heading">Right lens</h2><strong id="right-size">Awaiting capture</strong></div>
-<div class="live-actions"><button class="live-start" type="button">Start camera</button><button class="live-capture" type="button" disabled>Capture outline</button></div>
-<div class="live-stage" hidden><video playsinline muted autoplay aria-label="Live right lens camera"></video><canvas aria-label="Live right lens segmentation overlay"></canvas></div><p class="live-status" role="status">Camera ready when you are.</p>
-<div class="capture-main"><label>Lens photo<input class="photo-input" type="file" accept="image/*" capture="environment"></label></div>
-<details class="source-options"><summary>Use video or iPhone scan instead</summary><div class="inputs"><label>iPhone capture ZIP<input class="zip-input" type="file" accept=".zip,application/zip"></label><label>Lens video (max 60 s / 100 MB)<input class="video-input" type="file" accept="video/*,.mov,.mp4"></label><label>Empty sheet photo, optional<input class="empty-input" type="file" accept="image/*" capture="environment"></label></div></details>
-<div class="video-frames" aria-label="Choose a video photo" hidden></div>
-<div class="canvas-wrap"><canvas aria-label="right lens image and editable contour"></canvas><span class="canvas-placeholder">Add a lens photo</span></div>
-<div class="toolbar primary-tools"><button class="propose" type="button">Propose outline</button><button class="markers" type="button">Four sheet markers</button><button class="optical" type="button">Optical centre</button><button class="top" type="button">Mark top</button></div>
-<select class="proposal-select" aria-label="Contour proposal" hidden></select>
-<div class="capture-state"><p class="top-status">Top orientation not set</p><p class="marker-status">Four-marker calibration not set</p><p class="centre-status">Optical centre not set</p></div>
-<section class="outline-review" aria-label="Right measured outline" hidden><div class="outline-review-head"><h3>Measured outline</h3><span class="outline-review-note"></span></div><svg viewBox="0 0 300 190" role="img" aria-label="Rectified right lens contour"><path class="outline-review-path" d=""></path><path class="outline-review-cross" d=""></path></svg><p class="outline-review-size"></p></section>
-<details class="tool-options"><summary>Adjust outline or scale</summary><div class="toolbar"><button class="trace" type="button">Trace edge</button><button class="box" type="button">Set lens box</button><button class="scale" type="button">Two-point scale</button><button class="undo" type="button">Undo</button><button class="clear" type="button">Clear</button></div><div class="scale-row"><label>Reference length <input class="reference-mm" type="number" min="1" step="0.1" value="50"> mm</label><span class="scale-status">Scale not set</span></div></details>
-<details class="benchmark-details"><summary>Check measurements with calipers</summary><fieldset class="benchmark"><legend>Physical measurement check</legend><p>Measure maximum width and height with calipers. Save this outline, then compare an independent photo of the same lens.</p><div class="benchmark-fields"><label>Caliper width (mm)<input class="benchmark-input caliper-width" type="number" min="0.01" step="0.01"></label><label>Caliper height (mm)<input class="benchmark-input caliper-height" type="number" min="0.01" step="0.01"></label><label>Independent capture width (mm)<input class="benchmark-input repeat-width" type="number" min="0.01" step="0.001"></label><label>Independent capture height (mm)<input class="benchmark-input repeat-height" type="number" min="0.01" step="0.001"></label></div><button class="save-repeat" type="button">Save outline for repeat capture</button><button class="download-outline" type="button">Print 1:1 outline</button><p class="benchmark-status" role="status">Checks pending; target each discrepancy ≤ 0.5 mm.</p><p class="resolution-status">Pixel resolution awaits calibration.</p><label class="evidence-label"><input class="evidence-confirmed" type="checkbox"> I checked this lens with real calipers, a second photo, and verified sheet dimensions.</label><p>Measurement checks do not prove every edge point. Keep the same top orientation and verify the sheet’s printed size.</p></fieldset></details>
-<p class="panel-status" role="status">Start with a photo of the right lens on the calibration sheet.</p>
-</section></div></section>
-<section class="design" aria-labelledby="design-title"><div class="section-heading"><h2 id="design-title">Fit the wearer</h2><span>Position · preview · export</span></div><p>Use separately measured pupil distances and lens edge thicknesses. Mark each optical centre above before previewing.</p>
-<div class="design-inputs"><label>Left pupil distance <input id="left-pd" type="number" min="20" max="40" step="0.1" value="32"> <span>mm</span></label><label>Right pupil distance <input id="right-pd" type="number" min="20" max="40" step="0.1" value="32"> <span>mm</span></label><label>Left edge thickness <input id="left-edge-thickness" type="number" min="1" max="6" step="0.1" value="2.5"> <span>mm</span></label><label>Right edge thickness <input id="right-edge-thickness" type="number" min="1" max="6" step="0.1" value="2.5"> <span>mm</span></label></div>
-<details class="advanced-fit"><summary>More fitting and printer settings</summary><div class="design-inputs"><label>Left optical-centre height offset <input id="left-vertical-offset" type="number" min="-10" max="10" step="0.1" value="0"> <span>mm</span></label><label>Right optical-centre height offset <input id="right-vertical-offset" type="number" min="-10" max="10" step="0.1" value="0"> <span>mm</span></label><label>Temple length <input id="temple-length" type="number" min="90" max="180" step="1" value="130"> <span>mm</span></label><label>Printer bed width <input id="bed-width" type="number" min="100" step="1" value="220"> <span>mm</span></label><label>Printer bed depth <input id="bed-depth" type="number" min="100" step="1" value="220"> <span>mm</span></label></div><p>Positive height offsets place centres above the shared baseline. Confirm fitting heights and prescription suitability with an eye care professional.</p></details>
-<div class="design-actions"><button id="preview-frame" type="button">Preview frame</button><button id="download-frame" type="button">Download checked STL kit</button><button id="download-experimental" type="button">Download unverified kit</button></div><p id="design-status" role="status">Both lens outlines, scales, and optical centres are needed for a preview.</p><div id="viewer" aria-label="Rotatable 3D preview of full frame assembly"></div></section>
-<footer><span>OptiFrame is an experimental fabrication tool. Check each printed part and lens fit before wear.</span><a href="/android-ar.html">Test Android AR depth ↗</a></footer></main>
-<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"}}</script><script type="module" src="/app.js"></script></body></html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f7f7f3">
+  <title>OptiFrame — lens capture</title>
+  <link rel="stylesheet" href="/simple.css">
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <a class="brand" href="/" aria-label="OptiFrame home"><span class="brand-mark" aria-hidden="true"></span>OptiFrame</a>
+      <a class="sheet-link" href="/calibration-sheet.svg" target="_blank" rel="noopener">Print sheet ↗</a>
+    </header>
+    <main class="capture">
+      <div class="heading">
+        <div class="heading-top">
+          <span id="step-label">01 / CAPTURE</span>
+          <div class="sides" role="group" aria-label="Select lens"><button id="side-left" type="button" aria-pressed="true">Left</button><button id="side-right" type="button" aria-pressed="false">Right</button></div>
+        </div>
+        <h1 id="headline">Scan left lens</h1>
+        <p id="instruction">Put one lens on the sheet, title upright. Keep four dots visible.</p>
+      </div>
+      <div class="stage" id="stage">
+        <div class="empty" id="empty"><span class="empty-shape" aria-hidden="true"></span><span>Camera preview</span></div>
+        <div class="camera-frame" id="camera-frame" hidden><video id="camera" playsinline muted autoplay aria-label="Live lens camera"></video><canvas id="camera-overlay" aria-label="Live lens outline"></canvas></div>
+        <canvas id="review-canvas" aria-label="Captured lens and calibration dots" hidden></canvas>
+        <svg id="result-svg" viewBox="0 0 320 220" role="img" aria-label="Measured lens outline" hidden><path id="result-path" d=""></path></svg>
+      </div>
+      <div class="action-area">
+        <p id="status" role="status" aria-live="polite">Ready to open the camera.</p>
+        <button id="primary" class="primary" type="button">Start camera</button>
+        <div class="secondary">
+          <button id="secondary" type="button" hidden>Retake</button>
+          <label id="photo-label" for="photo-input">Use a photo<input id="photo-input" type="file" accept="image/*" capture="environment"></label>
+          <a id="studio-link" href="/studio.html" hidden>Frame builder ↗</a>
+        </div>
+      </div>
+    </main>
+  </div>
+  <button id="controller-capture" type="button" hidden disabled></button>
+  <script type="module" src="/simple.js"></script>
+</body>
+</html>
