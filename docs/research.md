@@ -75,6 +75,14 @@ A compelling evidence chain is: calibration sheet verified -> each lens contour 
 
 These gates are ambitious targets. The observed results should be recorded in [validation.md](validation.md), not silently assumed.
 
+## 7. ARKit and the web-app constraint
+
+ARKit's raw tracking and scene-depth APIs are iOS app APIs. Apple documents scene depth through an `ARSession` in a native app, on supported LiDAR devices; a normal Safari web page cannot directly call that API. WebKit staff state that WebXR `immersive-ar` is not supported on iOS. [Apple ARKit scene depth sample](https://developer.apple.com/documentation/ARKit/displaying-a-point-cloud-using-scene-depth), [WebKit issue and staff response](https://bugs.webkit.org/show_bug.cgi?id=309550)
+
+Safari **can** launch Apple's AR Quick Look from a website using a USDZ model. That is useful for an optional visual preview of the completed frame, but it does not give the web app ARKit's raw depth map or a metrology-grade scan. [Apple AR Quick Look for web pages](https://developer.apple.com/documentation/arkit/previewing-a-model-with-ar-quick-look), [Apple Quick Look gallery](https://developer.apple.com/quick-look-gallery/)
+
+**Decision:** keep the core capture, measurement, frame generation, and slicer-ready STL in a normal mobile web app. Use the phone camera plus a printed scale board for lens measurements and a browser 3D preview. Add USDZ/Quick Look only if time remains. A separate native iOS capture helper would be an additional product, not a web-only implementation.
+
 ## Open risks and scope limits
 
 | Risk | Early test or response |
