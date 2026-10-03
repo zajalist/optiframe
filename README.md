@@ -26,6 +26,15 @@ The core proof is **verified lenses + wearer measurements -> two independent len
 - [Hackathon build plan](docs/build-plan.md) — scope, architecture, order of work, and demo.
 - [Validation protocol](docs/validation.md) — concrete checks and pass/fail evidence.
 
+## Run the prototype
+
+```powershell
+python -m pip install -r gpu/requirements.txt
+python -m uvicorn segment:app --app-dir gpu --host 127.0.0.1 --port 8765
+```
+
+Open <http://127.0.0.1:8765>. The web app imports iPhone capture ZIPs or phone photos, proposes lens edges with image difference and GPU SAM, lets you edit each contour, and calibrates each lens independently. After marking both optical centres and entering wearer measurements, it previews the 3D front and downloads five closed STL parts. See [GPU service and frame export](gpu/README.md) and [iPhone capture app](ios/README.md).
+
 ## Status
 
-The [iPhone ARKit capture app](ios/README.md) and [local GPU contour-proposal service](gpu/README.md) are under construction. They are not yet an end-to-end frame generator. No measurement accuracy or lens fit is claimed until the actual lenses and printer pass the [validation protocol](docs/validation.md).
+This is an **experimental printable prototype**, not a validated medical device or proven lens fit. The current two-point photo scale assumes a near-frontal sheet; the planned four-marker perspective rectification is still needed for stronger measurement. The AR depth point cloud is recorded for testing, but is not used to size clear lenses. Android web camera capture works without ARCore; optional WebXR depth capture is still planned. No measurement accuracy or lens fit is claimed until the actual lenses and printer pass the [validation protocol](docs/validation.md).

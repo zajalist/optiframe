@@ -5,11 +5,17 @@ from __future__ import annotations
 import json
 import logging
 import threading
+import base64
+from io import BytesIO
+from pathlib import Path
+from zipfile import BadZipFile, ZipFile
 
 import cv2
 import numpy as np
 import torch
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.responses import Response
+from fastapi.staticfiles import StaticFiles
 from PIL import Image
 
 app = FastAPI(title="OptiFrame contour proposals")
@@ -108,10 +114,55 @@ def sam_mask(image: np.ndarray, box: tuple[int, int, int, int]) -> np.ndarray:
         return (masks.reshape(-1, *masks.shape[-2:])[index].numpy() > 0).astype(np.uint8) * 255
 
 
+def inspect_capture(data: bytes) -> dict:
+    with ZipFile(BytesIO(data)) as archive:
+        files = archive.infolist()
+        if len(files) > 100 or sum(item.file_size for item in files) > 250_000_000:
+            raise ValueError("Capture archive is too large")
+        manifest = json.loads(archive.read("manifest.json"))
+        if manifest.get("schemaVersion") != 1:
+            raise ValueError("Unsupported capture version")
+        frames = manifest.get("frames", [])
+        lens = [f for f in frames if f.get("kind") == "lens"]
+        if not lens:
+            raise ValueError("Capture has no lens-on-sheet frame")
+        best = max(lens, key=lambda f: f.get("sharpness", 0) /
+                   (1 + 10 * f.get("clippedFraction", 0)))
+        empty = next((f for f in frames if f.get("kind") == "empty"), None)
+
+        def jpeg(name: str) -> str:
+            if name not in archive.namelist() or not name.endswith(".jpg"):
+                raise ValueError("Capture references a missing JPEG")
+            payload = archive.read(name)
+            if len(payload) > 24_000_000:
+                raise ValueError("Capture JPEG exceeds 24 MB")
+            return "data:image/jpeg;base64," + base64.b64encode(payload).decode("ascii")
+
+        return {
+            "side": best["side"], "frameCount": len(frames),
+            "image": jpeg(best["original"]),
+            "empty": jpeg(empty["original"]) if empty else None,
+            "hasDepth": any(f.get("depth") for f in frames),
+            "rawCloud": "raw-cloud.ply" in archive.namelist(),
+            "measurementStatus": "uncalibrated; confirm sheet scale and contour",
+        }
+
+
 @app.get("/api/health")
 def health() -> dict:
     return {"cuda": torch.cuda.is_available(), "gpu": torch.cuda.get_device_name(0)
             if torch.cuda.is_available() else None, "modelLoaded": _model is not None}
+
+
+@app.post("/api/import")
+def import_capture(capture: UploadFile = File(...)) -> dict:
+    data = capture.file.read(100_000_001)
+    if len(data) > 100_000_000:
+        raise HTTPException(status_code=413, detail="Capture ZIP exceeds 100 MB")
+    try:
+        return inspect_capture(data)
+    except (ValueError, KeyError, OSError, BadZipFile, RuntimeError, json.JSONDecodeError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 @app.post("/api/segment")
@@ -157,3 +208,39 @@ def segment(image: UploadFile = File(...), empty: UploadFile | None = File(None)
                 "measurementStatus": "proposal-only; scale and contour review required"}
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.post("/api/frame")
+def frame(payload: dict) -> Response:
+    from frame import Settings, generate
+
+    try:
+        settings = Settings(**payload["settings"])
+        archive, notes = generate(payload["left"], payload["right"], settings)
+        if not notes["bedFit"]:
+            raise ValueError("A part exceeds the selected printer bed")
+        return Response(archive, media_type="application/zip", headers={
+            "Content-Disposition": 'attachment; filename="optiframe-experimental-kit.zip"',
+            "X-OptiFrame-Status": "experimental-fit-check-required",
+        })
+    except (KeyError, TypeError, ValueError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.post("/api/frame-preview")
+def frame_preview(payload: dict) -> Response:
+    from frame import Settings, generate
+
+    try:
+        archive_bytes, notes = generate(payload["left"], payload["right"],
+                                         Settings(**payload["settings"]))
+        if not notes["bedFit"]:
+            raise ValueError("A part exceeds the selected printer bed")
+        with ZipFile(BytesIO(archive_bytes)) as archive:
+            return Response(archive.read("front.stl"), media_type="model/stl")
+    except (KeyError, TypeError, ValueError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+app.mount("/", StaticFiles(directory=Path(__file__).resolve().parent.parent / "web", html=True),
+          name="web")
