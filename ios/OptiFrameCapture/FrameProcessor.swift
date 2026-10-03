@@ -12,6 +12,17 @@ final class FrameProcessor {
     private let context = CIContext(options: [.useSoftwareRenderer: false])
     private let colorSpace = CGColorSpaceCreateDeviceRGB()
 
+    func segmentationJPEG(frame: ARFrame) throws -> (data: Data, width: Int, height: Int) {
+        let image = CIImage(cvPixelBuffer: frame.capturedImage)
+        let scale = min(1, 960 / max(image.extent.width, image.extent.height))
+        let resized = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+        guard let bitmap = context.createCGImage(resized, from: resized.extent.integral),
+              let data = context.jpegRepresentation(of: CIImage(cgImage: bitmap), colorSpace: colorSpace) else {
+            throw ProcessingError.jpeg
+        }
+        return (data, bitmap.width, bitmap.height)
+    }
+
     func save(frame: ARFrame, side: LensSide, kind: FrameKind,
               index: Int, folder: URL) throws -> SavedFrame {
         let name = String(format: "frame-%04d", index)

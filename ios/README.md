@@ -11,6 +11,16 @@ This is OptiFrame's own SwiftUI/ARKit capture app. It records **one lens per ZIP
 
 Original JPEGs are always preserved. Enhanced JPEGs use modest contrast and luminance sharpening only to propose boundaries; they never replace the originals. The app scores sharpness and central clipped highlights so an operator can retake a view. Its `raw-cloud.ply` contains sampled ARKit scene-depth points from arc frames. **Clear lens pixels may produce missing or background depth.** The web app must compare cloud coverage against the approved 2D rim and calipers before using any Z value in CAD.
 
+## Native modes and review
+
+**Empty sheet** and **Lens photo** save one original ARFrame. **Outline video burst** and **Depth arc** sample at 0.75-second intervals for up to 12 attempts (approximately 9 seconds). Busy writes and unavailable tracking skip attempts; frames are never queued behind a slow write. Stop recording ends sampling while a current save completes. These modes export JPEG frame sequences, not an encoded movie. Depth arc on a non-LiDAR phone still saves RGB and camera poses.
+
+**Live segmentation** requires an accessible HTTPS OptiFrame GPU server. Enter its base URL and optional access key, then choose Start live. Samples with a maximum dimension of about 960 pixels are sent to `/api/segment`, no faster than once per 0.75 seconds and with only one request in flight. The center box supplies the SAM prompt. Returned proposals are drawn on their own source JPEG with measured request latency, never on a newer moving camera view. The access key stays in memory; redirects are rejected. There is no bundled local SAM model. A failed or contour-free response clears the proposal. Leaving live mode, New lens, backgrounding, or camera interruption stops requests. Main-thread generation checks discard late results after these actions.
+
+**Review & export** shows downsampled original previews, sharpness, central clipping, depth-frame count and a suggested outline frame. These are capture quality hints, not accepted measurements. Export preserves full original JPEGs and the existing pose/depth archive contract. Printed scale and final contour approval happen in the web workflow.
+
+Controls scroll on small iPhones while the camera retains a 260-point height. Capture checks every saved frame against an 85 MB budget including a conservative raw-cloud reserve. A rejected frame is removed before manifest append, keeping prior frames exportable beneath the 90 MB ZIP budget; the reserve leaves room for archive headers and manifest metadata.
+
 ## Build and device test
 
 On a Mac with Xcode and [XcodeGen](https://github.com/yonaskolb/XcodeGen):
@@ -36,6 +46,9 @@ Capture/export are serialized and each archive is limited to 60 frames, bounding
 Export checks every capture file including manifest and PLY before packaging: expanded contents must be at most **240,000,000 bytes** and the resulting ZIP at most **90,000,000 bytes**. These decimal byte budgets leave room below the public import's 250 MB expanded/100 MB upload caps. An oversized or failed ZIP is removed and never shared; all working frames remain intact. The app reports that a New lens with fewer views is required. It does not silently drop photos or cloud points. Sixty LiDAR frames can produce 242 archive entries (four files per frame plus manifest and cloud), which the server must permit independently of its byte limits.
 
 ### Physical device acceptance checks
+
+- In Live segmentation, configure the HTTPS GPU server/key, check central prompt and overlay alignment in portrait and landscape, and test slow responses, missing GPU, rejected access keys, server redirects and loss of connectivity. Never accept an old overlay as a measured outline.
+- In Outline video burst and Depth arc, verify automatic stop after 12 attempts, manual stop during a write, busy-frame skips, interruption cancellation and review/export. A slow device may save fewer than 12 frames.
 
 - On a non-LiDAR iPhone, capture empty/lens/arc views, export and import: photos/poses must work with no depth or cloud.
 - On a LiDAR iPhone, compare a rigid opaque target at a ruler-measured distance against depth/PLY; verify +X/+Y/−Z signs and metre-to-millimetre conversion. Then inspect missing/background returns on the clear lens separately.

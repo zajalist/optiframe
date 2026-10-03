@@ -22,9 +22,9 @@ Photo processing requires the full service described in the README.
 
 ## Fifteen-second experiment
 
-1. First scan an opaque object near a patterned board, 0.5–1 m away. Tap **Start 15-second AR scan**, accept camera access and move slowly. The heatmap shows sampled depth: brighter is nearer, black is invalid or outside the 5 m export range.
-2. Capture stops after 15 seconds, 60 successful frames, or four million raw depth entries. Stop manually from the overlay if available. Without DOM overlay the browser's exit control and automatic stop remain available.
-3. After leaving AR, download JSON and PLY separately. Confirm Chrome saves both nonempty files. Starting again replaces the in-memory capture. Reloading loses unsaved data.
+1. First scan an opaque object near a patterned board, 0.5–1 m away. Tap **Start 15-second AR scan**, accept camera access and move slowly. The heatmap shows sampled depth: brighter is nearer, black is invalid or outside the 5 m export range. The other canvas shows sampled 3D points and can be dragged to rotate them during or after capture.
+2. Capture stops after 15 seconds, 60 successful frames, or four million raw depth entries. The WebXR DOM overlay is required so Stop and progress remain accessible during the immersive session.
+3. After leaving AR, download JSON and PLY separately. PLY is enabled only if depth yielded at least one valid point; JSON remains available for diagnosis. Confirm Chrome saves both nonempty files. Starting again replaces the in-memory capture. Reloading loses unsaved data.
 4. Repeat with the upright clear lens and an empty stand. Keep lens/board fixed during each scan. Record phone model, Android/Chrome versions, frame count, valid samples, board offset, lighting and caliper dimensions in validation notes.
 5. Inspect whether the cloud follows the board instead of the lens. The normal photo flow remains the reference contour and fallback when this test fails.
 
@@ -34,7 +34,7 @@ Photo processing requires the full service described in the README.
 
 Sampling uses `getDepthInMeters(u,v)` so the runtime applies depth orientation/UV mapping. Back-projection inverts the view projection, treats depth as axial distance from the camera plane, then transforms by the view pose. PLY concatenates valid 0–5 m samples; units are **metres**, axes are WebXR local (Y up, camera forward -Z). Projection and pose matrices are column-major. The XR origin is arbitrary and different on each scan. A reference-space reset stops capture to avoid combining different origins.
 
-No RGB photos, native raw-depth confidence, fiducial board pose, board registration, lens-volume crop, outlier removal, fusion, mesh or accuracy estimate is generated. The PLY is the scene, including background, with repeated samples. Compare raw maps and repeated scans before using any geometry. Transparent lenses can yield board depth or missing depth. This export is not imported into OptiFrame's frame design and provides no lens dimensions.
+No RGB photos, native raw-depth confidence, fiducial board pose, board registration, lens-volume crop, outlier removal, fusion, mesh or accuracy estimate is generated. The PLY is the scene, including background, with repeated samples. The live viewer decimates valid samples only for display; it does not change the export. Compare raw maps and repeated scans before using any geometry. Transparent lenses can yield board depth or missing depth. This export is not imported into OptiFrame's frame design and provides no lens dimensions.
 
 ## Runnable numerical check
 

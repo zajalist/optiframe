@@ -1,7 +1,6 @@
 const panels = [...document.querySelectorAll('.lens-panel')];
 const accessKey = new URLSearchParams(location.hash.slice(1)).get('access');
-const arLink = document.querySelector?.('a[href="/android-ar.html"]');
-if (arLink && accessKey) arLink.hash = location.hash;
+if (accessKey) document.querySelectorAll('a[href="/android-ar.html"]').forEach(link => { link.hash = location.hash; });
 const apiFetch = (url, options = {}) => fetch(url, {
   ...options,
   headers: { ...options.headers, ...(accessKey ? { 'X-OptiFrame-Key': accessKey } : {}) },
@@ -10,6 +9,9 @@ const responseData = response => response.headers.get('content-type')?.includes(
   ? response.json() : response.text().then(detail => ({ detail }));
 
 import {distance,polygonArea,measure,sheetHomography,project,benchmark,pixelResolution,contourRepeatability,normalizeLensOrientation,outlineProofSVG} from './calibration.js';
+import {createLiveSegmentSession} from './live-segment.js';
+
+let activeLivePanel = null;
 
 class LensPanel {
   constructor(element) {
@@ -47,10 +49,42 @@ class LensPanel {
     this.dragVertex = null;
     this.proposals = [];
     this.history = [];
+    this.live = null;
     this.bind();
   }
 
   bind() {
+    const liveButton = this.el.querySelector('.live-start');
+    const liveStage = this.el.querySelector('.live-stage');
+    liveButton.addEventListener('click', async () => {
+      if (this.live?.active) { this.stopLive(); return; }
+      if (activeLivePanel && activeLivePanel !== this) activeLivePanel.stopLive();
+      if (!this.live) this.live = createLiveSegmentSession({
+        video: liveStage.querySelector('video'), overlay: liveStage.querySelector('canvas'),
+        status: this.el.querySelector('.live-status'),
+        captureButton: this.el.querySelector('.live-capture'), apiFetch, side: this.side,
+        onCapture: async ({file,contour,width,height,latencyMs}) => {
+          const loaded = await this.loadPhoto(file);
+          if (!loaded) throw new Error('Captured photo could not be opened. Try again.');
+          this.points = contour.map(([x,y]) => [x * this.canvas.width / width, y * this.canvas.height / height]);
+          this.render();
+          liveStage.hidden = true;
+          liveButton.textContent = 'Start camera';
+          if (activeLivePanel === this) activeLivePanel = null;
+          this.message(`Live outline captured (${latencyMs} ms proposal). Review the edge, then tap the four sheet markers, optical centre and top.`);
+        },
+      });
+      liveStage.hidden = false;
+      liveButton.disabled = true;
+      try {
+        await this.live.start();
+        activeLivePanel = this;
+        liveButton.textContent = 'Stop camera';
+      } catch (error) {
+        liveStage.hidden = true;
+        this.el.querySelector('.live-status').textContent = error.message;
+      } finally { liveButton.disabled = false; }
+    });
     this.el.querySelectorAll('.benchmark-input').forEach(input=>input.addEventListener('input',()=>{
       this.invalidateEvidence();
       this.updateMeasurement();
@@ -85,14 +119,14 @@ class LensPanel {
         this.message('1:1 outline downloaded. Print at 100%, verify its 50 mm line, and compare the real lens edge.');
       } catch (error) { this.message(error.message); }
     });
-    this.el.querySelector('.photo-input').addEventListener('change', event => this.loadPhoto(event.target.files[0]));
+    this.el.querySelector('.photo-input').addEventListener('change', event => { this.stopLive(); void this.loadPhoto(event.target.files[0]); });
     this.el.querySelector('.evidence-confirmed').addEventListener('change', invalidateFrameResult);
     this.el.querySelector('.empty-input').addEventListener('change', event => {
       this.empty = event.target.files[0] || null;
       this.message(this.empty ? 'Empty-sheet photo loaded. Propose the lens edge.' : 'Empty-sheet photo removed.');
     });
-    this.el.querySelector('.zip-input').addEventListener('change', event => this.loadArchive(event.target.files[0]));
-    this.el.querySelector('.video-input').addEventListener('change', event => this.loadVideo(event.target.files[0]));
+    this.el.querySelector('.zip-input').addEventListener('change', event => { this.stopLive(); void this.loadArchive(event.target.files[0]); });
+    this.el.querySelector('.video-input').addEventListener('change', event => { this.stopLive(); void this.loadVideo(event.target.files[0]); });
     for (const mode of ['trace', 'box', 'markers', 'scale', 'optical', 'top']) {
       this.el.querySelector(`.${mode}`).addEventListener('click', () => this.setMode(this.mode === mode ? null : mode));
     }
@@ -115,6 +149,13 @@ class LensPanel {
   }
 
   message(text) { this.status.textContent = text; }
+
+  stopLive() {
+    this.live?.stop();
+    this.el.querySelector('.live-stage').hidden = true;
+    this.el.querySelector('.live-start').textContent = 'Start camera';
+    if (activeLivePanel === this) activeLivePanel = null;
+  }
 
   invalidateEvidence() {
     invalidateFrameResult();
@@ -392,6 +433,39 @@ class LensPanel {
     }else status.textContent='Pixel resolution awaits calibration.';
     this.size.textContent = result ? `${result.width.toFixed(1)} × ${result.height.toFixed(1)} mm` : 'Awaiting reviewed contour + scale';
     if (result) this.size.title = `Perimeter ${result.perimeter.toFixed(1)} mm; area ${result.area.toFixed(1)} mm². Flat photo measurement only.`;
+    this.renderOutlineReview(result, normalized, transformed);
+  }
+
+  renderOutlineReview(result, normalized, transformed) {
+    const review = this.el.querySelector('.outline-review');
+    if (!review?.querySelector) return;
+    if (!result || this.points.length < 12 || (!this.homography && !this.mmPerPixel)) { review.hidden = true; return; }
+    const scale = this.homography ? 1 : this.mmPerPixel;
+    const outline = normalized || transformed.map(([x,y]) => [x * scale, y * scale]);
+    const xs = outline.map(point => point[0]), ys = outline.map(point => point[1]);
+    const left = Math.min(...xs), top = Math.min(...ys);
+    const width = Math.max(...xs) - left, height = Math.max(...ys) - top;
+    if (!(width > 0 && height > 0)) { review.hidden = true; return; }
+    const fit = Math.min(250 / width, 145 / height);
+    const tx = 150 - width * fit / 2, ty = 95 - height * fit / 2;
+    const place = ([x,y]) => [tx + (x - left) * fit, ty + (y - top) * fit];
+    const path = outline.map((point,index) => {
+      const [x,y] = place(point);
+      return `${index ? 'L' : 'M'}${x.toFixed(2)} ${y.toFixed(2)}`;
+    }).join(' ') + ' Z';
+    review.querySelector('.outline-review-path').setAttribute('d',path);
+    const centre = normalized ? [0,0] : this.opticalCentre
+      ? (this.homography ? project(this.opticalCentre,this.homography) : this.opticalCentre.map(value => value * scale))
+      : null;
+    let cross = '';
+    if (centre) {
+      const [x,y] = place(centre);
+      cross = `M${(x-5).toFixed(2)} ${y.toFixed(2)} H${(x+5).toFixed(2)} M${x.toFixed(2)} ${(y-5).toFixed(2)} V${(y+5).toFixed(2)}`;
+    }
+    review.querySelector('.outline-review-cross').setAttribute('d',cross);
+    review.querySelector('.outline-review-note').textContent = `${this.homography ? 'Perspective corrected' : 'Scale only'} · ${normalized ? 'top aligned' : 'orientation pending'}`;
+    review.querySelector('.outline-review-size').textContent = `${result.width.toFixed(2)} × ${result.height.toFixed(2)} mm`;
+    review.hidden = false;
   }
 
   async propose() {

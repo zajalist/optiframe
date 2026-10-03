@@ -35,16 +35,59 @@ function pointCloudPLY(frames) {
   return ["ply", "format ascii 1.0", "comment OptiFrame experimental scene depth; units meters; XR local space", `element vertex ${points.length}`, "property float x", "property float y", "property float z", "end_header", ...points.map(point => point.join(" ")), ""].join("\n");
 }
 
-if (typeof module !== "undefined" && module.exports) module.exports = {multiplyPoint, inverseMatrix, backProject, pointCloudPLY};
+// Draw from bounded capture samples without retaining another copy of the cloud.
+function drawPointCloud(ctx, canvas, frames, yaw = 0.35, pitch = -0.2) {
+  const width = canvas.width, height = canvas.height;
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = "#101c24";
+  ctx.fillRect(0, 0, width, height);
+  const validCount = frames.reduce((n, frame) => n + frame.views.reduce((m, view) => m + view.samples.filter(sample => sample.point?.every(Number.isFinite)).length, 0), 0);
+  if (!validCount) return 0;
+  const stride = Math.max(1, Math.ceil(validCount / 6000));
+  const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
+  const projected = [];
+  let validIndex = 0, minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const frame of frames) for (const view of frame.views) for (const sample of view.samples) {
+    if (!sample.point || !sample.point.every(Number.isFinite) || validIndex++ % stride) continue;
+    const point = sample.point;
+    const rx = cy * point[0] + sy * point[2];
+    const ry = cp * point[1] - sp * (-sy * point[0] + cy * point[2]);
+    projected.push([rx, ry]);
+    minX = Math.min(minX, rx); maxX = Math.max(maxX, rx);
+    minY = Math.min(minY, ry); maxY = Math.max(maxY, ry);
+  }
+  const padding = Math.min(12, width / 10, height / 10);
+  const scale = Math.min((width - 2 * padding) / Math.max(maxX - minX, 0.05), (height - 2 * padding) / Math.max(maxY - minY, 0.05));
+  const centerX = (minX + maxX) / 2, centerY = (minY + maxY) / 2;
+  ctx.fillStyle = "#91e4fa";
+  for (const [rx, ry] of projected) {
+    ctx.fillRect(Math.round(width / 2 + (rx - centerX) * scale), Math.round(height / 2 - (ry - centerY) * scale), 2, 2);
+  }
+  return projected.length;
+}
+
+if (typeof module !== "undefined" && module.exports) module.exports = {multiplyPoint, inverseMatrix, backProject, pointCloudPLY, drawPointCloud};
 
 if (typeof document !== "undefined") {
   const $ = id => document.getElementById(id);
   const status = message => { $("status").textContent = message; };
   const ctx = $("depth-preview").getContext("2d");
+  const cloudCanvas = $("cloud-preview"), cloudCtx = cloudCanvas.getContext("2d");
+  let yaw = 0.35, pitch = -0.2, dragging = null;
   let session = null, capture = null, gl = null, space = null, lastSample = -Infinity, startTime = null;
-  let timeout = null, ending = false, settingUp = false, framePending = false;
-  const diagnostics = () => { $("diagnostics").textContent = JSON.stringify({secureContext: isSecureContext, userAgent: navigator.userAgent, depthUsage: capture?.depthUsage, depthDataFormat: capture?.depthDataFormat, frames: capture?.frames.length || 0, rawDepthEntries: capture?.rawDepthEntries || 0, missingDepthFrames: capture?.missingDepthFrames || 0, trackingLostFrames: capture?.trackingLostFrames || 0, referenceSpaceResets: capture?.referenceSpaceResets || 0, stopReason: capture?.stopReason, lastError: capture?.lastError}, null, 2); };
-  const exportButtons = () => { $("json").disabled = !capture?.frames.length || !!session; $("ply").disabled = $("json").disabled; };
+  let timeout = null, ending = false, settingUp = false, framePending = false, samplingFrozen = false;
+  const diagnostics = () => { $("diagnostics").textContent = JSON.stringify({secureContext: isSecureContext, userAgent: navigator.userAgent, depthUsage: capture?.depthUsage, depthDataFormat: capture?.depthDataFormat, frames: capture?.frames.length || 0, sampledPoints: capture?.sampledPoints || 0, rawDepthEntries: capture?.rawDepthEntries || 0, missingDepthFrames: capture?.missingDepthFrames || 0, trackingLostFrames: capture?.trackingLostFrames || 0, referenceSpaceResets: capture?.referenceSpaceResets || 0, stopReason: capture?.stopReason, lastError: capture?.lastError}, null, 2); };
+  const exportButtons = () => { $("json").disabled = !capture?.frames.length || !!session; $("ply").disabled = $("json").disabled || !capture?.sampledPoints; };
+  const renderCloud = () => drawPointCloud(cloudCtx, cloudCanvas, capture?.frames || [], yaw, pitch);
+  cloudCanvas.addEventListener("pointerdown", event => { dragging = {x: event.clientX, y: event.clientY}; cloudCanvas.setPointerCapture?.(event.pointerId); });
+  cloudCanvas.addEventListener("pointermove", event => {
+    if (!dragging) return;
+    yaw += (event.clientX - dragging.x) * 0.01;
+    pitch = Math.max(-1.5, Math.min(1.5, pitch + (event.clientY - dragging.y) * 0.01));
+    dragging = {x: event.clientX, y: event.clientY}; renderCloud();
+  });
+  for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) cloudCanvas.addEventListener(type, () => { dragging = null; });
+  renderCloud();
 
   async function stop(message) {
     if (ending) return;
@@ -83,6 +126,7 @@ if (typeof document !== "undefined") {
     gl.bindFramebuffer(gl.FRAMEBUFFER, session.renderState.baseLayer.framebuffer);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    if (samplingFrozen) return;
     if (time - lastSample < 250) return;
     lastSample = time;
     try {
@@ -111,10 +155,14 @@ if (typeof document !== "undefined") {
         views.push({eye: view.eye, projectionMatrix: Array.from(view.projectionMatrix), worldFromView, width: depth.width, height: depth.height, rawValueToMeters: depth.rawValueToMeters, normDepthBufferFromNormView: Array.from(depth.normDepthBufferFromNormView.matrix), rawDepth: Array.from(raw, value => Number.isFinite(value) ? value : null), samples});
         drawSamples(samples);
       }
-      if (!views.length) { capture.missingDepthFrames++; status("No depth yet. Move slowly; try an opaque object first."); }
+      if (!views.length) { capture.missingDepthFrames++; $("coverage").textContent = "No depth in latest frame"; status("No depth yet. Move slowly; try an opaque object first."); }
       else {
         capture.frames.push({timestampMs: time - startTime, worldFromViewer: Array.from(pose.transform.matrix), emulatedPosition: pose.emulatedPosition, views});
         const valid = views.reduce((sum, view) => sum + view.samples.filter(sample => sample.point).length, 0);
+        const sampled = views.reduce((sum, view) => sum + view.samples.length, 0);
+        capture.sampledPoints += valid;
+        $("coverage").textContent = `${Math.min(15, Math.floor((time - startTime) / 1000))}/15 s · ${capture.frames.length}/60 frames · ${capture.sampledPoints.toLocaleString()} points · ${Math.round(valid / sampled * 100)}% valid depth in latest frame`;
+        renderCloud();
         status(`${capture.frames.length}/60 depth frames · ${valid} valid samples in latest frame. Move slowly around the fixed stand.`);
       }
       diagnostics();
@@ -139,10 +187,12 @@ if (typeof document !== "undefined") {
       activeGL = null;
     };
     try {
-      session = await navigator.xr.requestSession("immersive-ar", {requiredFeatures: ["depth-sensing"], optionalFeatures: ["dom-overlay"], domOverlay: {root: $("overlay")}, depthSensing: {usagePreference: ["cpu-optimized"], dataFormatPreference: ["luminance-alpha", "float32"]}});
+      session = await navigator.xr.requestSession("immersive-ar", {requiredFeatures: ["depth-sensing", "dom-overlay"], domOverlay: {root: $("overlay")}, depthSensing: {usagePreference: ["cpu-optimized"], dataFormatPreference: ["luminance-alpha", "float32"]}});
       activeSession = session;
       capture = null;
-      exportButtons(); diagnostics();
+      samplingFrozen = false;
+      $("coverage").textContent = "Waiting for depth frames";
+      renderCloud(); exportButtons(); diagnostics();
       session.addEventListener("end", () => {
         sessionEnded = true;
         framePending = false;
@@ -150,8 +200,9 @@ if (typeof document !== "undefined") {
         releaseGL();
         clearTimeout(timeout); session = null; $("stop").disabled = true; $("start").disabled = settingUp;
         $("start").textContent = "Start new 15-second scan";
-        exportButtons(); diagnostics();
-        if (capture?.stopReason) status(capture.stopReason);
+        exportButtons(); diagnostics(); renderCloud();
+        if (capture?.frames.length && !capture.sampledPoints) status("Depth captured but no valid 3D points. Download JSON diagnostics; try an opaque object for a point cloud.");
+        else if (capture?.stopReason) status(capture.stopReason);
         else if (!capture?.frames.length) status("Session ended without depth frames. Try an opaque object or continue with photos.");
         else status(`Capture ended: ${capture.frames.length} depth frames. Download both files before starting again.${capture.lastError ? ` Error: ${capture.lastError}` : ""}`);
       }, {once: true});
@@ -165,8 +216,8 @@ if (typeof document !== "undefined") {
       session.updateRenderState({baseLayer: new XRWebGLLayer(session, gl)});
       space = await session.requestReferenceSpace("local");
       if (!stillActive()) return;
-      capture = {schema: "optiframe-webxr-depth-v1", createdAt: new Date().toISOString(), userAgent: navigator.userAgent, units: "meters", coordinateFrame: "WebXR local; right-handed; Y up; camera looks down -Z; column-major matrices", warning: "Experimental scene points; transparent lenses may return background. No lens measurement, board alignment, fusion, confidence or RGB capture.", depthUsage: session.depthUsage, depthDataFormat: session.depthDataFormat, sampleGrid: [32, 24], maxDepthMeters: 5, rawDepthEntries: 0, missingDepthFrames: 0, trackingLostFrames: 0, referenceSpaceResets: 0, frames: []};
-      space.addEventListener("reset", () => { capture.referenceSpaceResets++; capture.lastError = "XR local reference space reset; capture stopped to prevent mixing coordinate frames"; void stop(capture.lastError); });
+      capture = {schema: "optiframe-webxr-depth-v1", createdAt: new Date().toISOString(), userAgent: navigator.userAgent, units: "meters", coordinateFrame: "WebXR local; right-handed; Y up; camera looks down -Z; column-major matrices", warning: "Experimental scene points; transparent lenses may return background. No lens measurement, board alignment, fusion, confidence or RGB capture.", depthUsage: session.depthUsage, depthDataFormat: session.depthDataFormat, sampleGrid: [32, 24], maxDepthMeters: 5, sampledPoints: 0, rawDepthEntries: 0, missingDepthFrames: 0, trackingLostFrames: 0, referenceSpaceResets: 0, frames: []};
+      space.addEventListener("reset", () => { samplingFrozen = true; capture.referenceSpaceResets++; capture.lastError = "XR local reference space reset; capture stopped to prevent mixing coordinate frames"; void stop(capture.lastError); });
       startTime = performance.now(); lastSample = -Infinity;
       $("stop").disabled = false; exportButtons(); diagnostics();
       status("AR started. Move slowly. Capture ends automatically after 15 seconds.");

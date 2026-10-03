@@ -37,7 +37,8 @@ class CaptureBodyLimit:
     async def __call__(self, scope, receive, send):
         limits = {"/api/video-frames": VIDEO_MAX_BYTES,
                   "/api/import": 100_000_000,
-                  "/api/segment": 48_000_000}
+                  "/api/segment": 48_000_000,
+                  "/api/live-segment": 8_000_000}
         if scope["type"] != "http" or scope["path"] not in limits:
             return await self.app(scope, receive, send)
         limit = limits[scope["path"]] + 64_000  # Multipart headers and boundaries.
@@ -160,6 +161,27 @@ def glare_fraction(image: np.ndarray, box: tuple[int, int, int, int]) -> float:
         return 0.0
     # This is a clipped-pixel warning, not a definitive specular classifier.
     return float(np.mean(np.min(roi, axis=2) >= 250))
+
+
+def live_quality(image: np.ndarray, contour: list[list[int]],
+                 box: tuple[int, int, int, int]) -> dict:
+    """Repeatable frame ranking; these image heuristics are not model confidence."""
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    x0, y0, x1, y1 = box
+    roi = gray[y0:y1, x0:x1]
+    sharpness = float(cv2.Laplacian(roi, cv2.CV_64F).var())
+    clipped = glare_fraction(image, box)
+    polygon = np.asarray(contour, dtype=np.float32)
+    area = abs(float(cv2.contourArea(polygon)))
+    box_area = (x1 - x0) * (y1 - y0)
+    coverage = area / box_area if box_area else 0.0
+    # Favor a clear edge, moderate clipping, and a contour that occupies the prompt.
+    sharpness_part = min(1.0, sharpness / 250.0)
+    coverage_part = min(1.0, coverage / 0.25) if coverage <= 0.85 else 0.0
+    glare_part = max(0.0, 1.0 - clipped / 0.08)
+    score = round(sharpness_part * coverage_part * glare_part, 4)
+    return {"score": score, "sharpness": round(sharpness, 2),
+            "clippedFraction": round(clipped, 5), "coverage": round(coverage, 4)}
 
 
 def sam_mask(image: np.ndarray, box: tuple[int, int, int, int]) -> np.ndarray:
@@ -352,6 +374,39 @@ def segment(image: UploadFile = File(...), empty: UploadFile | None = File(None)
                 "measurementStatus": "proposal-only; scale and contour review required"}
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.post("/api/live-segment")
+def live_segment(image: UploadFile = File(...), box: str = Form(...)) -> dict:
+    """Segment one bounded camera frame with the shared SAM2 image predictor."""
+    raw = image.file.read(6_000_001)
+    if len(raw) > 6_000_000:
+        raise HTTPException(status_code=413, detail="Live frame exceeds 6 MB")
+    try:
+        photo = decode(raw)
+        h, w = photo.shape[:2]
+        if max(w, h) > 1600 or w * h > 2_600_000:
+            raise ValueError("Live frame exceeds 1600 pixels per side or 2.6 megapixels")
+        parsed = json.loads(box)
+        if not isinstance(parsed, list) or len(parsed) != 4 or any(
+                isinstance(v, bool) or not isinstance(v, int) for v in parsed):
+            raise ValueError("Box must be four integer coordinates")
+        x0, y0, x1, y1 = parsed
+        if not (0 <= x0 < x1 <= w and 0 <= y0 < y1 <= h and
+                x1 - x0 >= 16 and y1 - y0 >= 16):
+            raise ValueError("Box must be at least 16 pixels wide and high inside the image")
+        contour = contour_from_mask(sam_mask(enhance(photo), tuple(parsed)))
+        if len(contour) < 3:
+            raise ValueError("No lens contour found in the box")
+        return {"width": w, "height": h, "contour": contour,
+                "quality": live_quality(photo, contour, tuple(parsed)),
+                "method": "sam2.1-hiera-small-cuda",
+                "measurementStatus": "proposal-only; review contour and calibrate sheet scale"}
+    except (ValueError, TypeError, json.JSONDecodeError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except Exception as error:
+        logging.exception("Live SAM2 proposal failed")
+        raise HTTPException(status_code=503, detail="GPU segmentation unavailable") from error
 
 
 @app.post("/api/frame")

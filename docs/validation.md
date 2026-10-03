@@ -49,6 +49,8 @@ Visual check of the saved overlays: both green contours broadly follow the visib
 
 Local warm/cold latency check on the original 1280 × 720 JPEG from IMG_1620 (5 s), boxed around the lens, RTX 5070: isolated `gpu/benchmark.py --iterations 2 --gpu` took 14,772.75 ms on first SAM use and 90.95–95.18 ms on two warm runs (median 93.06 ms). The same live backend took 9,386 ms for its first local request, then 661 ms for a warm public-tunnel request including network and upload. This is a single image and small sample, so it is a direction for startup optimization, not a throughput guarantee or accuracy evidence. The live backend was warmed for phone testing.
 
+October 3 live-update check with the existing public service, using a 1280 × 720 JPEG (16.5 KB) from the supplied video and the same lens box: three serial local `/api/segment` requests took **222, 90, 88 ms**; three HTTPS requests through the public tunnel took **653, 243, 243 ms**. With the live controller's 50 ms inter-request gap, the latter warm-path sample suggests roughly three updates per second in this network state. A client-side translation tracker moves the visible overlay between SAM responses at up to about 11 Hz, but those tracked positions are previews only; the captured contour comes from one completed SAM response and its own JPEG. Actual phone camera, upload size, radio latency, capture quality, and sustained thermal behavior are unmeasured. Longer filming selects among scored real frames; it does not fine-tune SAM weights or establish millimetre accuracy.
+
 ## Fit loop
 
 | Revision | Clearance / edge-thickness settings | Coupon result | Change made |

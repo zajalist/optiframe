@@ -3,6 +3,24 @@ import simd
 @testable import OptiFrameCapture
 
 final class CaptureMathTests: XCTestCase {
+    func testStoppedOrReplacedProposalCannotPublishLateResult() {
+        var generation = ProposalGeneration()
+        let firstRequest = generation.invalidate()
+        XCTAssertTrue(generation.accepts(firstRequest))
+        _ = generation.invalidate() // Stop, New lens, or mode change.
+        XCTAssertFalse(generation.accepts(firstRequest))
+        let replacementRequest = generation.invalidate()
+        XCTAssertFalse(generation.accepts(firstRequest))
+        XCTAssertTrue(generation.accepts(replacementRequest))
+    }
+
+    func testCaptureBudgetReservesCloudAndRejectsAdditionalFrame() throws {
+        try ArchiveBudget.validateCapture(fileBytes: 84_999_904, cloudPoints: 1)
+        XCTAssertThrowsError(try ArchiveBudget.validateCapture(fileBytes: 84_999_905, cloudPoints: 1))
+        XCTAssertThrowsError(try ArchiveBudget.validateCapture(fileBytes: UInt64.max, cloudPoints: 0))
+        XCTAssertThrowsError(try ArchiveBudget.validateCapture(fileBytes: 0, cloudPoints: -1))
+    }
+
     func testArchiveBudgetBoundariesAndOverflow() {
         XCTAssertNoThrow(try ArchiveBudget.validateExpanded(fileSizes: [100_000_000, 140_000_000]))
         XCTAssertThrowsError(try ArchiveBudget.validateExpanded(fileSizes: [240_000_000, 1]))

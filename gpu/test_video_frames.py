@@ -141,7 +141,7 @@ const context = {document:{querySelectorAll:()=>[]},location:{hash:''},URLSearch
 vm.createContext(context);
 vm.runInContext(fs.readFileSync('web/calibration.js','utf8').replace(/^export .*;$/m, ''), context);
 context.invalidateFrameResult = () => {};
-vm.runInContext(fs.readFileSync('web/app.js','utf8').replace(/^import .*;$/m, '').split('const [leftPanel, rightPanel]')[0]+';globalThis.Panel=LensPanel', context);
+vm.runInContext(fs.readFileSync('web/app.js','utf8').replace(/^import .*;$/gm, '').split('const [leftPanel, rightPanel]')[0]+';globalThis.Panel=LensPanel', context);
 const panel = Object.create(context.Panel.prototype);
 Object.assign(panel,{photoVersion:0,proposalRequest:0,photoLoading:false,canvas:{},select:{replaceChildren(){}},
   placeholder:{},scaleStatus:{},markerStatus:{},centreStatus:{},topStatus:{},status:{},el:{querySelector:()=>({checked:false})},render(){}});

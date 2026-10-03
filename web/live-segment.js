@@ -1,0 +1,339 @@
+// Live camera proposals are only inputs to the existing photo review flow.
+const MAX_SIDE = 1280;
+const INTERVAL_MS = 50;
+
+const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
+const centerBox = [0.2, 0.2, 0.8, 0.8];
+
+export function createLiveSegmentSession({
+  video, overlay, status, captureButton, onCapture, apiFetch = fetch, side = 'lens',
+  mediaDevices = navigator.mediaDevices, intervalMs = INTERVAL_MS,
+}) {
+  if (!video || !overlay || !status || !captureButton || typeof onCapture !== 'function')
+    throw new TypeError('Live segmentation needs video, overlay, status, captureButton and onCapture');
+
+  const context = overlay.getContext('2d');
+  let stream = null;
+  let timer = null;
+  let request = null;
+  let generation = 0;
+  let box = [...centerBox];
+  let dragStart = null;
+  let latest = null;
+  let best = null;
+  let previousUpdateAt = null;
+  let cadenceHz = null;
+  let working = false;
+  let capturePending = false;
+  let boxVersion = 0;
+  let animation = null;
+  let trackingBase = null;
+  let lastTrackAt = 0;
+  let legacyApi = false;
+  const trackingCanvas = document.createElement('canvas');
+  const trackingContext = trackingCanvas.getContext('2d', { willReadFrequently: true });
+
+  function message(value) { status.textContent = value; }
+  function dimensions() {
+    const width = video.videoWidth;
+    const height = video.videoHeight;
+    const factor = Math.min(1, MAX_SIDE / Math.max(width, height));
+    return [Math.max(1, Math.round(width * factor)), Math.max(1, Math.round(height * factor))];
+  }
+  function draw() {
+    if (!overlay.width || !overlay.height) return;
+    context.clearRect(0, 0, overlay.width, overlay.height);
+    const [x0, y0, x1, y1] = box;
+    context.strokeStyle = '#79d7ef';
+    context.lineWidth = 2;
+    context.setLineDash([8, 5]);
+    context.strokeRect(x0 * overlay.width, y0 * overlay.height,
+      (x1 - x0) * overlay.width, (y1 - y0) * overlay.height);
+    context.setLineDash([]);
+    if (!latest?.contour?.length) return;
+    context.beginPath();
+    latest.contour.forEach(([x, y], index) => {
+      const px = (x + (latest.offset?.[0] || 0)) * overlay.width / latest.width;
+      const py = (y + (latest.offset?.[1] || 0)) * overlay.height / latest.height;
+      if (index) context.lineTo(px, py);
+      else context.moveTo(px, py);
+    });
+    context.closePath();
+    context.strokeStyle = '#c9eb64';
+    context.lineWidth = 3;
+    context.stroke();
+  }
+  function setBoxNormalized(value) {
+    if (!Array.isArray(value) || value.length !== 4 || value.some(v => !Number.isFinite(v)))
+      throw new TypeError('Box must contain four finite normalized coordinates');
+    const [x0, y0, x1, y1] = value;
+    if (!(0 <= x0 && x0 < x1 && x1 <= 1 && 0 <= y0 && y0 < y1 && y1 <= 1 &&
+          x1 - x0 >= 0.03 && y1 - y0 >= 0.03))
+      throw new RangeError('Box must be inside the preview and at least 3% wide and high');
+    box = [...value];
+    boxVersion++;
+    request?.abort();
+    trackingBase = null;
+    latest = null;
+    best = null;
+    captureButton.disabled = true;
+    draw();
+    message('Lens box set. Hold the lens steady while the edge updates.');
+  }
+  function pointer(event) {
+    const rect = overlay.getBoundingClientRect();
+    return [clamp((event.clientX - rect.left) / rect.width, 0, 1),
+      clamp((event.clientY - rect.top) / rect.height, 0, 1)];
+  }
+  overlay.addEventListener('pointerdown', event => {
+    if (!stream) return;
+    dragStart = pointer(event);
+    overlay.setPointerCapture?.(event.pointerId);
+  });
+  overlay.addEventListener('pointerup', event => {
+    if (!dragStart) return;
+    const end = pointer(event);
+    const value = [Math.min(dragStart[0], end[0]), Math.min(dragStart[1], end[1]),
+      Math.max(dragStart[0], end[0]), Math.max(dragStart[1], end[1])];
+    dragStart = null;
+    if (value[2] - value[0] >= 0.03 && value[3] - value[1] >= 0.03)
+      setBoxNormalized(value);
+  });
+  overlay.addEventListener('pointercancel', () => { dragStart = null; });
+
+  function grayFrame(source) {
+    if (!trackingContext) return null;
+    const width = 160;
+    const height = Math.max(1, Math.round(width * overlay.height / overlay.width));
+    trackingCanvas.width = width;
+    trackingCanvas.height = height;
+    trackingContext.drawImage(source, 0, 0, width, height);
+    const rgba = trackingContext.getImageData(0, 0, width, height).data;
+    const gray = new Uint8Array(width * height);
+    for (let index = 0; index < gray.length; index++) {
+      const pixel = index * 4;
+      gray[index] = (rgba[pixel] * 77 + rgba[pixel + 1] * 150 + rgba[pixel + 2] * 29) >> 8;
+    }
+    return { gray, width, height };
+  }
+  function trackOnce() {
+    if (!stream) return;
+    animation = requestAnimationFrame(trackOnce);
+    if (!trackingBase || !latest || !video.videoWidth) return;
+    if (performance.now() - lastTrackAt < 90) return;
+    lastTrackAt = performance.now();
+    try {
+      const current = grayFrame(video);
+      if (!current || current.width !== trackingBase.width || current.height !== trackingBase.height) return;
+      const { width, height, gray: reference } = trackingBase;
+      const x0 = Math.max(9, Math.ceil(box[0] * width));
+      const y0 = Math.max(9, Math.ceil(box[1] * height));
+      const x1 = Math.min(width - 9, Math.floor(box[2] * width));
+      const y1 = Math.min(height - 9, Math.floor(box[3] * height));
+      if (x1 - x0 < 16 || y1 - y0 < 16) return;
+      let bestDifference = Infinity;
+      let bestShift = [0, 0];
+      for (let dy = -8; dy <= 8; dy += 2) {
+        for (let dx = -8; dx <= 8; dx += 2) {
+          let difference = 0;
+          let count = 0;
+          for (let y = y0; y < y1; y += 5) {
+            for (let x = x0; x < x1; x += 5) {
+              difference += Math.abs(reference[y * width + x] - current.gray[(y + dy) * width + x + dx]);
+              count++;
+            }
+          }
+          difference /= count;
+          if (difference < bestDifference) { bestDifference = difference; bestShift = [dx, dy]; }
+        }
+      }
+      // Reject changed lighting/scene content instead of letting the outline drift.
+      latest.offset = bestDifference < 15
+        ? [bestShift[0] * latest.width / width, bestShift[1] * latest.height / height]
+        : [0, 0];
+      draw();
+    } catch {
+      trackingBase = null; // Tracking is optional; segmentation remains authoritative.
+    }
+  }
+
+  function schedule(token) {
+    if (token === generation && stream)
+      timer = setTimeout(() => { void sample(token); }, intervalMs);
+  }
+  async function canvasBlob(canvas) {
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.86));
+    if (!blob) throw new Error('Could not capture a camera frame');
+    return blob;
+  }
+  function legacyQuality(frame, contour, prompt, clippedFraction) {
+    let twiceArea = 0;
+    contour.forEach(([x, y], index) => {
+      const [nextX, nextY] = contour[(index + 1) % contour.length];
+      twiceArea += x * nextY - nextX * y;
+    });
+    const boxArea = (prompt[2] - prompt[0]) * (prompt[3] - prompt[1]);
+    const coverage = Math.abs(twiceArea) / 2 / boxArea;
+    let sharpness = 0.5;
+    try {
+      const { gray, width, height } = grayFrame(frame);
+      let gradient = 0;
+      let count = 0;
+      for (let y = 1; y < height - 1; y += 3) {
+        for (let x = 1; x < width - 1; x += 3) {
+          const index = y * width + x;
+          gradient += Math.abs(gray[index] - gray[index + 1]) +
+            Math.abs(gray[index] - gray[index + width]);
+          count++;
+        }
+      }
+      sharpness = Math.min(1, gradient / Math.max(1, count) / 28);
+    } catch { /* Image quality still has glare and contour coverage. */ }
+    const glare = Math.max(0, 1 - Number(clippedFraction || 0) / 0.08);
+    const area = coverage > 0.85 ? 0 : Math.min(1, coverage / 0.25);
+    return { score: Math.round(sharpness * glare * area * 10_000) / 10_000,
+      clippedFraction: Number(clippedFraction || 0), coverage: Math.round(coverage * 10_000) / 10_000 };
+  }
+  async function segmentFrame(body, signal, frame, prompt) {
+    let response = await apiFetch(legacyApi ? '/api/segment' : '/api/live-segment',
+      { method: 'POST', body, signal });
+    if (!legacyApi && response.status === 404) {
+      legacyApi = true;
+      response = await apiFetch('/api/segment', { method: 'POST', body, signal });
+    }
+    const data = response.headers?.get('content-type')?.includes('json') === false
+      ? { detail: await response.text() } : await response.json();
+    if (!response.ok) throw new Error(data.detail || 'Live edge proposal failed');
+    if (!legacyApi) return data;
+    const sam = data.candidates?.find(candidate =>
+      candidate.method === 'sam2.1-hiera-small-cuda' && candidate.contour?.length >= 3);
+    if (!sam) throw new Error('GPU lens contour unavailable; check the prompt box or GPU service');
+    return { width: data.width, height: data.height, contour: sam.contour,
+      quality: legacyQuality(frame, sam.contour, prompt, data.clippedFraction),
+      method: sam.method };
+  }
+  async function sample(token) {
+    timer = null;
+    if (token !== generation || !stream || working || !video.videoWidth) return;
+    working = true;
+    try {
+      const [width, height] = dimensions();
+      const frame = document.createElement('canvas');
+      frame.width = width;
+      frame.height = height;
+      frame.getContext('2d').drawImage(video, 0, 0, width, height);
+      const promptVersion = boxVersion;
+      const capturedAt = new Date().toISOString();
+      const startedAt = performance.now();
+      const blob = await canvasBlob(frame);
+      if (token !== generation || promptVersion !== boxVersion) return;
+      const prompt = [Math.floor(box[0] * width), Math.floor(box[1] * height),
+        Math.ceil(box[2] * width), Math.ceil(box[3] * height)];
+      const body = new FormData();
+      body.append('image', blob, `${side}-live.jpg`);
+      body.append('box', JSON.stringify(prompt));
+      request = new AbortController();
+      const data = await segmentFrame(body, request.signal, frame, prompt);
+      if (token !== generation || promptVersion !== boxVersion) return;
+      if (data.width !== width || data.height !== height || !Array.isArray(data.contour) || data.contour.length < 3)
+        throw new Error('Live edge response has invalid dimensions or contour');
+      const updatedAt = performance.now();
+      const latencyMs = Math.round(updatedAt - startedAt);
+      if (previousUpdateAt !== null) {
+        const rate = 1000 / Math.max(1, updatedAt - previousUpdateAt);
+        cadenceHz = cadenceHz === null ? rate : cadenceHz * 0.7 + rate * 0.3;
+      }
+      previousUpdateAt = updatedAt;
+      latest = { ...data, offset: [0, 0] };
+      try { trackingBase = grayFrame(frame); } catch { trackingBase = null; }
+      if (!best || data.quality.score > best.quality.score) {
+        best = { blob, contour: data.contour.map(point => [...point]),
+          width, height, quality: data.quality, capturedAt, latencyMs };
+        captureButton.disabled = false;
+      }
+      draw();
+      message(`Live edge · ${cadenceHz === null ? 'calibrating rate' : cadenceHz.toFixed(1) + ' updates/s'} · ${latencyMs} ms. Drag to refine the lens box.`);
+    } catch (error) {
+      if (token === generation && error.name !== 'AbortError') message(error.message);
+    } finally {
+      request = null;
+      working = false;
+      schedule(token);
+    }
+  }
+
+  async function start() {
+    stop();
+    const token = generation;
+    if (!mediaDevices?.getUserMedia) throw new Error('Camera access requires a secure browser context');
+    message('Opening camera…');
+    try {
+      const acquired = await mediaDevices.getUserMedia({
+        audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } },
+      });
+      if (token !== generation) { acquired.getTracks().forEach(track => track.stop()); return; }
+      stream = acquired;
+      video.srcObject = stream;
+      await video.play();
+      if (token !== generation) return;
+      if (!video.videoWidth || !video.videoHeight) throw new Error('Camera has no video frames');
+      [overlay.width, overlay.height] = dimensions();
+      captureButton.disabled = true;
+      draw();
+      if (typeof requestAnimationFrame === 'function') animation = requestAnimationFrame(trackOnce);
+      message('Center the lens inside the box, or drag a tighter box over the preview.');
+      void sample(token);
+    } catch (error) {
+      if (token === generation) { stop(); message(`Camera unavailable: ${error.message}`); }
+      throw error;
+    }
+  }
+  function stop() {
+    generation++;
+    clearTimeout(timer);
+    timer = null;
+    request?.abort();
+    request = null;
+    if (animation !== null && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(animation);
+    animation = null;
+    trackingBase = null;
+    stream?.getTracks().forEach(track => track.stop());
+    stream = null;
+    video.pause?.();
+    video.srcObject = null;
+    latest = null;
+    best = null;
+    previousUpdateAt = null;
+    cadenceHz = null;
+    captureButton.disabled = true;
+    context.clearRect(0, 0, overlay.width, overlay.height);
+  }
+  async function capture() {
+    if (!best) throw new Error('Wait for a lens edge proposal before capturing');
+    if (capturePending) throw new Error('Capture is already in progress');
+    capturePending = true;
+    captureButton.disabled = true;
+    const selected = best;
+    const payload = {
+      file: new File([selected.blob], `${side}-live.jpg`, { type: 'image/jpeg' }),
+      contour: selected.contour.map(point => [...point]),
+      width: selected.width, height: selected.height,
+      quality: selected.quality, capturedAt: selected.capturedAt,
+      latencyMs: selected.latencyMs, source: 'live-segmentation',
+    };
+    try {
+      await onCapture(payload);
+      stop();
+      return payload;
+    } finally {
+      capturePending = false;
+      if (stream && best) captureButton.disabled = false;
+    }
+  }
+  captureButton.addEventListener('click', () => {
+    void capture().catch(error => message(error.message));
+  });
+  captureButton.disabled = true;
+  return { start, stop, capture, setBoxNormalized,
+    get active() { return !!stream; } };
+}
