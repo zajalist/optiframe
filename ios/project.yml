@@ -1,0 +1,39 @@
+name: OptiFrameCapture
+options:
+  bundleIdPrefix: com.zajalist
+settings:
+  base:
+    SWIFT_VERSION: 5.9
+    IPHONEOS_DEPLOYMENT_TARGET: 18.0
+targets:
+  OptiFrameCapture:
+    type: application
+    platform: iOS
+    sources: [OptiFrameCapture]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.zajalist.optiframe.capture
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_NSCameraUsageDescription: OptiFrame records lens photos and optional depth for frame fitting.
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        TARGETED_DEVICE_FAMILY: 1
+    dependencies:
+      - package: ZIPFoundation
+  OptiFrameCaptureTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [OptiFrameCaptureTests]
+    dependencies:
+      - target: OptiFrameCapture
+packages:
+  ZIPFoundation:
+    url: https://github.com/weichsel/ZIPFoundation.git
+    from: 0.9.19
+schemes:
+  OptiFrameCapture:
+    build:
+      targets:
+        OptiFrameCapture: all
+    test:
+      targets:
+        - OptiFrameCaptureTests
