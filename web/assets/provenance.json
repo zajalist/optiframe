@@ -1,0 +1,15 @@
+{
+  "hero": {
+    "path": "hero-source.js (embedded WebP)",
+    "provider": "Higgsfield",
+    "model": "gpt_image_2_5",
+    "job_id": "1bb65066-4a0d-4548-8018-a268b9743bfb",
+    "purpose": "Illustrative asymmetric eyewear concept; not a photograph of the generated STL or a certified product",
+    "prompt": "A high-end industrial-design product photograph for OptiFrame, a concept demonstration of recycling two mismatched eyeglass lenses into an asymmetric custom 3D-printed eyeglass frame. Wide cinematic 16:9 image with matte charcoal-black seamless background #101112 and generous uninterrupted dark negative space across the left 35 percent and upper left. On the right two thirds, a beautifully composed exploded assembly of matte black thin-rim eyewear: left rim is softly rounded teardrop, right rim rounded rectangular, distinctly asymmetric but plausible. Two separate clear optical lenses, matching their respective shapes exactly, float just in front of their corresponding rims; delicate clear edges catch restrained ivory studio rim light, realistic soft reflections, no glowing holograms. Two detached matte black temple arms subtly separated behind, tiny real steel screws only near hinge attachments. A tactile fine additive layer texture in the polymer. Three-quarter front angle, lens openings readable, physically restrained product still life, one elegant long soft shadow on charcoal surface, precise Swiss industrial catalog art direction, premium optics lab. No text, no typography, no logos, no labels, no diagram lines, no measuring grid, no people, no colorful gradients, no neon. This is an illustrative concept, not a claim of a certified manufactured device."
+  },
+  "font": {
+    "family": "Manrope",
+    "source": "https://fonts.gstatic.com/s/manrope/v20/xn7gYHE41ni1AdIRggexSg.woff2",
+    "license": "SIL Open Font License 1.1"
+  }
+}

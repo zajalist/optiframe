@@ -5,11 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#101112">
   <title>OptiFrame — lens capture</title>
-  <link rel="stylesheet" href="/simple.css?v=11">
+  <link rel="stylesheet" href="/simple.css?v=12">
+  <link rel="stylesheet" href="/tutorial.css?v=12">
 </head>
 <body>
   <div class="app">
-    <header class="header"><span class="brand">OptiFrame</span><a class="sheet-link" href="/calibration-sheet.svg" target="_blank" rel="noopener">Print sheet</a></header>
+    <header class="header"><a class="brand" href="/welcome.html" data-preserve-access aria-label="About OptiFrame">OptiFrame</a><div class="header-actions"><a class="sheet-link" href="/calibration-sheet.svg" target="_blank" rel="noopener">Print sheet</a><button class="help-button" type="button" data-tutorial="capture">Help</button></div></header>
     <main class="capture">
       <div class="heading">
         <div class="heading-row"><h1 id="headline">First lens</h1><span id="step-label" aria-label="Capture progress">1 of 2</span></div>
@@ -35,5 +36,7 @@
   </div>
   <button id="controller-capture" type="button" hidden disabled></button>
   <script type="module" src="/simple.js?v=11"></script>
+  <script src="/tutorial.js?v=12" defer></script>
+  <script src="/navigation.js?v=12" defer></script>
 </body>
 </html>

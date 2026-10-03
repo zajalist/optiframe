@@ -1,0 +1,133 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-03T22:46:29Z",
+  "title": "Design System: OptiFrame",
+  "extensions": {
+    "colorMeta": {
+      "welcome-accent": { "role": "primary", "displayName": "Welcome lime" },
+      "welcome-ink": { "role": "neutral", "displayName": "Welcome graphite" },
+      "welcome-paper": { "role": "neutral", "displayName": "Editorial ivory" },
+      "scanner-accent": { "role": "primary", "displayName": "Scanner focus lime" },
+      "scanner-background": { "role": "neutral", "displayName": "Scanner near-black" },
+      "guide-accent": { "role": "primary", "displayName": "Guide soft green" },
+      "guide-background": { "role": "neutral", "displayName": "Guide charcoal" }
+    },
+    "typographyMeta": {
+      "welcome-display": { "displayName": "Welcome display", "purpose": "Manrope hero only; responsive overrides remain in welcome.css." },
+      "welcome-headline": { "displayName": "Welcome headline", "purpose": "Editorial process heading; section-specific variants remain in welcome.css." },
+      "welcome-body": { "displayName": "Welcome body", "purpose": "Principle copy using the landing font stack." },
+      "scanner-title": { "displayName": "Scanner title", "purpose": "Current capture task in system typography." },
+      "guide-title": { "displayName": "Guide title", "purpose": "One tutorial step in system typography, independent of the invoking page." }
+    },
+    "shadows": [
+      { "name": "scanner-crosshair", "value": "0 2px 8px #0009", "purpose": "Separate the aiming point from camera imagery." },
+      { "name": "scanner-loupe", "value": "0 10px 28px #0009", "purpose": "Lift the magnified image above the capture stage." },
+      { "name": "guide-dialog", "value": "0 24px 80px #0006", "purpose": "Separate the optional guide from its invoking surface." }
+    ],
+    "motion": [
+      { "name": "welcome-action", "value": "background .18s, color .18s", "purpose": "Welcome primary and outlined action state changes." },
+      { "name": "welcome-object-arrive", "value": "1.2s cubic-bezier(.16,1,.3,1) both", "purpose": "One-time concept image reveal; clip-path inset(0 0 5% 15%) to inset(0), translation (20px,9px) to (0,0)." },
+      { "name": "scanner-action", "value": ".16s ease-out", "purpose": "Primary opacity and shutter-core transform; active core scales to .91." },
+      { "name": "guide-arrive", "value": "260ms cubic-bezier(.16,1,.3,1)", "purpose": "Dialog translates from 12px below its resting position." },
+      { "name": "guide-reflection", "value": "3s ease-in-out 2", "purpose": "Reflection moves 78px and fades to demonstrate clearing the lens rim." },
+      { "name": "guide-brackets", "value": "900ms cubic-bezier(.16,1,.3,1)", "purpose": "Capture brackets settle from scale(1.05) to scale(1)." },
+      { "name": "guide-layers", "value": "1.8s cubic-bezier(.16,1,.3,1)", "purpose": "Printer lines reveal from clip-path inset(100% 0 0) to inset(0)." },
+      { "name": "guide-progress", "value": "width 180ms ease, background 180ms ease", "purpose": "Current step indicator expands from 5px to 19px." },
+      { "name": "guide-action", "value": "background 140ms ease, transform 140ms ease", "purpose": "Guide action hover and press; active action scales to .98." }
+    ],
+    "breakpoints": [
+      { "name": "welcome-wide-min-width", "value": "1600px" },
+      { "name": "welcome-compact-max-width", "value": "1100px" },
+      { "name": "welcome-mobile-max-width", "value": "760px" },
+      { "name": "welcome-small-max-width", "value": "380px" },
+      { "name": "scanner-pair-columns-min-width", "value": "650px" },
+      { "name": "scanner-short-max-height", "value": "640px" },
+      { "name": "guide-phone-max-width", "value": "520px" },
+      { "name": "guide-compact-max-height", "value": "730px" },
+      { "name": "guide-landscape-max-height", "value": "570px" },
+      { "name": "guide-small-max-width-with-570px-max-height", "value": "380px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Welcome primary action",
+      "kind": "button",
+      "refersTo": "welcome-primary",
+      "description": "Square lime action on the graphite welcome surface.",
+      "html": "<a class=\"ds-welcome-primary\" href=\"/\">Scan your lenses <svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M5 12h14m-6-6 6 6-6 6\"/></svg></a>",
+      "css": ".ds-welcome-primary{display:inline-flex;align-items:center;justify-content:space-between;gap:27px;min-height:56px;padding:17px 23px;background:var(--accent,#d5ef83);color:var(--ink,#191b19);font:700 14px Manrope,\"Segoe UI\",sans-serif;text-decoration:none;transition:background .18s,color .18s}.ds-welcome-primary svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}.ds-welcome-primary:hover{background:#e4f6b0}.ds-welcome-primary:focus-visible{outline:3px solid var(--accent,#d5ef83);outline-offset:6px}@media(prefers-reduced-motion:reduce){.ds-welcome-primary{transition:none}}"
+    },
+    {
+      "name": "Welcome outline action",
+      "kind": "button",
+      "refersTo": "welcome-outline",
+      "description": "Secondary document link from the welcome page.",
+      "html": "<a class=\"ds-welcome-outline\" href=\"/calibration-sheet.svg\">Open reference sheet <svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M6 18 18 6M6 6h12v12\"/></svg></a>",
+      "css": ".ds-welcome-outline{display:inline-flex;align-items:center;justify-content:space-between;gap:27px;min-height:50px;padding:13px 17px;border:1px solid #777d6c;color:var(--paper,#eeeee5);font:700 12px Manrope,\"Segoe UI\",sans-serif;text-decoration:none;transition:background .18s,color .18s}.ds-welcome-outline svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}.ds-welcome-outline:hover{background:var(--paper,#eeeee5);color:var(--ink,#191b19)}.ds-welcome-outline:focus-visible{outline:3px solid var(--accent,#d5ef83);outline-offset:6px}@media(prefers-reduced-motion:reduce){.ds-welcome-outline{transition:none}}"
+    },
+    {
+      "name": "Welcome navigation",
+      "kind": "nav",
+      "description": "Compact desktop links reduce to the scanner action on mobile.",
+      "html": "<nav class=\"ds-welcome-nav\" aria-label=\"Main navigation\"><a class=\"ds-nav-process\" href=\"#process\">The process</a><button class=\"ds-nav-guide\" type=\"button\">Printing guide</button><a class=\"ds-nav-scan\" href=\"/\">Open scanner <svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M5 12h14m-6-6 6 6-6 6\"/></svg></a></nav>",
+      "css": ".ds-welcome-nav{display:flex;align-items:center;gap:34px;color:var(--paper,#eeeee5);font:600 13px Manrope,\"Segoe UI\",sans-serif}.ds-welcome-nav a{color:inherit;text-decoration:none}.ds-nav-guide{font:inherit;color:inherit;border:0;background:none;padding:12px 0;cursor:pointer}.ds-nav-process:hover,.ds-nav-guide:hover{color:var(--accent,#d5ef83)}.ds-nav-scan{display:flex;align-items:center;gap:16px;padding:13px 17px;border:1px solid #777d6c;transition:background .18s,color .18s}.ds-nav-scan svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}.ds-nav-scan:hover{background:var(--paper,#eeeee5);color:var(--ink,#191b19)}.ds-welcome-nav a:focus-visible,.ds-nav-guide:focus-visible{outline:3px solid var(--accent,#d5ef83);outline-offset:6px}@media(max-width:760px){.ds-welcome-nav{gap:0}.ds-nav-process,.ds-nav-guide{display:none}.ds-nav-scan{font-size:12px;border:0;padding:13px 0 13px 12px;gap:9px}}@media(prefers-reduced-motion:reduce){.ds-nav-scan{transition:none}}"
+    },
+    {
+      "name": "Scanner primary action",
+      "kind": "button",
+      "refersTo": "scanner-primary",
+      "description": "System-font confirmation action; no landing typography.",
+      "html": "<button class=\"ds-scanner-primary\" type=\"button\">Confirm</button>",
+      "css": ".ds-scanner-primary{min-height:48px;padding:0 30px;border:0;border-radius:6px;background:#f5f5f5;color:#101112;font:600 .9375rem -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;cursor:pointer;transition:opacity .16s ease-out}.ds-scanner-primary:focus-visible{outline:2px solid #c8fa72;outline-offset:4px}.ds-scanner-primary:not(:disabled):active{background:#d7d8da}.ds-scanner-primary:disabled{opacity:.35;cursor:default}@media(prefers-reduced-motion:reduce){.ds-scanner-primary{transition-duration:.01ms}}"
+    },
+    {
+      "name": "Scanner shutter",
+      "kind": "button",
+      "refersTo": "scanner-shutter",
+      "description": "Circular capture control with a distinct inset core and press feedback.",
+      "html": "<button class=\"ds-shutter\" type=\"button\" aria-label=\"Capture lens\"><span class=\"ds-shutter-core\"></span></button>",
+      "css": ".ds-shutter{width:72px;height:72px;min-height:72px;padding:4px;border:2px solid #f5f5f5;border-radius:50%;background:transparent;cursor:pointer}.ds-shutter-core{display:block;width:100%;height:100%;border-radius:50%;background:#f5f5f5;transition:transform .16s ease-out}.ds-shutter:focus-visible{outline:2px solid #c8fa72;outline-offset:4px}.ds-shutter:not(:disabled):active .ds-shutter-core{transform:scale(.91)}.ds-shutter:disabled{opacity:.35;cursor:default}@media(max-height:640px){.ds-shutter{width:56px;height:56px;min-height:56px}}@media(prefers-reduced-motion:reduce){.ds-shutter-core{transition-duration:.01ms}}"
+    },
+    {
+      "name": "Guide next action",
+      "kind": "button",
+      "refersTo": "guide-next",
+      "description": "Soft white guide action; the final step uses a task-specific close label.",
+      "html": "<button class=\"ds-guide-next\" type=\"button\">Next</button>",
+      "css": ".ds-guide-next{min-height:48px;border:0;border-radius:10px;padding:0 18px;background:var(--oft-fg,#f5f5f2);color:#151915;font:600 15px/1.5 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;cursor:pointer;transition:background 140ms ease,transform 140ms ease}.ds-guide-next:hover{background:#e3eadf}.ds-guide-next:focus-visible{outline:2px solid var(--oft-accent,#d4ecba);outline-offset:3px}.ds-guide-next:active{transform:scale(.98)}@media(prefers-reduced-motion:reduce){.ds-guide-next{transition:none}}"
+    },
+    {
+      "name": "Guide progress",
+      "kind": "custom",
+      "description": "Small current-step marks inside direct-navigation touch targets.",
+      "html": "<nav class=\"ds-guide-dots\" aria-label=\"Guide steps\"><button class=\"ds-guide-dot\" type=\"button\" aria-label=\"Step 1: Print to scale\" aria-current=\"step\"><span></span></button><button class=\"ds-guide-dot\" type=\"button\" aria-label=\"Step 2: Four dots. One lens.\"><span></span></button><button class=\"ds-guide-dot\" type=\"button\" aria-label=\"Step 3: Give the edge good light\"><span></span></button></nav>",
+      "css": ".ds-guide-dots{display:flex;align-items:center;justify-content:center;margin-bottom:10px}.ds-guide-dot{display:grid;place-items:center;width:36px;height:36px;min-height:36px;padding:0;border:0;border-radius:50%;background:transparent;cursor:pointer}.ds-guide-dot span{width:5px;height:5px;border-radius:4px;background:#747e75;transition:width 180ms ease,background 180ms ease}.ds-guide-dot[aria-current] span{width:19px;background:var(--oft-accent,#d4ecba)}.ds-guide-dot:hover span{background:var(--oft-fg,#f5f5f2)}.ds-guide-dot:focus-visible{outline:2px solid var(--oft-accent,#d4ecba);outline-offset:3px}@media(prefers-reduced-motion:reduce){.ds-guide-dot span{transition:none}}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Optically lit introduction, focused camera operation",
+    "overview": "OptiFrame has two deliberate surface families. The welcome page is a Persuade surface: graphite, lime, editorial ivory, generous Manrope typography, and a dramatically lit frame concept. The scanner is an Operate surface: system typography, a nearly black camera stage, compact instructions, and one next action. Their typography and density remain separate.\n\nThe optional tutorial belongs to Operate even when opened from the welcome page. It uses a native dialog with the proportions and controls of a phone guide, restrained motion, and precise diagrams derived from existing captured contours. The concept image is explicitly a generated illustration; neither imagery nor diagrams imply proven physical accuracy or a certified product.",
+    "keyCharacteristics": [
+      "Expressive, scrollable introduction with an optically lit concept hero.",
+      "Minimal scanner contained within the viewport, without editorial sections or page scrolling.",
+      "Optional guidance with independent left and right contours and one illustrated step at a time.",
+      "Clear separation between a contour proposal and checked physical measurements."
+    ],
+    "rules": [
+      { "name": "The Surface Boundary Rule", "body": "Keep welcome, scanner, and guide color assignments local to their implemented surfaces; importing the welcome stylesheet into the scanner or dialog would erase intentional differences.", "section": "colors" },
+      { "name": "The Operating Type Rule", "body": "Preserve system typography in the scanner and tutorial, including when a tutorial opens over the Manrope welcome page.", "section": "typography" }
+    ],
+    "dos": [
+      "Do preserve the expressive welcome page and compact scanner as separate surface families.",
+      "Do keep tutorial guidance optional, keyboard accessible, and readable at short phone heights.",
+      "Do use the existing independent contours for technical diagrams and clearly label generated concept imagery.",
+      "Do retain reduced-motion behavior, visible focus, and physical measurement checks."
+    ],
+    "donts": [
+      "Don't add landing-page sections, promotional cards, Manrope headings, or page scrolling to the scanner.",
+      "Don't replace the two lens contours with a symmetric generic glasses icon in instructional diagrams.",
+      "Don't imply proven millimetre accuracy, validated physical fit, or certified eyewear through claims or imagery.",
+      "Don't promote local landing composition or tutorial radii into a universal style for every application surface."
+    ]
+  }
+}
