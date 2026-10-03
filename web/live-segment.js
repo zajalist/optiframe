@@ -31,6 +31,7 @@ export function createLiveSegmentSession({
   video, overlay, status, captureButton, onCapture, apiFetch = fetch, side = 'lens',
   mediaDevices = navigator.mediaDevices, intervalMs = INTERVAL_MS,
   startupTimeoutMs = STARTUP_TIMEOUT_MS,
+  requestTimeoutMs = 8000, maxResultAgeMs = 2000,
   locateTarget = null, minimalStatus = false,
 }) {
   if (!video || !overlay || !status || !captureButton || typeof onCapture !== 'function')
@@ -47,7 +48,8 @@ export function createLiveSegmentSession({
   let best = null;
   let previousUpdateAt = null;
   let cadenceHz = null;
-  let working = false;
+  let working = null;
+  let resultExpiry = null;
   let capturePending = false;
   let boxVersion = 0;
   let animation = null;
@@ -61,6 +63,15 @@ export function createLiveSegmentSession({
   const trackingContext = trackingCanvas.getContext('2d', { willReadFrequently: true });
 
   function message(value, routine = false) { status.textContent = minimalStatus && routine ? '' : value; }
+  function clearResult() {
+    clearTimeout(resultExpiry);
+    resultExpiry = null;
+    latest = null;
+    best = null;
+    trackingBase = null;
+    captureButton.disabled = true;
+    draw();
+  }
   function dimensions() {
     const width = video.videoWidth;
     const height = video.videoHeight;
@@ -263,7 +274,9 @@ export function createLiveSegmentSession({
   async function sample(token) {
     timer = null;
     if (token !== generation || !stream || working || !video.videoWidth) return;
-    working = true;
+    const job = { abort: new AbortController() };
+    working = job;
+    request = job.abort;
     try {
       const [width, height] = dimensions();
       const frame = document.createElement('canvas');
@@ -289,13 +302,18 @@ export function createLiveSegmentSession({
       const body = new FormData();
       body.append('image', blob, `${side}-live.jpg`);
       body.append('box', JSON.stringify(prompt));
-      request = new AbortController();
-      const data = await segmentFrame(body, request.signal, frame, prompt);
+      const data = await boundedStartup(segmentFrame(body, job.abort.signal, frame, prompt),
+        requestTimeoutMs, job.abort.signal, 'Connection is slow. Retrying…');
       if (token !== generation || promptVersion !== boxVersion) return;
-      if (data.width !== width || data.height !== height || !Array.isArray(data.contour) || data.contour.length < 3)
+      if (data.width !== width || data.height !== height || !Array.isArray(data.contour) || data.contour.length < 3 ||
+          !data.contour.every(point => Array.isArray(point) && point.length === 2 && point.every(Number.isFinite) &&
+            point[0] >= 0 && point[0] <= width && point[1] >= 0 && point[1] <= height) ||
+          !Number.isFinite(data.quality?.score))
         throw new Error('Live edge response has invalid dimensions or contour');
       const updatedAt = performance.now();
       const latencyMs = Math.round(updatedAt - startedAt);
+      if (updatedAt - startedAt > maxResultAgeMs)
+        throw new Error('Camera frame arrived too late. Retrying…');
       if (previousUpdateAt !== null) {
         const rate = 1000 / Math.max(1, updatedAt - previousUpdateAt);
         cadenceHz = cadenceHz === null ? rate : cadenceHz * 0.7 + rate * 0.3;
@@ -303,20 +321,32 @@ export function createLiveSegmentSession({
       previousUpdateAt = updatedAt;
       latest = { ...data, offset: [0, 0] };
       try { trackingBase = grayFrame(frame); } catch { trackingBase = null; }
-      if (!best || data.quality.score > best.quality.score) {
+      if (!best || updatedAt - best.sampledAt > maxResultAgeMs / 2 || data.quality.score >= best.quality.score) {
         best = { blob, contour: data.contour.map(point => [...point]),
-          width, height, quality: data.quality, capturedAt, latencyMs };
+          width, height, quality: data.quality, capturedAt, latencyMs, sampledAt: startedAt };
         captureButton.disabled = false;
       }
+      clearTimeout(resultExpiry);
+      resultExpiry = setTimeout(() => {
+        if (token !== generation) return;
+        clearResult();
+        message('Connection interrupted. Retrying…');
+      }, Math.max(0, maxResultAgeMs - (updatedAt - startedAt)));
       draw();
       message('Lens found. Hold steady and capture.', true);
     } catch (error) {
-      if (token === generation && error.name !== 'AbortError')
+      if (token === generation && error.name !== 'AbortError') {
+        clearResult();
         message(`No lens edge yet. ${error.message}`);
+      }
     } finally {
-      request = null;
-      working = false;
-      schedule(token);
+      job.abort.abort();
+      // A restarted camera owns its new request and schedule independently.
+      if (working === job) {
+        request = null;
+        working = null;
+        schedule(token);
+      }
     }
   }
 
@@ -363,6 +393,9 @@ export function createLiveSegmentSession({
     timer = null;
     request?.abort();
     request = null;
+    working = null;
+    clearTimeout(resultExpiry);
+    resultExpiry = null;
     if (animation !== null && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(animation);
     animation = null;
     trackingBase = null;
@@ -379,11 +412,15 @@ export function createLiveSegmentSession({
     context.clearRect(0, 0, overlay.width, overlay.height);
   }
   async function capture() {
-    if (!best) throw new Error('Wait for a lens edge proposal before capturing');
+    if (!best || performance.now() - best.sampledAt > maxResultAgeMs) {
+      clearResult();
+      throw new Error('Wait for a fresh lens outline');
+    }
     if (capturePending) throw new Error('Capture is already in progress');
     capturePending = true;
     captureButton.disabled = true;
     const selected = best;
+    const token = generation;
     const payload = {
       file: new File([selected.blob], `${side}-live.jpg`, { type: 'image/jpeg' }),
       contour: selected.contour.map(point => [...point]),
@@ -393,7 +430,7 @@ export function createLiveSegmentSession({
     };
     try {
       await onCapture(payload);
-      stop();
+      if (token === generation) stop();
       return payload;
     } finally {
       capturePending = false;

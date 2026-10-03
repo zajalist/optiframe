@@ -12,6 +12,34 @@ import numpy as np
 import trimesh
 from shapely.geometry import LineString, Point, Polygon, box
 from shapely.ops import unary_union
+from shapely.strtree import STRtree
+
+
+OUTLINE_SIMPLIFICATION_MM = 0.05
+MIN_OUTLINE_CLEARANCE_MM = 0.2
+
+
+def _check_nonlocal_clearance(polygon: Polygon) -> None:
+    """Check distinct boundary sections, not distances between dense adjacent samples.
+
+    GEOS minimum_clearance also counts tiny edges along an otherwise sound rim.
+    Only chains separated by more than 0.5 mm of boundary arc are nonlocal;
+    the 0.2 mm physical separation requirement is unchanged for those sections.
+    """
+    coords = np.asarray(polygon.exterior.coords)
+    lengths = np.linalg.norm(np.diff(coords, axis=0), axis=1)
+    arc = np.concatenate(([0.0], np.cumsum(lengths)))
+    segments = [LineString(coords[i:i + 2]) for i in range(len(lengths))]
+    tree = STRtree(segments)
+    for i, segment in enumerate(segments):
+        for j in tree.query(segment, predicate="dwithin", distance=MIN_OUTLINE_CLEARANCE_MM):
+            if j <= i:
+                continue
+            gap = min(arc[j] - arc[i + 1], arc[-1] - (arc[j + 1] - arc[i]))
+            if gap <= 0.5:
+                continue
+            if segment.distance(segments[j]) < MIN_OUTLINE_CLEARANCE_MM:
+                raise ValueError("Lens outline has a narrow or nearly crossed section")
 
 
 @dataclass
@@ -46,8 +74,19 @@ def _polygon(points: list[list[float]], sign: int, pd: float, vertical_offset: f
     polygon = Polygon(array)
     if not polygon.is_valid or polygon.area < 300 or polygon.area > 4000:
         raise ValueError("Lens outline must be a simple, plausible closed shape")
-    if polygon.minimum_clearance < 0.2:
-        raise ValueError("Lens outline has a narrow or nearly crossed section")
+    # Test the measured boundary before simplification so cleanup cannot hide a pinch.
+    if polygon.minimum_clearance < MIN_OUTLINE_CLEARANCE_MM:
+        _check_nonlocal_clearance(polygon)
+    # Sparse reviewed contours stay exact. Only oversampled/duplicate chains need cleanup.
+    duplicate_sample = np.any(np.linalg.norm(np.diff(np.asarray(polygon.exterior.coords), axis=0), axis=1) < 1e-10)
+    simplified = (polygon.simplify(OUTLINE_SIMPLIFICATION_MM, preserve_topology=True)
+                  if len(array) > 512 or duplicate_sample else polygon)
+    if (not simplified.is_valid or simplified.geom_type != "Polygon" or
+            polygon.boundary.hausdorff_distance(simplified.boundary) > OUTLINE_SIMPLIFICATION_MM + 1e-9):
+        raise ValueError("Outline cleanup exceeded the 0.05 mm boundary tolerance")
+    polygon = simplified
+    if polygon.minimum_clearance < MIN_OUTLINE_CLEARANCE_MM:
+        _check_nonlocal_clearance(polygon)
     return polygon
 
 
@@ -247,6 +286,7 @@ def build_parts(left: list[list[float]], right: list[list[float]], settings: Set
     notes = {
         "status": "experimental; lens fit and hinge strength require physical validation",
         "units": "millimetres", "parts": list(parts),
+        "outline_cleanup_max_boundary_deviation_mm": OUTLINE_SIMPLIFICATION_MM,
         "hardware": "Eight M2 through fasteners for lens retainers; two M2 hinge screws and matching nuts. Check actual screw length and clearance.",
         "lens_edge_thickness_mm": {"left": edge_thicknesses[0], "right": edge_thicknesses[1]},
         "optical_centre_vertical_offset_mm": {"left": offsets[0], "right": offsets[1]},
@@ -285,7 +325,27 @@ def generate(left: list[list[float]], right: list[list[float]], settings: Settin
     stream = io.BytesIO()
     with ZipFile(stream, "w", ZIP_DEFLATED) as archive:
         for name, mesh in parts.items():
-            archive.writestr(f"{name}.stl", mesh.export(file_type="stl"))
-        archive.writestr("plate.stl", plate.export(file_type="stl"))
+            archive.writestr(f"{name}.stl", _validated_stl(mesh, name))
+        archive.writestr("plate.stl", _validated_stl(plate, "plate"))
         archive.writestr("README.json", json.dumps(notes, indent=2))
     return stream.getvalue(), notes
+
+
+def _validated_stl(mesh: trimesh.Trimesh, name: str) -> bytes:
+    """Validate the float32 geometry that STL actually stores, including packed parts."""
+    output = mesh.copy()
+    rounded = output.vertices.astype(np.float32).astype(np.float64)
+    if np.max(np.abs(rounded - output.vertices)) > 0.0001:
+        raise RuntimeError(f"{name} STL exceeds coordinate precision tolerance")
+    output.vertices = rounded
+    # Boolean intersections can create slivers that collapse on float32 export.
+    # Remove only those duplicate/degenerate triangles, never fill or smooth holes.
+    output.merge_vertices(digits_vertex=7)
+    output.update_faces(output.nondegenerate_faces())
+    output.update_faces(output.unique_faces())
+    output.remove_unreferenced_vertices()
+    data = output.export(file_type="stl")
+    decoded = trimesh.load(io.BytesIO(data), file_type="stl")
+    if not decoded.is_watertight or decoded.volume <= 0:
+        raise RuntimeError(f"{name} serialized STL failed watertight validation")
+    return data

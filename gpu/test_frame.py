@@ -1,12 +1,15 @@
 import io
 import math
+import json
 import unittest
+from pathlib import Path
 from zipfile import ZipFile
 
 import trimesh
 import numpy as np
 
-from frame import Settings, generate, preview
+from shapely.geometry import Polygon
+from frame import Settings, generate, preview, _polygon, OUTLINE_SIMPLIFICATION_MM
 
 
 def ellipse(rx, ry, count=96):
@@ -21,6 +24,41 @@ def bed_contact_area(mesh):
 
 
 class FrameTests(unittest.TestCase):
+    def test_dense_adjacent_samples_are_not_a_narrow_lens(self):
+        points = ellipse(25, 19, 2000)
+        points.insert(35, points[35][:])
+        self.assertLess(Polygon(points).minimum_clearance, 0.2)
+        polygon = _polygon(points, 1, 0)
+        original = Polygon([[x, -y] for x, y in points])
+        self.assertTrue(polygon.is_valid)
+        self.assertLessEqual(original.boundary.hausdorff_distance(polygon.boundary),
+                             OUTLINE_SIMPLIFICATION_MM + 1e-9)
+
+    def test_true_narrow_neck_and_crossed_edges_remain_rejected(self):
+        neck = [[-25,-15],[-5,-15],[-5,-.05],[5,-.05],[5,-15],[25,-15],
+                [25,15],[5,15],[5,.05],[-5,.05],[-5,15],[-25,15]]
+        with self.assertRaisesRegex(ValueError, "narrow or nearly crossed"):
+            _polygon(neck, 1, 0)
+        crossed = ellipse(25, 19)
+        crossed[0], crossed[48] = crossed[48], crossed[0]
+        with self.assertRaisesRegex(ValueError, "simple, plausible"):
+            _polygon(crossed, 1, 0)
+
+    def test_real_scanned_lens_outlines_generate_preview_and_closed_print_kit(self):
+        payload = json.loads((Path(__file__).parent / 'fixtures' / 'scanned-lens-outlines.json').read_text())
+        settings = Settings(**payload['settings'])
+        result = preview(payload['left'], payload['right'], settings)
+        self.assertEqual(len(result['meshes']), 7)
+        archive, notes = generate(payload['left'], payload['right'], settings)
+        self.assertEqual(notes['outline_cleanup_max_boundary_deviation_mm'], .05)
+        with ZipFile(io.BytesIO(archive)) as files:
+            self.assertEqual(len([name for name in files.namelist() if name.endswith('.stl')]), 6)
+            for name in files.namelist():
+                if name.endswith('.stl'):
+                    mesh = trimesh.load(io.BytesIO(files.read(name)), file_type='stl')
+                    self.assertTrue(mesh.is_watertight, name)
+                    self.assertGreater(mesh.volume, 0, name)
+
     def test_independent_edge_thickness_and_optical_centre_height(self):
         settings = Settings(32, 31, 2.5, 125, left_edge_thickness=1.4,
                             right_edge_thickness=4.2, left_vertical_offset=3,

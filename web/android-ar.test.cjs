@@ -139,3 +139,62 @@ test('browser-driven end records a reason in capture diagnostics',async()=>{
   assert.match(JSON.parse(h.elements.diagnostics.textContent).stopReason,/browser or device/);
   assert.equal(h.counts().releases,1);
 });
+
+test('voxel fusion balances frames, preserves raw points, and records temporal support', () => {
+  const cloud = new math.SceneCloud(.01);
+  const frame = points => ({views:[{samples:points.map(point => ({point}))}]});
+  const input = frame([[.001,.002,-.009],[.003,.004,-.007],[NaN,0,0],null]);
+  const original = JSON.stringify(input);
+  cloud.addFrame(input);
+  cloud.addFrame(frame([[.008,.009,-.002]]));
+  assert.equal(JSON.stringify(input),original);
+  assert.equal(cloud.samples().length,1);
+  const cell = cloud.samples()[0];
+  assert.equal(cell.observations,2); // Dense first view contributes only once.
+  [.005,.006,-.005].forEach((expected,i) => assert.ok(Math.abs(cell.point[i]-expected)<1e-10));
+  assert.equal(cloud.summary().repeatedPoints,1);
+  assert.equal(cloud.samples(3).length,0);
+  const ply = cloud.toPLY();
+  assert.match(ply,/element vertex 1\n/);
+  assert.match(ply,/property uint observations\n/);
+  assert.match(ply,/transparent lenses may return background/);
+  assert.ok(!ply.includes('NaN'));
+});
+
+test('fusion bounds memory while accepting later observations of existing voxels', () => {
+  const cloud = new math.SceneCloud(.01,2);
+  const frame = points => ({views:[{samples:points.map(point => ({point}))}]});
+  cloud.addFrame(frame([[0,0,0],[-.001,0,0],[1,0,0]]));
+  cloud.addFrame(frame([[.002,0,0]]));
+  assert.equal(cloud.samples().length,2);
+  assert.equal(cloud.summary().droppedVoxels,1);
+  assert.equal(cloud.summary().repeatedPoints,1);
+  assert.throws(() => new math.SceneCloud(0));
+  assert.throws(() => new math.SceneCloud(.01,0));
+  cloud.addFrame({...frame([[.003,0,0]]),emulatedPosition:true});
+  assert.equal(cloud.samples()[0].observations,2);
+  assert.equal(cloud.frames,2);
+});
+
+test('emulated position is not fused into an apparently measured cloud',async()=>{
+  const h=harness(); await flush(); await h.elements.start.click();
+  h.frame(0,{getViewerPose:()=>({emulatedPosition:true}),getDepthInformation(){throw new Error('untracked depth must not be read');}});
+  const diagnostic = JSON.parse(h.elements.diagnostics.textContent);
+  assert.equal(diagnostic.frames,0);
+  assert.equal(diagnostic.emulatedPositionFrames,1);
+  assert.equal(diagnostic.fusion.points,0);
+});
+
+test('successive tracked frames update fused diagnostics and reset on new scan',async()=>{
+  const h=harness(); await flush(); await h.elements.start.click();
+  const identity=[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1];
+  const view={eye:'none',projectionMatrix:identity,transform:{matrix:identity}};
+  const frame={getViewerPose:()=>({views:[view],transform:{matrix:identity}}),getDepthInformation:()=>({width:1,height:1,rawValueToMeters:1,normDepthBufferFromNormView:{matrix:identity},getDepthInMeters:()=>1,data:new Float32Array([1]).buffer})};
+  h.frame(0,frame); h.frame(300,frame);
+  const diagnostics=JSON.parse(h.elements.diagnostics.textContent);
+  assert.equal(diagnostics.fusion.points,768);
+  assert.equal(diagnostics.fusion.repeatedPoints,768);
+  assert.equal(diagnostics.sampledPoints,1536);
+  await h.session.end(); await h.elements.start.click();
+  assert.equal(JSON.parse(h.elements.diagnostics.textContent).fusion.points,0);
+});

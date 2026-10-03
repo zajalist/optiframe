@@ -43,7 +43,8 @@ function setup(fetcher, onCapture = async () => {}, options = {}) {
   }) };
   const session = createLiveSegmentSession({ video, overlay, status, captureButton,
     onCapture, apiFetch: fetcher, mediaDevices, side: 'left', intervalMs: 5,
-    startupTimeoutMs: options.startupTimeoutMs ?? 12000, locateTarget: options.locateTarget });
+    startupTimeoutMs: options.startupTimeoutMs ?? 12000, locateTarget: options.locateTarget,
+    requestTimeoutMs: options.requestTimeoutMs ?? 8000, maxResultAgeMs: options.maxResultAgeMs ?? 2000 });
   return { session, video, overlay, status, captureButton, get stopped() { return stopped; } };
 }
 
@@ -226,4 +227,86 @@ test('preview timeout closes the acquired camera stream', async () => {
   assert.equal(fixture.stopped, 1);
   assert.equal(fixture.video.srcObject, null);
   assert.equal(fixture.session.active, false);
+});
+
+test('a hung segmentation request times out and the loop recovers', async () => {
+  let calls = 0;
+  const fixture = setup(async () => {
+    if (++calls === 1) return new Promise(() => {});
+    return { ok: true, json: async () => result };
+  }, async () => {}, { requestTimeoutMs: 8 });
+  await fixture.session.start();
+  await pause(35);
+  assert.ok(calls >= 2);
+  assert.equal(fixture.captureButton.disabled, false);
+  fixture.session.stop();
+});
+
+test('restarting during an ignored abort still starts a new sampling loop', async () => {
+  let calls = 0;
+  const fixture = setup(async () => {
+    if (++calls === 1) return new Promise(() => {});
+    return { ok: true, json: async () => result };
+  });
+  await fixture.session.start();
+  await pause(1);
+  await fixture.session.start();
+  await pause(20);
+  assert.ok(calls >= 2);
+  assert.equal(fixture.captureButton.disabled, false);
+  fixture.session.stop();
+});
+
+test('lost connection expires the old outline and prevents stale capture', async () => {
+  let calls = 0;
+  const fixture = setup(async () => {
+    if (++calls > 1) return new Promise(() => {});
+    return { ok: true, json: async () => result };
+  }, async () => {}, { maxResultAgeMs: 15 });
+  await fixture.session.start();
+  await pause(4);
+  assert.equal(fixture.captureButton.disabled, false);
+  await pause(25);
+  assert.equal(fixture.captureButton.disabled, true);
+  await assert.rejects(fixture.session.capture(), /fresh lens outline/);
+  fixture.session.stop();
+});
+
+test('a malformed response revokes the previous valid capture', async () => {
+  let calls = 0;
+  const fixture = setup(async () => ({ ok: true, json: async () => ++calls === 1 ? result :
+    { ...result, contour: [[NaN, 10], [100, 10], [100, 100]] } }));
+  await fixture.session.start();
+  await pause(20);
+  assert.equal(fixture.captureButton.disabled, true);
+  await assert.rejects(fixture.session.capture(), /fresh lens outline/);
+  fixture.session.stop();
+});
+
+test('a delayed response is not fresh merely because it has just arrived', async () => {
+  const fixture = setup(async () => {
+    await pause(15);
+    return { ok: true, json: async () => result };
+  }, async () => {}, { maxResultAgeMs: 8 });
+  await fixture.session.start();
+  await pause(22);
+  assert.equal(fixture.captureButton.disabled, true);
+  await assert.rejects(fixture.session.capture(), /fresh lens outline/);
+  fixture.session.stop();
+});
+
+test('a completed old capture callback cannot stop a restarted camera', async () => {
+  let finishCapture;
+  const fixture = setup(async () => ({ ok: true, json: async () => result }),
+    () => new Promise(resolve => { finishCapture = resolve; }));
+  await fixture.session.start();
+  await pause(2);
+  const capturing = fixture.session.capture();
+  await fixture.session.start();
+  finishCapture();
+  await capturing;
+  assert.equal(fixture.session.active, true);
+  await pause(10);
+  assert.equal(fixture.captureButton.disabled, false);
+  fixture.session.stop();
 });

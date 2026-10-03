@@ -16,7 +16,7 @@ function harness() {
   const app=fs.readFileSync(new URL('./app.js',import.meta.url),'utf8').replace(/^import .*;$/gm,'');
   vm.runInContext(app.split('const [leftPanel, rightPanel]')[0]+';globalThis.Panel=LensPanel',context);
   const panel=Object.create(context.Panel.prototype);
-  Object.assign(panel,{el:{querySelector:field},photoVersion:1,points:[[0,0],[50,0],[50,30],[0,30]],homography:[1,0,0,0,1,0,0,0],mmPerPixel:null,opticalCentre:[25,15],bitmap:null,size:{},topStatus:{textContent:''},photoLoading:false});
+  Object.assign(panel,{el:{querySelector:field},photoVersion:1,points:[[0,0],[50,0],[50,30],[0,30]],homography:[1,0,0,0,1,0,0,0],mmPerPixel:null,opticalCentre:[25,15],topMark:[25,0],bitmap:null,size:{},topStatus:{textContent:''},photoLoading:false});
   context.panel=panel;
   vm.runInContext('const leftPanel=panel,rightPanel=panel;const designStatus={};globalThis.status=designStatus;'+app.slice(app.indexOf('function invalidateFrameResult()'),app.indexOf("document.getElementById('preview-frame')"))+';globalThis.payload=framePayload;globalThis.makeFrame=makeFrame;globalThis.invalidateFrameResult=invalidateFrameResult;',context);
   return {panel,field,context,designInput};
@@ -25,7 +25,7 @@ function harness() {
 test('geometry/calibration changes revoke confirmed evidence even when dimensions still pass',()=>{
   const {panel,field}=harness();
   panel.updateMeasurement();
-  for (const change of [()=>panel.points[0][0]+=0.1,()=>panel.points=panel.points.map(p=>[...p]).reverse(),()=>panel.homography=[1,0,0,0,1,0.01,0,0],()=>panel.mmPerPixel=0.1,()=>panel.opticalCentre=[24,15],()=>panel.topMark=[25,0],()=>panel.photoVersion++]) {
+  for (const change of [()=>panel.points[0][0]+=0.1,()=>panel.points=panel.points.map(p=>[...p]).reverse(),()=>panel.homography=[1,0,0,0,1,0.01,0,0],()=>panel.mmPerPixel=0.1,()=>panel.opticalCentre=[24,15],()=>panel.topMark=[26,0],()=>panel.photoVersion++]) {
     field('.evidence-confirmed').checked=true;
     change();panel.updateMeasurement();
     assert.equal(field('.evidence-confirmed').checked,false);
@@ -183,4 +183,49 @@ test('archive labelled for the other lens is rejected before loading image',asyn
  context.fetch=async()=>({ok:true,headers:{get:()=> 'application/json'},json:async()=>({side:'right',image:'wrong'})});
  await panel.loadArchive(new Blob(['wrong']));
  assert.match(panel.status.textContent,/labelled right/);assert.equal(panel.photoLoading,false);assert.equal(panel.photo,undefined);
+});
+
+test('studio edits the captured photo canvas, not the hidden live camera overlay', () => {
+  const {context} = harness();
+  context.Panel.prototype.bind = () => {};
+  const captured = {getContext: () => ({})}, live = {getContext: () => ({})};
+  const panel = new context.Panel({dataset:{side:'left'}, querySelector: selector => selector === '.canvas-wrap canvas' ? captured : selector === 'canvas' ? live : {}});
+  assert.equal(panel.canvas, captured);
+});
+
+test('experimental export and preview require an explicit physical top mark', async () => {
+  const {panel, context} = harness();
+  panel.millimetreOutline = () => Array.from({length: 12}, (_, i) => [i, i]);
+  panel.topMark = null;
+  for (const args of [[true, false], [false, true]]) {
+    await context.makeFrame(...args);
+    assert.match(context.status.textContent, /physical top of both lenses/);
+  }
+});
+
+test('capture handoff preserves both independently sized contours through studio resizing and requires provider marks', async () => {
+  const {context: shared} = harness();
+  const app = fs.readFileSync(new URL('./app.js', import.meta.url), 'utf8');
+  const transfer = ['left', 'right'].map((side, index) => ({side, image:'data:image/jpeg;base64,test', width:1000, height:700,
+    contour:Array.from({length:80}, (_, i) => [500+(index ? 180 : 250)*Math.cos(i*Math.PI/40),350+(index ? 160 : 200)*Math.sin(i*Math.PI/40)]),
+    markers:[[0,0],[1000,0],[1000,700],[0,700]]}));
+  const makePanel = () => ({canvas:{width:500,height:350},markerStatus:{}, opticalCentre:null,topMark:null,
+    loadPhoto:async()=>true,render(){},setMode(mode){this.mode=mode;},millimetreOutline:shared.Panel.prototype.millimetreOutline});
+  const left = makePanel(), right = makePanel();
+  let removed = false;
+  const context = vm.createContext({leftPanel:left,rightPanel:right, sheetHomography:shared.sheetHomography,
+    sessionStorage:{getItem:()=>JSON.stringify(transfer),removeItem(){removed=true;}},
+    fetch:async()=>({blob:async()=>new Blob(['photo'])}),
+    document:{body:{classList:{add(){}}},getElementById:()=>({}),querySelector:()=>({})}});
+  vm.runInContext(app.slice(app.indexOf('async function importSimpleCaptures()'),app.indexOf('void importSimpleCaptures();')),context);
+  await vm.runInContext('importSimpleCaptures()',context);
+  assert.equal(removed,true);
+  for(const panel of [left,right]) {
+    assert.equal(panel.mode,'optical');
+    assert.equal(panel.millimetreOutline(),null);
+    panel.opticalCentre=[250,175]; panel.topMark=[250,75];
+  }
+  const leftSize=shared.measure(left.millimetreOutline(),1),rightSize=shared.measure(right.millimetreOutline(),1);
+  assert.ok(Math.abs(leftSize.width-50)<.001 && Math.abs(leftSize.height-40)<.001);
+  assert.ok(Math.abs(rightSize.width-36)<.001 && Math.abs(rightSize.height-32)<.001);
 });

@@ -7,7 +7,7 @@ import { sheetHomography, project, measure } from './calibration.js';
 const source = (await readFile(new URL('./simple.js', import.meta.url), 'utf8')).replace(/^import .*;\r?\n/gm, '');
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
-function harness({ cameraError = null } = {}) {
+function harness({ cameraError = null, storageError = null, deferReads = false } = {}) {
   const nodes = new Map();
   const drawing = new Proxy({}, { get: (object, key) => object[key] ?? (() => {}) });
   function element() {
@@ -33,18 +33,26 @@ function harness({ cameraError = null } = {}) {
     createGain() { return { gain: { setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {} }, connect() {}, disconnect() {} }; }
   }
   const body = { dataset: {} };
+  const storage = new Map(), pendingReads = [];
+  const location = {hash:'#access=test-key',href:''};
+  class FileReader {
+    readAsDataURL() {
+      const done = () => { this.result = 'data:image/jpeg;base64,test'; this.onload(); };
+      if (deferReads) pendingReads.push(done); else queueMicrotask(done);
+    }
+  }
   const context = vm.createContext({
     document: { getElementById: $, createElement: element, body },
-    window: { addEventListener() {}, AudioContext }, location: { hash: '', href: '' },
+    window: { addEventListener() {}, AudioContext }, location, FileReader,
     URLSearchParams, sheetHomography, project, measure,
     detectSheetMarkers: () => [[0, 0], [1000, 0], [1000, 700], [0, 700]],
     createLiveSegmentSession(options) { callbacks = options; return controller; },
     createImageBitmap: async () => ({ width: 1000, height: 700, close() {} }),
     ResizeObserver: class { observe() {} }, MutationObserver: class { observe() {} },
-    requestAnimationFrame: callback => callback(), fetch() {}, sessionStorage: { setItem() {} },
+    requestAnimationFrame: callback => callback(), fetch() {}, sessionStorage: { setItem(key,value) { if(storageError) throw new Error(storageError); storage.set(key,value); } },
   });
   vm.runInContext(source, context);
-  return { $, body, payload, context, get starts() { return starts; }, get sounds() { return sounds; },
+  return { $, body, payload, context, storage, location, pendingReads, get starts() { return starts; }, get sounds() { return sounds; },
     accept: value => callbacks.onCapture(value), click: id => $(id).handlers.click?.({ preventDefault() {} }) };
 }
 
@@ -59,6 +67,56 @@ test('camera requests access on load and a failed request keeps photo import and
   app.click('camera-retry');
   await tick();
   assert.equal(app.starts, 2);
+});
+
+async function confirmPair(app) {
+  await tick();
+  app.click('primary'); await tick(); app.click('primary'); await tick();
+  app.click('primary'); await tick(); app.click('primary');
+}
+
+test('confirmed pair transfers actual photos, pixel contours and calibration to studio with access key', async () => {
+  const app = harness();
+  await confirmPair(app);
+  app.click('primary'); await tick();
+  assert.equal(app.location.href, '/studio.html#access=test-key');
+  const saved = JSON.parse(app.storage.get('optiframe-captures'));
+  assert.deepEqual(saved.map(item=>item.side), ['left','right']);
+  assert.deepEqual(saved[0].contour, app.payload.contour);
+  assert.deepEqual(saved[1].markers, [[0,0],[1000,0],[1000,700],[0,700]]);
+  assert.equal(saved[0].opticalCentre, undefined);
+  assert.equal(saved[0].topMark, undefined);
+});
+
+test('retry during transfer cancels stale navigation, and storage errors leave the pair retryable', async () => {
+  const app = harness({deferReads:true});
+  await confirmPair(app);
+  app.click('primary'); app.click('retry-left');
+  app.pendingReads.forEach(done=>done()); await tick();
+  assert.equal(app.location.href,'');
+  assert.equal(app.storage.size,0);
+  assert.equal(app.body.dataset.phase,'live');
+  const blocked = harness({storageError:'Storage is full'});
+  await confirmPair(blocked);
+  blocked.click('primary'); await tick();
+  assert.equal(blocked.location.href,'');
+  assert.equal(blocked.$('primary').disabled,false);
+  assert.match(blocked.$('status').textContent,/Storage is full/);
+});
+
+test('a captured image finishing decoding after retake cannot replace the new camera session', async () => {
+  const app = harness();
+  await tick();
+  let finish, closed = 0;
+  app.context.createImageBitmap = () => new Promise(resolve => { finish = resolve; });
+  const old = app.accept(app.payload);
+  app.click('retry-left');
+  await tick();
+  finish({width:1000,height:700,close(){closed++;}});
+  await old;
+  assert.equal(closed,1);
+  assert.equal(app.body.dataset.phase,'live');
+  assert.equal(app.$('result-svg').hidden,true);
 });
 
 test('guided capture requires both confirmations, displays both contours, and retry preserves the other lens', async () => {

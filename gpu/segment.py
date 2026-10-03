@@ -99,6 +99,18 @@ def decode(data: bytes) -> np.ndarray:
     return image
 
 
+def parse_lens_box(value: str, width: int, height: int) -> tuple[int, int, int, int]:
+    parsed = json.loads(value)
+    if not isinstance(parsed, list) or len(parsed) != 4 or any(
+            isinstance(v, bool) or not isinstance(v, int) for v in parsed):
+        raise ValueError("Box must be four integer coordinates")
+    x0, y0, x1, y1 = parsed
+    if not (0 <= x0 < x1 <= width and 0 <= y0 < y1 <= height and
+            x1 - x0 >= 16 and y1 - y0 >= 16):
+        raise ValueError("Box must be at least 16 pixels wide and high inside the image")
+    return tuple(parsed)
+
+
 def enhance(image: np.ndarray) -> np.ndarray:
     lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
     lab[:, :, 0] = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)).apply(lab[:, :, 0])
@@ -199,16 +211,28 @@ def sam_mask(image: np.ndarray, box: tuple[int, int, int, int]) -> np.ndarray:
             name = "facebook/sam2.1-hiera-small"
             _processor = Sam2Processor.from_pretrained(name)
             _model = Sam2Model.from_pretrained(name).to("cuda").eval()
-        rgb = cv2.cvtColor(crop.image, cv2.COLOR_BGR2RGB)
-        inputs = _processor(images=Image.fromarray(rgb), input_boxes=[[list(crop.box)]],
-                            return_tensors="pt").to("cuda")
-        with torch.inference_mode():
-            result = _model(**inputs)
-        masks = _processor.post_process_masks(result.pred_masks.cpu(),
-                                               inputs["original_sizes"])[0]
-        candidates = masks.reshape(-1, *masks.shape[-2:]).numpy()
-        scores = result.iou_scores.reshape(-1).cpu().numpy()
-        return restore_best_lens_mask(candidates, scores, crop)
+        for attempt in range(2):
+            rgb = cv2.cvtColor(crop.image, cv2.COLOR_BGR2RGB)
+            inputs = _processor(images=Image.fromarray(rgb), input_boxes=[[list(crop.box)]],
+                                return_tensors="pt").to("cuda")
+            with torch.inference_mode():
+                result = _model(**inputs)
+            masks = _processor.post_process_masks(result.pred_masks.cpu(),
+                                                   inputs["original_sizes"])[0]
+            candidates = masks.reshape(-1, *masks.shape[-2:]).numpy()
+            scores = result.iou_scores.reshape(-1).cpu().numpy()
+            try:
+                return restore_best_lens_mask(candidates, scores, crop)
+            except ValueError:
+                if attempt or crop.sheet is None:
+                    raise
+                # One bounded retry asks SAM about a tighter target, without
+                # smoothing, clipping or inventing a replacement contour.
+                x0, y0, x1, y1 = crop.box
+                cx = (x0 + x1) / 2 + crop.origin[0]
+                cy = (y0 + y1) / 2 + crop.origin[1]
+                hw, hh = (x1 - x0) * .41, (y1 - y0) * .41
+                crop = isolate_lens(image, tuple(round(v) for v in (cx - hw, cy - hh, cx + hw, cy + hh)))
 
 
 def inspect_capture(data: bytes) -> dict:
@@ -253,10 +277,10 @@ def health() -> dict:
         import torch
     except ImportError:
         return {"cuda": False, "gpu": None, "modelLoaded": _model is not None,
-                "pipeline": "isolated-lens-crop-v1"}
+                "pipeline": "sheet-aware-lens-crop-v2"}
     return {"cuda": torch.cuda.is_available(), "gpu": torch.cuda.get_device_name(0)
             if torch.cuda.is_available() else None, "modelLoaded": _model is not None,
-            "pipeline": "isolated-lens-crop-v1"}
+            "pipeline": "sheet-aware-lens-crop-v2"}
 
 
 @app.post("/api/import")
@@ -345,10 +369,7 @@ def segment(image: UploadFile = File(...), empty: UploadFile | None = File(None)
             raise ValueError("Image exceeds 24 MB")
         photo = decode(raw)
         h, w = photo.shape[:2]
-        given_box = tuple(int(v) for v in json.loads(box)) if box else None
-        if given_box and (len(given_box) != 4 or not (0 <= given_box[0] < given_box[2] <= w)
-                          or not (0 <= given_box[1] < given_box[3] <= h)):
-            raise ValueError("Box must be [left, top, right, bottom] inside the image")
+        given_box = parse_lens_box(box, w, h) if box else None
         candidates = []
         if empty:
             empty_bytes = empty.file.read(24_000_001)
@@ -380,7 +401,7 @@ def segment(image: UploadFile = File(...), empty: UploadFile | None = File(None)
             raise ValueError("Provide an empty-sheet image or a box around the lens")
         return {"width": w, "height": h, "candidates": candidates,
                 "clippedFraction": glare_fraction(photo, given_box or (0, 0, w, h)),
-                "preprocessing": "isolated-lens-crop-v1",
+                "preprocessing": "sheet-aware-lens-crop-v2",
                 "measurementStatus": "proposal-only; scale and contour review required"}
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
@@ -397,21 +418,14 @@ def live_segment(image: UploadFile = File(...), box: str = Form(...)) -> dict:
         h, w = photo.shape[:2]
         if max(w, h) > 1600 or w * h > 2_600_000:
             raise ValueError("Live frame exceeds 1600 pixels per side or 2.6 megapixels")
-        parsed = json.loads(box)
-        if not isinstance(parsed, list) or len(parsed) != 4 or any(
-                isinstance(v, bool) or not isinstance(v, int) for v in parsed):
-            raise ValueError("Box must be four integer coordinates")
-        x0, y0, x1, y1 = parsed
-        if not (0 <= x0 < x1 <= w and 0 <= y0 < y1 <= h and
-                x1 - x0 >= 16 and y1 - y0 >= 16):
-            raise ValueError("Box must be at least 16 pixels wide and high inside the image")
+        parsed = parse_lens_box(box, w, h)
         contour = contour_from_mask(sam_mask(photo, tuple(parsed)))
         if len(contour) < 3:
             raise ValueError("No lens contour found in the box")
         return {"width": w, "height": h, "contour": contour,
                 "quality": live_quality(photo, contour, tuple(parsed)),
                 "method": "sam2.1-hiera-small-cuda",
-                "preprocessing": "isolated-lens-crop-v1",
+                "preprocessing": "sheet-aware-lens-crop-v2",
                 "measurementStatus": "proposal-only; review contour and calibrate sheet scale"}
     except (ValueError, TypeError, json.JSONDecodeError) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error

@@ -50,6 +50,18 @@ class LiveSegmentTests(unittest.TestCase):
             self.assertEqual(self.post(image=b'bad').status_code, 422)
         predictor.assert_not_called()
 
+    def test_photo_and_live_reject_malformed_targets_without_gpu_work(self):
+        with patch('segment.sam_mask') as predictor:
+            for route in ('/api/segment', '/api/live-segment'):
+                for value in (None, {}, [False, 10, 100, 100], [10.2, 10, 100, 100],
+                              ['10', 10, 100, 100], [10, 10, 11, 100]):
+                    with self.subTest(route=route, value=value):
+                        response = self.client.post(route, headers=self.headers,
+                            files={'image': ('frame.jpg', jpeg(), 'image/jpeg')},
+                            data={'box': json.dumps(value)})
+                        self.assertEqual(response.status_code, 422)
+        predictor.assert_not_called()
+
     def test_large_upload_is_bounded_before_predictor(self):
         with patch('segment.sam_mask') as predictor:
             response = self.post(image=b'x' * 6_000_001)

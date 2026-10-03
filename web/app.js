@@ -17,7 +17,7 @@ class LensPanel {
   constructor(element) {
     this.el = element;
     this.side = element.dataset.side;
-    this.canvas = element.querySelector('canvas');
+    this.canvas = element.querySelector('.canvas-wrap canvas');
     this.ctx = this.canvas.getContext('2d');
     this.status = element.querySelector('.panel-status');
     this.size = element.querySelector(`#${this.side}-size`);
@@ -337,11 +337,13 @@ class LensPanel {
       this.opticalCentre = point;
       this.centreStatus.textContent = 'Optical centre set — verify this mark with the lens provider';
       this.render();
+      if (this.guidedCapture) this.setMode('top');
     } else if (this.mode === 'top') {
       if (this.opticalCentre && distance(point, this.opticalCentre) < 2) { this.message('Top mark and optical centre must be separate points.'); return; }
       this.topMark = point;
       this.topStatus.textContent = 'Top marked — verify the physical mark on the lens';
       this.render();
+      if (this.guidedCapture) { this.setMode(null); this.message('Centre and top set. Enter the patient measurements below.'); }
     }
   }
 
@@ -601,8 +603,11 @@ async function importSimpleCaptures() {
       panel.homography = sheetHomography(panel.markerPoints);
       panel.markerStatus.textContent = 'Perspective calibrated from camera capture';
       panel.render();
-      panel.message('Capture imported. Mark the optical centre and physical top before building the frame.');
+      panel.guidedCapture = true;
+      panel.setMode('optical');
     }
+    document.body.classList.add('guided-fit');
+    document.getElementById('page-title').textContent = 'Fit frame';
     sessionStorage.removeItem('optiframe-captures');
   } catch (error) { document.querySelector('#design-status').textContent = `Capture transfer failed: ${error.message}`; }
 }
@@ -667,6 +672,8 @@ function framePayload() {
   const left = leftPanel.millimetreOutline();
   const right = rightPanel.millimetreOutline();
   if (!left || !right) throw new Error('Each lens needs at least 12 contour points, a sheet calibration or two-point scale, and an optical centre.');
+  if ([leftPanel, rightPanel].some(panel => !panel.topMark))
+    throw new Error('Mark the physical top of both lenses to set their orientation.');
   const leftThickness = number('left-edge-thickness');
   const rightThickness = number('right-edge-thickness');
   return { left, right, settings: {
@@ -717,7 +724,7 @@ async function makeFrame(preview, experimental = false) {
       link.download = experimental ? 'optiframe-UNVERIFIED-experimental-kit.zip' : 'optiframe-measurement-checked-kit.zip';
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
-      designStatus.textContent = (experimental ? `UNVERIFIED experimental kit. ${[leftPanel,rightPanel].some(panel=>!panel.topMark)?'At least one lens has no top mark, so orientation was inferred from its photo. ':''}` : 'Measurement checks passed; physical fit unverified. ') + 'STL kit downloaded. Slice at 100% in millimetres, print a fit test and inspect lens retention before use.';
+      designStatus.textContent = (experimental ? 'UNVERIFIED experimental kit. ' : 'Measurement checks passed; physical fit unverified. ') + 'STL kit downloaded. Slice at 100% in millimetres, print a fit test and inspect lens retention before use.';
     }
   } catch (error) { if (request === makeFrame.sequence) designStatus.textContent = error.message; }
   finally { if (request === makeFrame.sequence) makeFrame.pending = false; }

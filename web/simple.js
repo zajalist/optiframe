@@ -1,4 +1,4 @@
-import { createLiveSegmentSession } from './live-segment.js?v=10';
+import { createLiveSegmentSession } from './live-segment.js?v=11';
 import { sheetHomography, project, measure } from './calibration.js';
 import { detectSheetMarkers } from './marker-detect.js?v=9';
 
@@ -296,7 +296,10 @@ function completeMarkers(capture, automatic = false) {
 }
 
 async function acceptCapture({ file, contour, width, height }) {
+  const generation = captureGeneration;
+  const capturedSide = side;
   const bitmap = await createImageBitmap(file);
+  if (generation !== captureGeneration || capturedSide !== side) { bitmap.close(); return; }
   const scaleX = bitmap.width / width, scaleY = bitmap.height / height;
   const capture = {
     file, bitmap, width: bitmap.width, height: bitmap.height,
@@ -319,8 +322,10 @@ async function acceptCapture({ file, contour, width, height }) {
 async function selectPhoto(file) {
   if (!file) return;
   stopCamera();
+  const generation = captureGeneration;
   try {
     const bitmap = await createImageBitmap(file);
+    if (generation !== captureGeneration) { bitmap.close(); return; }
     const factor = Math.min(1, 1280 / Math.max(bitmap.width, bitmap.height));
     const canvas = document.createElement('canvas');
     canvas.width = Math.round(bitmap.width * factor);
@@ -328,10 +333,13 @@ async function selectPhoto(file) {
     canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
     bitmap.close();
     const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.86));
+    if (generation !== captureGeneration) return;
     if (!blob) throw new Error('Could not read that photo');
+    const photoBitmap = await createImageBitmap(blob);
+    if (generation !== captureGeneration) { photoBitmap.close(); return; }
     pendingPhoto?.bitmap?.close();
     pendingPhoto = { file: new File([blob], 'lens.jpg', { type: 'image/jpeg' }),
-      bitmap: await createImageBitmap(blob), width: canvas.width, height: canvas.height };
+      bitmap: photoBitmap, width: canvas.width, height: canvas.height };
     review.width = canvas.width;
     review.height = canvas.height;
     reviewContext.drawImage(pendingPhoto.bitmap, 0, 0);
@@ -341,7 +349,7 @@ async function selectPhoto(file) {
       const center = pendingPhoto.markers.reduce((sum, point) => [sum[0] + point[0] / 4, sum[1] + point[1] / 4], [0, 0]);
       await segmentPhotoAt(...center);
     } else setPhase('aim', 'Press on the lens, drag to its center, then lift.');
-  } catch (error) { setPhase('idle', `Could not open that photo: ${error.message}`); }
+  } catch (error) { if (generation === captureGeneration) setPhase('idle', `Could not open that photo: ${error.message}`); }
 }
 
 async function segmentPhotoAt(x, y) {
@@ -503,6 +511,7 @@ const asDataURL = file => new Promise((resolve, reject) => {
 });
 
 async function openStudio() {
+  const generation = captureGeneration;
   primary.disabled = true;
   try {
     const saved = await Promise.all(['left', 'right'].map(async lens => {
@@ -512,9 +521,13 @@ async function openStudio() {
         width: capture.width, height: capture.height,
         contour: capture.contour, markers: capture.markers };
     }));
+    if (generation !== captureGeneration || phase !== 'pair') return;
     sessionStorage.setItem('optiframe-captures', JSON.stringify(saved));
     location.href = `/studio.html${location.hash}`;
-  } catch (error) { status.textContent = `${error.message}. Try again.`; primary.disabled = false; }
+  } catch (error) {
+    if (generation !== captureGeneration || phase !== 'pair') return;
+    status.textContent = `${error.message}. Try again.`; primary.disabled = false;
+  }
 }
 
 window.addEventListener('resize', () => { fitCamera(); fitReview(); syncAimOverlay(); });

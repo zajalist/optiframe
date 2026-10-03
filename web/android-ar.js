@@ -31,8 +31,62 @@ function backProject(u, v, depth, inverseProjection, worldFromView) {
 }
 
 function pointCloudPLY(frames) {
-  const points = frames.flatMap(frame => frame.views.flatMap(view => view.samples.filter(sample => sample.point).map(sample => sample.point)));
+  const points = frames.flatMap(frame => frame.views.flatMap(view => view.samples.filter(sample => sample.point?.length === 3 && sample.point.every(Number.isFinite)).map(sample => sample.point)));
   return ["ply", "format ascii 1.0", "comment OptiFrame experimental scene depth; units meters; XR local space", `element vertex ${points.length}`, "property float x", "property float y", "property float z", "end_header", ...points.map(point => point.join(" ")), ""].join("\n");
+}
+
+// Scene-only fusion. One contribution per voxel per frame prevents a dense view
+// from outweighing all other views. Voxel size is a sampling choice, NOT accuracy.
+class SceneCloud {
+  constructor(voxelMeters = 0.01, maxVoxels = 50000) {
+    if (!Number.isFinite(voxelMeters) || voxelMeters <= 0 || !Number.isInteger(maxVoxels) || maxVoxels < 1) throw new Error("Invalid cloud limits");
+    this.voxelMeters = voxelMeters;
+    this.maxVoxels = maxVoxels;
+    this.voxels = new Map();
+    this.frames = 0;
+    this.droppedVoxels = 0;
+  }
+
+  addFrame(frame) {
+    if (frame.emulatedPosition) return;
+    const observed = new Map();
+    for (const view of frame.views) for (const sample of view.samples) {
+      const point = sample.point;
+      if (point?.length !== 3 || !point.every(Number.isFinite)) continue;
+      const key = point.map(value => Math.floor(value / this.voxelMeters)).join(",");
+      let cell = observed.get(key);
+      if (!cell) { cell = {sum:[0,0,0], count:0}; observed.set(key, cell); }
+      point.forEach((value, axis) => { cell.sum[axis] += value; });
+      cell.count++;
+    }
+    for (const [key, observation] of observed) {
+      let cell = this.voxels.get(key);
+      if (!cell) {
+        if (this.voxels.size >= this.maxVoxels) { this.droppedVoxels++; continue; }
+        cell = {point:[0,0,0], observations:0}; this.voxels.set(key, cell);
+      }
+      cell.observations++;
+      cell.point.forEach((value, axis) => {
+        cell.point[axis] += (observation.sum[axis] / observation.count - value) / cell.observations;
+      });
+    }
+    this.frames++;
+  }
+
+  samples(minObservations = 1) {
+    return Array.from(this.voxels.values()).filter(cell => cell.observations >= minObservations);
+  }
+
+  summary() {
+    let repeatedPoints = 0;
+    for (const cell of this.voxels.values()) if (cell.observations > 1) repeatedPoints++;
+    return {method:"frame-balanced-voxel-mean-v1", voxelMeters:this.voxelMeters, points:this.voxels.size, repeatedPoints, droppedVoxels:this.droppedVoxels};
+  }
+
+  toPLY() {
+    const points = this.samples();
+    return ["ply", "format ascii 1.0", "comment OptiFrame fused SCENE depth; transparent lenses may return background", "comment units meters; XR local space; voxel size is not measurement accuracy", `comment voxel_meters ${this.voxelMeters}`, `element vertex ${points.length}`, "property float x", "property float y", "property float z", "property uint observations", "end_header", ...points.map(cell => `${cell.point.join(" ")} ${cell.observations}`), ""].join("\n");
+  }
 }
 
 // Draw from bounded capture samples without retaining another copy of the cloud.
@@ -66,7 +120,7 @@ function drawPointCloud(ctx, canvas, frames, yaw = 0.35, pitch = -0.2) {
   return projected.length;
 }
 
-if (typeof module !== "undefined" && module.exports) module.exports = {multiplyPoint, inverseMatrix, backProject, pointCloudPLY, drawPointCloud};
+if (typeof module !== "undefined" && module.exports) module.exports = {multiplyPoint, inverseMatrix, backProject, pointCloudPLY, drawPointCloud, SceneCloud};
 
 if (typeof document !== "undefined") {
   const $ = id => document.getElementById(id);
@@ -75,10 +129,11 @@ if (typeof document !== "undefined") {
   const cloudCanvas = $("cloud-preview"), cloudCtx = cloudCanvas.getContext("2d");
   let yaw = 0.35, pitch = -0.2, dragging = null;
   let session = null, capture = null, gl = null, space = null, lastSample = -Infinity, startTime = null;
+  let sceneCloud = new SceneCloud();
   let timeout = null, ending = false, settingUp = false, framePending = false, samplingFrozen = false;
-  const diagnostics = () => { $("diagnostics").textContent = JSON.stringify({secureContext: isSecureContext, userAgent: navigator.userAgent, depthUsage: capture?.depthUsage, depthDataFormat: capture?.depthDataFormat, frames: capture?.frames.length || 0, sampledPoints: capture?.sampledPoints || 0, rawDepthEntries: capture?.rawDepthEntries || 0, missingDepthFrames: capture?.missingDepthFrames || 0, trackingLostFrames: capture?.trackingLostFrames || 0, referenceSpaceResets: capture?.referenceSpaceResets || 0, stopReason: capture?.stopReason, lastError: capture?.lastError}, null, 2); };
+  const diagnostics = () => { $("diagnostics").textContent = JSON.stringify({secureContext: isSecureContext, userAgent: navigator.userAgent, depthUsage: capture?.depthUsage, depthDataFormat: capture?.depthDataFormat, frames: capture?.frames.length || 0, sampledPoints: capture?.sampledPoints || 0, fusion:sceneCloud.summary(), rawDepthEntries: capture?.rawDepthEntries || 0, missingDepthFrames: capture?.missingDepthFrames || 0, trackingLostFrames: capture?.trackingLostFrames || 0, emulatedPositionFrames:capture?.emulatedPositionFrames || 0, referenceSpaceResets: capture?.referenceSpaceResets || 0, stopReason: capture?.stopReason, lastError: capture?.lastError}, null, 2); };
   const exportButtons = () => { $("json").disabled = !capture?.frames.length || !!session; $("ply").disabled = $("json").disabled || !capture?.sampledPoints; };
-  const renderCloud = () => drawPointCloud(cloudCtx, cloudCanvas, capture?.frames || [], yaw, pitch);
+  const renderCloud = () => drawPointCloud(cloudCtx, cloudCanvas, [{views:[{samples:sceneCloud.samples()}]}], yaw, pitch);
   cloudCanvas.addEventListener("pointerdown", event => { dragging = {x: event.clientX, y: event.clientY}; cloudCanvas.setPointerCapture?.(event.pointerId); });
   cloudCanvas.addEventListener("pointermove", event => {
     if (!dragging) return;
@@ -132,6 +187,7 @@ if (typeof document !== "undefined") {
     try {
       const pose = frame.getViewerPose(space);
       if (!pose) { capture.trackingLostFrames++; status("Tracking unavailable. Move slowly toward the patterned board."); diagnostics(); return; }
+      if (pose.emulatedPosition) { capture.emulatedPositionFrames++; status("Position tracking unavailable. Move slowly toward the patterned board."); diagnostics(); return; }
       const views = [];
       for (const view of pose.views) {
         const depth = frame.getDepthInformation(view);
@@ -157,7 +213,10 @@ if (typeof document !== "undefined") {
       }
       if (!views.length) { capture.missingDepthFrames++; $("coverage").textContent = "No depth in latest frame"; status("No depth yet. Move slowly; try an opaque object first."); }
       else {
-        capture.frames.push({timestampMs: time - startTime, worldFromViewer: Array.from(pose.transform.matrix), emulatedPosition: pose.emulatedPosition, views});
+        const capturedFrame = {timestampMs: time - startTime, worldFromViewer: Array.from(pose.transform.matrix), emulatedPosition: pose.emulatedPosition, views};
+        capture.frames.push(capturedFrame);
+        sceneCloud.addFrame(capturedFrame);
+        capture.fusion = sceneCloud.summary();
         const valid = views.reduce((sum, view) => sum + view.samples.filter(sample => sample.point).length, 0);
         const sampled = views.reduce((sum, view) => sum + view.samples.length, 0);
         capture.sampledPoints += valid;
@@ -190,6 +249,7 @@ if (typeof document !== "undefined") {
       session = await navigator.xr.requestSession("immersive-ar", {requiredFeatures: ["depth-sensing", "dom-overlay"], domOverlay: {root: $("overlay")}, depthSensing: {usagePreference: ["cpu-optimized"], dataFormatPreference: ["luminance-alpha", "float32"]}});
       activeSession = session;
       capture = null;
+      sceneCloud = new SceneCloud();
       samplingFrozen = false;
       $("coverage").textContent = "Waiting for depth frames";
       renderCloud(); exportButtons(); diagnostics();
@@ -216,7 +276,7 @@ if (typeof document !== "undefined") {
       session.updateRenderState({baseLayer: new XRWebGLLayer(session, gl)});
       space = await session.requestReferenceSpace("local");
       if (!stillActive()) return;
-      capture = {schema: "optiframe-webxr-depth-v1", createdAt: new Date().toISOString(), userAgent: navigator.userAgent, units: "meters", coordinateFrame: "WebXR local; right-handed; Y up; camera looks down -Z; column-major matrices", warning: "Experimental scene points; transparent lenses may return background. No lens measurement, board alignment, fusion, confidence or RGB capture.", depthUsage: session.depthUsage, depthDataFormat: session.depthDataFormat, sampleGrid: [32, 24], maxDepthMeters: 5, sampledPoints: 0, rawDepthEntries: 0, missingDepthFrames: 0, trackingLostFrames: 0, referenceSpaceResets: 0, frames: []};
+      capture = {schema: "optiframe-webxr-depth-v1", createdAt: new Date().toISOString(), userAgent: navigator.userAgent, units: "meters", coordinateFrame: "WebXR local; right-handed; Y up; camera looks down -Z; column-major matrices", warning: "Experimental scene points; transparent lenses may return background. Voxel fusion is not lens measurement. No board alignment, sensor confidence or RGB capture.", depthUsage: session.depthUsage, depthDataFormat: session.depthDataFormat, sampleGrid: [32, 24], maxDepthMeters: 5, sampledPoints: 0, rawDepthEntries: 0, missingDepthFrames: 0, trackingLostFrames: 0, emulatedPositionFrames:0, referenceSpaceResets: 0, fusion:sceneCloud.summary(), frames: []};
       space.addEventListener("reset", () => { samplingFrozen = true; capture.referenceSpaceResets++; capture.lastError = "XR local reference space reset; capture stopped to prevent mixing coordinate frames"; void stop(capture.lastError); });
       startTime = performance.now(); lastSample = -Infinity;
       $("stop").disabled = false; exportButtons(); diagnostics();
@@ -242,7 +302,7 @@ if (typeof document !== "undefined") {
     setTimeout(() => URL.revokeObjectURL(url), 30000);
   }
   $("json").addEventListener("click", () => download("json", JSON.stringify(capture), "application/json"));
-  $("ply").addEventListener("click", () => download("ply", pointCloudPLY(capture.frames), "text/plain"));
+  $("ply").addEventListener("click", () => download("ply", sceneCloud.toPLY(), "text/plain"));
 
   (async () => {
     diagnostics();

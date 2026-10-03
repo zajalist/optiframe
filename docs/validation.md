@@ -90,6 +90,24 @@ The later independent-thickness/height version was also imported through PrusaSl
 - [ ] Slice completes with the chosen printer/material profile; inspect first layer, thin walls, unsupported regions, and estimated print time.
 - [ ] Final photo or short video shows the tested physical assembly.
 
+## End-to-end regression, 2026-10-03
+
+The `sheet-aware-lens-crop-v2` backend was exercised through the public HTTPS endpoint using the supplied dark-lens original photo and transparent-lens screenshot. All 18 tested prompt-size/position variations returned the lens rather than the printed sheet. This is robustness on two fixed images, not independent-capture or physical accuracy evidence. The screenshot contains the previous bad green overlay; the new review overlay is orange.
+
+The backend preserves original pixels, excludes surrounding sheet context from SAM, rejects sheet-sized/irregular masks, and retries once with a tighter internal target when a recognised sheet permits it. It does not erase grid pixels visible through glass. Crowded and ambiguous marker layouts decline automatic sheet inference.
+
+Warm direct GPU processing measured 62.4–138.9 ms across the prompt matrix. A separate eight-request benchmark with a 139,286-byte JPEG measured local HTTP median 71.5 ms (maximum 83.8 ms) and public HTTPS median 152.2 ms (maximum 598.1 ms, including first connection). These exclude phone encoding/rendering and cellular latency. Model cold load was about 12 seconds; the deployed service was warmed before handoff. The browser samples serially with a 50 ms gap, tracks between model updates, rejects responses older than two seconds, expires stale outlines, and recovers from request timeout/restart races. This is not a measured 30 FPS segmentation claim.
+
+Both photos were rectified with the production JavaScript marker detector and 100 × 70 mm homography, then passed through public `/api/frame-preview` and `/api/frame`. Detected spans were about 61.07 × 43.69 mm and 48.15 × 45.09 mm. The test deliberately used **example** 36/34 mm pupil distances, 2.5 mm thicknesses and bounding-box centres/photo-up orientation; these are not wearer measurements or optical marks. Production fitting requires explicit patient values and provider-marked centres/tops.
+
+The real contours exposed two now-covered regressions: densely sampled valid boundaries were falsely rejected as narrow sections, and float32 STL serialization collapsed numerical sliver triangles in the packed plate. The generator preserves these two measured contours exactly, checks nonlocal boundary separation, and reimports serialized STLs for watertight/positive-volume checks.
+
+The downloaded test ZIP contains five individual parts plus `plate.stl`. All six files reload as watertight positive-volume meshes. PrusaSlicer 2.9.6 reports the plate manifold, five parts, 159.21 × 157.36 × 13.50 mm, minimum Z=0. The kit carries an `EXAMPLE-FIT-NOT-PATIENT.json` provenance file. Physical fit, printed tolerances, prescription alignment and actual phone camera/AR depth remain unvalidated.
+
+Regression gates after integration: **44 Python tests and 70 web tests passed**. Web CI includes both `.mjs` and Android `.cjs` tests.
+
+The same downloaded plate completed generic slicing with a 220 × 220 mm bed, 0.4 mm nozzle, 0.2 mm layers and supports. This smoke test validates slicer acceptance; its temporary G-code is not supplied as a machine-specific print file.
+
 ## Scope of claim
 
 The demo can claim a measured contour, wearer-specific geometric placement, and a tested mechanical fit only when the checks above are filled in. A prescription-ready or standards-compliant wearable frame needs professional optical and safety assessment.

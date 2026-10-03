@@ -24,4 +24,4 @@ jobs:
       - name: Python unit tests
         run: python -m unittest discover -s gpu -p 'test_*.py' -v
       - name: Web unit tests
-        run: node --test web/*.test.mjs
+        run: node --test web/*.test.mjs web/*.test.cjs
