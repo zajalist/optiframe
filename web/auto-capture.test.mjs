@@ -16,6 +16,17 @@ test('only a full stable span captures once; reset starts a new span', () => {
   assert.equal(span(gate, 2000).at(-1).capture, true);
 });
 
+test('a stationary lens can capture at a realistic mobile inference cadence', () => {
+  for (const latency of [650, 1050]) {
+    const gate = createAutoCaptureGate();
+    const decisions = Array.from({length: 6}, (_, i) => {
+      const time = i * (latency + 80);
+      return gate.update(sample(time, {now: time + latency}));
+    });
+    assert.ok(decisions.some(d => d.capture), `stable lens never captured with ${latency} ms requests`);
+  }
+});
+
 test('absence, missing presence, blur, low quality, missing scale and dragging never capture', () => {
   for (const extra of [{presence: {detected: false}}, {presence: undefined},
     {quality: {score: .8, sharpness: 10}}, {quality: {score: .2, sharpness: 100}},

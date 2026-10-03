@@ -126,6 +126,16 @@ The web fitting wizard consumes the real native 21-sample export format and labe
 
 Actual browser interaction at 390 × 844 used the supplied photo files, confirmed both contours, entered explicitly synthetic fitting values, placed test optical marks, rendered the generated asymmetric assembly, exercised Front/Parts, and reached export success. The browser download event could not be confirmed, while the independent HTTP test verified downloaded ZIP contents. The summary also fit 320 × 568. No console warnings/errors appeared in the full flow. A small mark-canvas clipping issue was fixed with scoped intrinsic sizing; that final CSS was loaded but the captured-state visual recheck was unavailable after the in-app browser session ended. These desktop browser checks do not replace physical iPhone camera tests.
 
+## Auto-capture mobile latency repair — 3 October 2026
+
+After the user reported no automatic capture while stationary, deterministic replay reproduced two timing defects. The old 600 ms maximum sample interval reset every serial request taking 650 ms; the old 900 ms age limit separately rejected 1050 ms replies. Fix: limit idle time after the previous response, and use the existing two-second frame-freshness limit. Geometry, calibration, distinct-frame and lens-presence requirements remain enforced.
+
+An integrated session test then reproduced another blocker: the previous overlay expired while the next serial request was pending and erased the stability history. Expiry now clears the displayed result, while the gate independently checks the next response for freshness, idle gaps, presence and geometry. A four-frame sequence with 1050 ms simulated request latency now reaches the actual capture callback; it previously never did. The live status shows stable progress or the specific quality/calibration blocker. All **100 web tests pass** after the repair. This reproduces a software cause of the reported symptom; it is not a physical iPhone acceptance test.
+
+The running GPU was also saturated while two OptiFrame server copies were active. The obsolete copy was stopped and the public worker restarted. Two actual public segmentation requests after the final restart completed in **588 ms and 203 ms** for the supplied dark photo and clear-lens screenshot. Replaying these observations through production calibration, guidance and capture gates at 300, 650 and 1100 ms sampling intervals triggered capture for both images. These repeated-image timing checks do not measure physical stability or lens accuracy.
+
+SAM access now has a bounded 250 ms queue wait and returns retryable HTTP 503 when occupied, instead of accumulating stale camera requests. Health includes worker occupancy, inference age and last completed inference duration. **54 Python tests pass**, including lock release on failure and the busy endpoint response.
+
 ## Scope of claim
 
 The demo can claim a measured contour, wearer-specific geometric placement, and a tested mechanical fit only when the checks above are filled in. A prescription-ready or standards-compliant wearable frame needs professional optical and safety assessment.

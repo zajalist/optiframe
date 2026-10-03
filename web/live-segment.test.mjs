@@ -84,6 +84,21 @@ test('automatic capture uses the qualifying current frame and waits for actual s
   assert.deepEqual(captured.markers,autoOptions.calibrateFrame().markers);
 });
 
+test('automatic capture survives serial phone latency and overlay expiry between replies', {timeout: 7000}, async () => {
+  let captured = null;
+  const fixture = setup(async () => {
+    await pause(1050);
+    return {ok:true,json:async()=>({...result,presence:{detected:true},quality:{score:.7,sharpness:180}})};
+  }, async value => {captured=value;}, autoOptions);
+  try {
+    await fixture.session.start();
+    await pause(4800);
+    assert.ok(captured, 'a clear stationary lens never reached the capture callback');
+    assert.equal(fixture.session.active,false);
+    assert.ok(captured.latencyMs>=1000);
+  } finally { fixture.session.stop(); }
+});
+
 test('captures the same JPEG and contour as the best completed segmentation', async () => {
   let sent = 0;
   let captured;

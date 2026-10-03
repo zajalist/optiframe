@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import logging
 import threading
+import time
+from contextlib import contextmanager
 import base64
 import hmac
 import os
@@ -28,6 +30,27 @@ app = FastAPI(title="OptiFrame contour proposals")
 _model = None
 _processor = None
 _model_lock = threading.Lock()
+_model_started_at = None
+_last_inference_ms = None
+
+
+class ModelBusyError(RuntimeError):
+    pass
+
+
+@contextmanager
+def model_slot():
+    """Never queue phone frames indefinitely behind an occupied GPU worker."""
+    global _model_started_at, _last_inference_ms
+    if not _model_lock.acquire(timeout=0.25):
+        raise ModelBusyError("GPU busy. Retrying…")
+    _model_started_at = time.monotonic()
+    try:
+        yield
+    finally:
+        _last_inference_ms = round((time.monotonic() - _model_started_at) * 1000, 1)
+        _model_started_at = None
+        _model_lock.release()
 
 
 class CaptureBodyLimit:
@@ -204,7 +227,7 @@ def sam_mask(image: np.ndarray, box: tuple[int, int, int, int]) -> np.ndarray:
 
     crop = isolate_lens(image, box)
     global _model, _processor
-    with _model_lock:
+    with model_slot():
         if not torch.cuda.is_available():
             raise RuntimeError("CUDA is unavailable")
         if _model is None:
@@ -275,14 +298,18 @@ def inspect_capture(data: bytes) -> dict:
 
 @app.get("/api/health")
 def health() -> dict:
+    started = _model_started_at
+    worker = {"modelBusy": _model_lock.locked(),
+              "inferenceAgeMs": round((time.monotonic() - started) * 1000, 1) if started is not None else None,
+              "lastInferenceMs": _last_inference_ms}
     try:
         import torch
     except ImportError:
         return {"cuda": False, "gpu": None, "modelLoaded": _model is not None,
-                "pipeline": "edge-supported-lens-v3"}
+                "pipeline": "edge-supported-lens-v3", **worker}
     return {"cuda": torch.cuda.is_available(), "gpu": torch.cuda.get_device_name(0)
             if torch.cuda.is_available() else None, "modelLoaded": _model is not None,
-            "pipeline": "edge-supported-lens-v3"}
+            "pipeline": "edge-supported-lens-v3", **worker}
 
 
 @app.post("/api/import")
@@ -393,6 +420,8 @@ def segment(image: UploadFile = File(...), empty: UploadFile | None = File(None)
                 presence = lens_presence(photo, proposal)
                 if presence["detected"]:
                     candidates.append({"method": "sam2.1-hiera-small-cuda", "contour": proposal, "presence": presence})
+            except ModelBusyError as error:
+                raise HTTPException(status_code=503, detail=str(error), headers={"Retry-After": "1"}) from error
             except ValueError as error:
                 if not candidates:
                     raise
@@ -437,6 +466,8 @@ def live_segment(image: UploadFile = File(...), box: str = Form(...)) -> dict:
                 "method": "sam2.1-hiera-small-cuda",
                 "preprocessing": "edge-supported-lens-v3",
                 "measurementStatus": "proposal-only; review contour and calibrate sheet scale"}
+    except ModelBusyError as error:
+        raise HTTPException(status_code=503, detail=str(error), headers={"Retry-After": "1"}) from error
     except (ValueError, TypeError, json.JSONDecodeError) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     except Exception as error:

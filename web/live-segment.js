@@ -1,4 +1,4 @@
-import { createAutoCaptureGate } from './auto-capture.js?v=18';
+import { createAutoCaptureGate } from './auto-capture.js?v=20';
 import { createCaptureGuidance, frameBrightness, optimizeCameraTrack } from './capture-guidance.js?v=18';
 // Live camera proposals are only inputs to the existing photo review flow.
 const MAX_SIDE = 1280;
@@ -63,7 +63,7 @@ export function createLiveSegmentSession({
   let manualTarget = false;
   let lastLocateAt = -Infinity;
   let frameId = 0;
-  const autoGate = createAutoCaptureGate();
+  const autoGate = createAutoCaptureGate({ maxAgeMs: maxResultAgeMs });
   const guidance = createCaptureGuidance();
   let autoState = 'searching';
   const trackingCanvas = document.createElement('canvas');
@@ -362,8 +362,11 @@ export function createLiveSegmentSession({
       clearTimeout(resultExpiry);
       resultExpiry = setTimeout(() => {
         if (token !== generation) return;
-        clearResult();
-        message('Connection interrupted. Retrying…');
+        // Expiring the displayed frame must not erase a valid sequence while
+        // its next serial inference is still pending. The gate separately
+        // rejects stale replies, idle gaps, missing lenses and changed geometry.
+        clearResult(autoCapture);
+        message(working ? 'Processing…' : 'Connection interrupted. Retrying…');
       }, Math.max(0, maxResultAgeMs - (updatedAt - startedAt)));
       draw();
       if (autoCapture) {
@@ -372,7 +375,10 @@ export function createLiveSegmentSession({
         const decision = autoGate.update({ ...data, quality: advice.ready ? data.quality : null, calibration, sampledAt: startedAt,
           now: updatedAt, id: sampledId, dragging: Boolean(target) });
         autoState = decision.state;
-        message(decision.state === 'remove' ? 'Remove the first lens' : advice.message);
+        const blocker = {stale:'Connection is slow. Retrying…', calibration:'Show all four dots',
+          blur:'Let the camera focus', quality:'Edge unclear. Adjust the light', outline:'Keep one lens inside the dots'}[decision.reason];
+        message(decision.state === 'remove' ? 'Remove the first lens' : !advice.ready ? advice.message
+          : blocker || (decision.state === 'steady' ? `Hold steady · ${Math.round((decision.progress || 0) * 100)}%` : advice.message));
         if (decision.capture) await capture(best, true);
       } else message('Lens found. Hold steady and capture.', true);
     } catch (error) {
