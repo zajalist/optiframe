@@ -1,6 +1,6 @@
-import { createLiveSegmentSession } from './live-segment.js';
+import { createLiveSegmentSession } from './live-segment.js?v=2';
 import { sheetHomography, project, measure } from './calibration.js';
-import { detectSheetMarkers } from './marker-detect.js';
+import { detectSheetMarkers } from './marker-detect.js?v=2';
 
 const $ = id => document.getElementById(id);
 const stage = $('stage');
