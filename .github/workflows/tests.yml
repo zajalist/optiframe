@@ -20,7 +20,7 @@ jobs:
           node-version: '22'
       - name: Install CPU test dependencies
         # SAM/CUDA are loaded only by sam_mask; deterministic tests need neither.
-        run: python -m pip install fastapi python-multipart numpy opencv-python-headless Pillow shapely trimesh mapbox-earcut manifold3d httpx
+        run: python -m pip install fastapi python-multipart numpy opencv-python-headless Pillow shapely trimesh mapbox-earcut manifold3d networkx httpx
       - name: Python unit tests
         run: python -m unittest discover -s gpu -p 'test_*.py' -v
       - name: Web unit tests
