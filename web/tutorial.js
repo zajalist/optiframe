@@ -32,7 +32,7 @@
         ['Print to scale', 'Print the calibration sheet at 100%, with no “fit to page”. Check the 50 mm bar with a ruler.', 'sheet', 'Print sheet'],
         ['Four dots. One lens.', 'Lay the sheet flat on a matte surface. Place the lens inside the four white marker centres.', 'place'],
         ['Give the edge good light', 'Use diffuse light and move reflections off the rim. Hold your phone close, with all four dots visible.', 'light'],
-        ['Left, then right', 'Capture the left lens, inspect its outline, then tap Confirm. Repeat for the right lens.', 'confirm'],
+        ['Left, then right', 'Hold still for automatic capture, then inspect and confirm. Remove the first lens before placing the second.', 'confirm'],
         ['Check the real dimensions', 'Compare each width and height with a ruler or calipers before printing. Take an independent photo to check the result.', 'measure'],
       ],
     },

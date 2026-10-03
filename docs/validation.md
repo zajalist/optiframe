@@ -124,6 +124,8 @@ Local validation: **98 web tests and 51 Python tests passed**, including 27 Pyth
 
 The web fitting wizard consumes the real native 21-sample export format and labels whether TrueDepth hardware was available. Repeatability thresholds and capability metadata do not establish pupil measurement accuracy. The iOS simulator workflow and actual device validation are recorded separately in `docs/face-fitting.md`.
 
+Actual browser interaction at 390 × 844 used the supplied photo files, confirmed both contours, entered explicitly synthetic fitting values, placed test optical marks, rendered the generated asymmetric assembly, exercised Front/Parts, and reached export success. The browser download event could not be confirmed, while the independent HTTP test verified downloaded ZIP contents. The summary also fit 320 × 568. No console warnings/errors appeared in the full flow. A small mark-canvas clipping issue was fixed with scoped intrinsic sizing; that final CSS was loaded but the captured-state visual recheck was unavailable after the in-app browser session ended. These desktop browser checks do not replace physical iPhone camera tests.
+
 ## Scope of claim
 
 The demo can claim a measured contour, wearer-specific geometric placement, and a tested mechanical fit only when the checks above are filled in. A prescription-ready or standards-compliant wearable frame needs professional optical and safety assessment.
