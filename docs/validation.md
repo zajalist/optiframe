@@ -136,6 +136,14 @@ The running GPU was also saturated while two OptiFrame server copies were active
 
 SAM access now has a bounded 250 ms queue wait and returns retryable HTTP 503 when occupied, instead of accumulating stale camera requests. Health includes worker occupancy, inference age and last completed inference duration. **54 Python tests pass**, including lock release on failure and the busy endpoint response.
 
+## Sharp-still capture flow — 3 October 2026
+
+Following the report of slow/noisy live segmentation and repeated "Hold steady", a controller regression reproduced indefinite waiting with alternating 0.9 mm preview-edge jitter. The automatic scanner now uses a 960-pixel, JPEG78 preview and a separate still measurement. Two or more valid preview observations spanning at least 350 ms with at most 1.5 mm contour disagreement trigger a local three-frame burst. These relaxed preview checks only start capture; they are not measurement evidence. Camera movement, missing markers, absent lens, bad scale and poor image quality still block triggering.
+
+The burst normally samples for about 150–180 ms, ranks focus within the lens region, and retains the original best frame at up to 1600 pixels (never upscaled). It rejects a frozen camera. The chosen JPEG95 is frozen on screen, segmented separately, and checked again for lens presence, calibration, quality and plausible dimensions. Only that photo's contour and marker coordinates reach review. No sharpening, generated detail or averaged contour enters measurement. Burst ranking does not guarantee accurate focus on a transparent edge or millimetre accuracy.
+
+All **109 web tests passed**, including preview jitter, rejecting blurry/absent final lenses, preserving exact final JPEG/contour identity, and cancelled/restarted bursts. A separate review caught a shared capture-lock race, now protected by operation ownership. Public requests on the two supplied fixtures succeeded at preview/final settings: dark 484/242 ms; clear screenshot 177/249 ms. Source fixtures are 1280 pixels, so the final setting preserved their native resolution; it does not demonstrate a real 1600-pixel phone capture. This small desktop HTTPS sample excludes phone encoding, burst time, rendering and radio latency. Physical phone acceptance remains pending.
+
 ## Scope of claim
 
 The demo can claim a measured contour, wearer-specific geometric placement, and a tested mechanical fit only when the checks above are filled in. A prescription-ready or standards-compliant wearable frame needs professional optical and safety assessment.

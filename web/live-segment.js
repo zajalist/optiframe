@@ -1,5 +1,6 @@
 import { createAutoCaptureGate } from './auto-capture.js?v=20';
-import { createCaptureGuidance, frameBrightness, optimizeCameraTrack } from './capture-guidance.js?v=18';
+import { createCaptureGuidance, frameBrightness, optimizeCameraTrack } from './capture-guidance.js?v=21';
+import { captureSharpFrame } from './sharp-frame.js?v=21';
 // Live camera proposals are only inputs to the existing photo review flow.
 const MAX_SIDE = 1280;
 const INTERVAL_MS = 50;
@@ -36,6 +37,7 @@ export function createLiveSegmentSession({
   requestTimeoutMs = 8000, maxResultAgeMs = 2000,
   locateTarget = null, minimalStatus = false,
   autoCapture = false, calibrateFrame = null,
+  stillCapture = true, captureFrame = captureSharpFrame,
 }) {
   if (!video || !overlay || !status || !captureButton || typeof onCapture !== 'function')
     throw new TypeError('Live segmentation needs video, overlay, status, captureButton and onCapture');
@@ -53,7 +55,7 @@ export function createLiveSegmentSession({
   let cadenceHz = null;
   let working = null;
   let resultExpiry = null;
-  let capturePending = false;
+  let capturePending = null;
   let boxVersion = 0;
   let animation = null;
   let trackingBase = null;
@@ -63,7 +65,10 @@ export function createLiveSegmentSession({
   let manualTarget = false;
   let lastLocateAt = -Infinity;
   let frameId = 0;
-  const autoGate = createAutoCaptureGate({ maxAgeMs: maxResultAgeMs });
+  const sharpStill = autoCapture && stillCapture;
+  // Preview agreement only triggers a new still; it is never exported as measurement evidence.
+  const autoGate = createAutoCaptureGate({ maxAgeMs: maxResultAgeMs,
+    ...(sharpStill ? {durationMs: 350, minFrames: 2, toleranceMm: 1.5} : {}) });
   const guidance = createCaptureGuidance();
   let autoState = 'searching';
   const trackingCanvas = document.createElement('canvas');
@@ -83,7 +88,7 @@ export function createLiveSegmentSession({
   function dimensions() {
     const width = video.videoWidth;
     const height = video.videoHeight;
-    const factor = Math.min(1, MAX_SIDE / Math.max(width, height));
+    const factor = Math.min(1, (sharpStill ? 960 : MAX_SIDE) / Math.max(width, height));
     return [Math.max(1, Math.round(width * factor)), Math.max(1, Math.round(height * factor))];
   }
   function draw() {
@@ -122,6 +127,7 @@ export function createLiveSegmentSession({
     context.stroke();
   }
   function setBoxNormalized(value) {
+    if (capturePending) return;
     if (!Array.isArray(value) || value.length !== 4 || value.some(v => !Number.isFinite(v)))
       throw new TypeError('Box must contain four finite normalized coordinates');
     const [x0, y0, x1, y1] = value;
@@ -147,19 +153,19 @@ export function createLiveSegmentSession({
       clamp((event.clientY - rect.top - fingerOffset) / rect.height, 0, 1)];
   }
   overlay.addEventListener('pointerdown', event => {
-    if (!stream) return;
+    if (!stream || capturePending) return;
     autoGate.invalidate();
     target = pointer(event);
     overlay.setPointerCapture?.(event.pointerId);
     draw();
   });
   overlay.addEventListener('pointermove', event => {
-    if (!stream || !target) return;
+    if (!stream || !target || capturePending) return;
     target = pointer(event);
     draw();
   });
   overlay.addEventListener('pointerup', event => {
-    if (!stream || !target) return;
+    if (!stream || !target || capturePending) return;
     const [tapX, tapY] = pointer(event);
     target = null;
     const halfWidth = 0.2;
@@ -168,11 +174,11 @@ export function createLiveSegmentSession({
     const y = clamp(tapY, halfHeight, 1 - halfHeight);
     setBoxNormalized([x - halfWidth, y - halfHeight, x + halfWidth, y + halfHeight]);
   });
-  overlay.addEventListener('pointercancel', () => { target = null; draw(); });
+  overlay.addEventListener('pointercancel', () => { target = null; if (!capturePending) draw(); });
 
   function grayFrame(source) {
     if (!trackingContext) return null;
-    const width = 160;
+    const width = 240;
     const height = Math.max(1, Math.round(width * overlay.height / overlay.width));
     trackingCanvas.width = width;
     trackingCanvas.height = height;
@@ -186,7 +192,7 @@ export function createLiveSegmentSession({
     return { gray, width, height };
   }
   function trackOnce() {
-    if (!stream) return;
+    if (!stream || capturePending) return;
     animation = requestAnimationFrame(trackOnce);
     if (!trackingBase || !latest || !video.videoWidth) return;
     if (performance.now() - lastTrackAt < 90) return;
@@ -202,8 +208,8 @@ export function createLiveSegmentSession({
       if (x1 - x0 < 16 || y1 - y0 < 16) return;
       let bestDifference = Infinity;
       let bestShift = [0, 0];
-      for (let dy = -8; dy <= 8; dy += 2) {
-        for (let dx = -8; dx <= 8; dx += 2) {
+      for (let dy = -8; dy <= 8; dy++) {
+        for (let dx = -8; dx <= 8; dx++) {
           let difference = 0;
           let count = 0;
           for (let y = y0; y < y1; y += 5) {
@@ -230,8 +236,8 @@ export function createLiveSegmentSession({
     if (token === generation && stream)
       timer = setTimeout(() => { void sample(token); }, intervalMs);
   }
-  async function canvasBlob(canvas) {
-    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.86));
+  async function canvasBlob(canvas, quality = .86) {
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', quality));
     if (!blob) throw new Error('Could not capture a camera frame');
     return blob;
   }
@@ -306,7 +312,7 @@ export function createLiveSegmentSession({
       const promptVersion = boxVersion;
       const capturedAt = new Date().toISOString();
       const startedAt = performance.now();
-      const blob = await canvasBlob(frame);
+      const blob = await canvasBlob(frame, sharpStill ? .78 : .86);
       if (token !== generation || promptVersion !== boxVersion) return;
       const prompt = [Math.floor(box[0] * width), Math.floor(box[1] * height),
         Math.ceil(box[2] * width), Math.ceil(box[3] * height)];
@@ -332,7 +338,7 @@ export function createLiveSegmentSession({
         const decision = autoGate.update({ presence: data.presence, quality: data.quality, brightness, calibration, sampledAt: startedAt,
           now: performance.now(), id: sampledId, dragging: Boolean(target) });
         autoState = decision.state;
-        const advice = guidance.update({ calibration, width, height, quality: data.quality, presence: data.presence,
+        const advice = guidance.update({ calibration, width, height, minMarkerSpan: sharpStill ? 225 : 300, quality: data.quality, presence: data.presence,
           brightness, latencyMs: performance.now() - startedAt, now: performance.now(), state: autoState });
         message(advice.message);
         return;
@@ -370,7 +376,7 @@ export function createLiveSegmentSession({
       }, Math.max(0, maxResultAgeMs - (updatedAt - startedAt)));
       draw();
       if (autoCapture) {
-        const advice = guidance.update({ calibration, width, height, quality: data.quality, presence: data.presence,
+        const advice = guidance.update({ calibration, width, height, minMarkerSpan: sharpStill ? 225 : 300, quality: data.quality, presence: data.presence,
           brightness, latencyMs, now: updatedAt, state: autoState });
         const decision = autoGate.update({ ...data, quality: advice.ready ? data.quality : null, calibration, sampledAt: startedAt,
           now: updatedAt, id: sampledId, dragging: Boolean(target) });
@@ -378,8 +384,11 @@ export function createLiveSegmentSession({
         const blocker = {stale:'Connection is slow. Retrying…', calibration:'Show all four dots',
           blur:'Let the camera focus', quality:'Edge unclear. Adjust the light', outline:'Keep one lens inside the dots'}[decision.reason];
         message(decision.state === 'remove' ? 'Remove the first lens' : !advice.ready ? advice.message
-          : blocker || (decision.state === 'steady' ? `Hold steady · ${Math.round((decision.progress || 0) * 100)}%` : advice.message));
-        if (decision.capture) await capture(best, true);
+          : blocker || (decision.state === 'steady' ? 'Lens found' : advice.message));
+        if (decision.capture) {
+          if (sharpStill) await captureStill(token, job.abort.signal);
+          else await capture(best, true);
+        }
       } else message('Lens found. Hold steady and capture.', true);
     } catch (error) {
       if (token === generation && error.name !== 'AbortError') {
@@ -393,6 +402,59 @@ export function createLiveSegmentSession({
         request = null;
         working = null;
         schedule(token);
+      }
+    }
+  }
+
+  async function captureStill(token, signal) {
+    const pending = {};
+    capturePending = pending;
+    clearTimeout(resultExpiry);
+    if (animation !== null && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(animation);
+    animation = null;
+    target = null;
+    message('Capturing…');
+    try {
+      const selected = await captureFrame(video, {maxSide:1600, box:[...box], signal});
+      if (token !== generation || signal.aborted) return;
+      const frame = selected.canvas, width = frame.width, height = frame.height;
+      const pixels = frame.getContext('2d').getImageData(0, 0, width, height);
+      const found = !manualTarget && locateTarget ? locateTarget(pixels) : null;
+      const targetBox = Array.isArray(found) && found.length === 4 && found.every(Number.isFinite) ? found : box;
+      const prompt = [Math.floor(targetBox[0]*width), Math.floor(targetBox[1]*height),
+        Math.ceil(targetBox[2]*width), Math.ceil(targetBox[3]*height)];
+      const blob = await canvasBlob(frame, .95);
+      if (token !== generation || signal.aborted) return;
+      // Freeze the selected real frame while its own high-resolution contour is computed.
+      overlay.width=width; overlay.height=height;
+      context.drawImage(frame,0,0,width,height);
+      message('Measuring…');
+      const body = new FormData(); body.append('image',blob,`${side}-still.jpg`);
+      body.append('box',JSON.stringify(prompt));
+      const started = performance.now();
+      const data = await boundedStartup(segmentFrame(body,signal,frame,prompt),requestTimeoutMs,signal,'Measurement timed out. Retrying…');
+      if (token !== generation || signal.aborted) return;
+      if (data.width !== width || data.height !== height || !Array.isArray(data.contour) ||
+          data.contour.some(p => !Array.isArray(p) || p.length!==2 || p.some((v,i)=>!Number.isFinite(v)||v<0||v>(i?height:width))))
+        throw new Error('Still frame could not be measured');
+      const calibration = calibrateFrame?.(pixels,data.contour);
+      const now = performance.now();
+      const advice = createCaptureGuidance().update({...data,calibration,brightness:frameBrightness(pixels),now});
+      // Frozen photos may take longer than live replies. Validate their own lens/scale/quality,
+      // never substitute the earlier preview contour or claim burst agreement as accuracy.
+      const checked = createAutoCaptureGate({durationMs:0,minFrames:1}).update({...data,
+        quality:advice.ready?data.quality:null,calibration,sampledAt:now,now,id:0});
+      if (!checked.capture) throw new Error(!advice.ready ? advice.message || 'Check light and all four dots' : 'Still edge unclear. Adjust the light');
+      await onCapture({file:new File([blob],`${side}-still.jpg`,{type:'image/jpeg'}),
+        contour:data.contour.map(p=>[...p]),width,height,markers:calibration.markers.map(p=>[...p]),
+        quality:data.quality,capturedAt:selected.capturedAt,latencyMs:now-started,source:'sharp-still'});
+      if (token===generation) stop();
+    } finally {
+      if (capturePending===pending) capturePending=null;
+      if (token===generation && stream) {
+        autoGate.reset();
+        [overlay.width,overlay.height]=dimensions();
+        if (typeof requestAnimationFrame==='function') animation=requestAnimationFrame(trackOnce);
       }
     }
   }
@@ -411,7 +473,7 @@ export function createLiveSegmentSession({
     message('Opening camera…', true);
     try {
       const acquired = await boundedStartup(mediaDevices.getUserMedia({
-        audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } },
+        audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: sharpStill ? 1920 : 1280 } },
       }), startupTimeoutMs, signal, 'Camera permission timed out. Open in Safari or use a photo.',
       late => late.getTracks().forEach(track => track.stop()));
       if (token !== generation) { acquired.getTracks().forEach(track => track.stop()); return; }
@@ -436,6 +498,7 @@ export function createLiveSegmentSession({
     }
   }
   function stop() {
+    capturePending = null;
     autoGate.reset();
     guidance.reset();
     autoState = 'searching';
@@ -471,7 +534,8 @@ export function createLiveSegmentSession({
       throw new Error('Wait for a fresh lens outline');
     }
     if (capturePending) throw new Error('Capture is already in progress');
-    capturePending = true;
+    const pending = {};
+    capturePending = pending;
     captureButton.disabled = true;
     const token = generation;
     const payload = {
@@ -490,8 +554,8 @@ export function createLiveSegmentSession({
       if (token === generation) autoGate.reset();
       throw error;
     } finally {
-      capturePending = false;
-      if (stream && best) captureButton.disabled = false;
+      if (capturePending===pending) capturePending=null;
+      if (token === generation && stream && best) captureButton.disabled = false;
     }
   }
   captureButton.addEventListener('click', () => {

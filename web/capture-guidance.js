@@ -13,7 +13,7 @@ export function createCaptureGuidance() {
   let pending = '', pendingSince = 0, current = '', slowCount = 0, nearEdge = false;
   return {
     reset() { pending = ''; pendingSince = 0; current = ''; slowCount = 0; nearEdge = false; },
-    update({ calibration, width, height, quality, presence, brightness, latencyMs, now, state }) {
+    update({ calibration, width, height, quality, presence, brightness, latencyMs, now, state, minMarkerSpan = 300 }) {
       let message = '', ready = true;
       const markers = calibration?.markers;
       slowCount = latencyMs > 700 ? slowCount + 1 : 0;
@@ -24,12 +24,12 @@ export function createCaptureGuidance() {
         const span = Math.min(Math.hypot(markers[1][0] - markers[0][0], markers[1][1] - markers[0][1]),
           Math.hypot(markers[2][0] - markers[3][0], markers[2][1] - markers[3][1]));
         if (nearEdge) { message = 'Move back slightly'; ready = false; }
-        else if (span < 300) { message = 'Move closer'; ready = false; }
+        else if (span < minMarkerSpan) { message = 'Move closer'; ready = false; }
         else if (quality?.clippedFraction > .025 && !(presence?.detected === true &&
             presence.evidence?.edgeSupport >= .64 && presence.evidence?.sectorsSupported >= 7)) {
           message = 'Soften the light'; ready = false;
         }
-        else if (presence?.detected === true && quality?.sharpness < 35) { message = 'Hold steady'; ready = false; }
+        else if (presence?.detected === true && quality?.sharpness < 35) { message = 'Let the camera focus'; ready = false; }
       } else {
         ready = false;
         if (nearEdge) message = 'Move back slightly';

@@ -45,7 +45,8 @@ function setup(fetcher, onCapture = async () => {}, options = {}) {
     onCapture, apiFetch: fetcher, mediaDevices, side: 'left', intervalMs: 5,
     startupTimeoutMs: options.startupTimeoutMs ?? 12000, locateTarget: options.locateTarget,
     requestTimeoutMs: options.requestTimeoutMs ?? 8000, maxResultAgeMs: options.maxResultAgeMs ?? 2000,
-    autoCapture: options.autoCapture, calibrateFrame: options.calibrateFrame });
+    autoCapture: options.autoCapture, calibrateFrame: options.calibrateFrame,
+    stillCapture: options.stillCapture ?? false, captureFrame: options.captureFrame });
   return { session, video, overlay, status, captureButton, get stopped() { return stopped; } };
 }
 
@@ -55,6 +56,53 @@ const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 const autoOutline = Array.from({length: 80}, (_, i) => [50 + 25 * Math.cos(i * Math.PI / 40), 35 + 20 * Math.sin(i * Math.PI / 40)]);
 const autoOptions = {autoCapture: true, calibrateFrame: () => ({markers: [[80,50],[560,50],[560,386],[80,386]], contour: autoOutline})};
+
+test('small preview edge jitter triggers a separately measured sharp still instead of holding forever', {timeout: 4000}, async () => {
+  let captured = null, calls = 0, bursts = 0;
+  const fixture = setup(async () => {
+    calls++; await pause(240);
+    return {ok:true,json:async()=>({...result,presence:{detected:true},quality:{score:.7,sharpness:180}})};
+  }, value => {captured=value;}, {...autoOptions, stillCapture:true,
+    calibrateFrame: () => ({...autoOptions.calibrateFrame(), contour:autoOutline.map(([x,y])=>[x+(calls%2)*.9,y])}),
+    captureFrame: async () => { bursts++; const canvas=document.createElement('canvas'); canvas.width=640;canvas.height=480;
+      return {canvas,sharpness:200,sampledAt:performance.now(),capturedAt:new Date().toISOString()}; }});
+  try {
+    await fixture.session.start(); await pause(1600);
+    assert.ok(captured, 'small SAM edge jitter must not prevent taking a separate sharp still');
+    assert.equal(bursts,1); assert.equal(captured.source,'sharp-still');
+    assert.ok(calls>=3, 'final still needs its own model response');
+  } finally { fixture.session.stop(); }
+});
+
+test('a good preview never substitutes for a blurry or missing lens in the final still', {timeout:5000}, async () => {
+  for (const invalid of [{presence:{detected:false},contour:[]}, {quality:{score:.7,sharpness:5}}]) {
+    let captured=null, still=false;
+    const fixture=setup(async()=>({ok:true,json:async()=>({...result,presence:{detected:true},quality:{score:.7,sharpness:180},...(still?invalid:{})})}),
+      value=>{captured=value;},{...autoOptions,stillCapture:true,captureFrame:async()=>{
+        still=true;const canvas=document.createElement('canvas');canvas.width=640;canvas.height=480;
+        return {canvas,sampledAt:performance.now(),capturedAt:new Date().toISOString()};
+      }});
+    try {await fixture.session.start();await pause(750);assert.equal(still,true);assert.equal(captured,null);assert.equal(fixture.session.active,true);}
+    finally {fixture.session.stop();}
+  }
+});
+
+test('final still is independently segmented and its exact JPEG and coordinates reach review', {timeout:3000}, async () => {
+  let captured, sentStill, still=false;
+  const finalContour=result.contour.map(([x,y])=>[x*2,y*2]);
+  const fixture=setup(async(_path,options)=>{
+    if(still)sentStill=options.body.get('image');
+    return {ok:true,json:async()=>({...result,width:still?1280:640,height:still?960:480,
+      contour:still?finalContour:result.contour,presence:{detected:true},quality:{score:.7,sharpness:180}})};
+  },value=>{captured=value;},{...autoOptions,stillCapture:true,captureFrame:async()=>{
+    still=true;const canvas=document.createElement('canvas');canvas.width=1280;canvas.height=960;
+    canvas.toBlob=callback=>callback(new Blob(['original-sharp-photo'],{type:'image/jpeg'}));
+    return {canvas,sampledAt:performance.now(),capturedAt:'2026-10-03T12:00:00Z'};
+  }});
+  try {await fixture.session.start();await pause(650);assert.ok(captured);assert.equal(await captured.file.text(),await sentStill.text());
+    assert.equal(captured.width,1280);assert.deepEqual(captured.contour,finalContour);assert.equal(captured.capturedAt,'2026-10-03T12:00:00Z');}
+  finally {fixture.session.stop();}
+});
 
 test('automatic mode stays live without an outline for absent or legacy presence', async () => {
   for (const presence of [undefined, {detected:false}]) {

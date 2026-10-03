@@ -14,7 +14,7 @@ test('darkness, glare and blur block capture with one short prioritized cue', ()
   const dark=settled(createCaptureGuidance(),{brightness:20,quality:{sharpness:5,clippedFraction:.1}});
   assert.deepEqual(dark,{message:'Add soft light',ready:false});
   assert.deepEqual(settled(createCaptureGuidance(),{quality:{sharpness:180,clippedFraction:.05}}),{message:'Soften the light',ready:false});
-  assert.deepEqual(settled(createCaptureGuidance(),{quality:{sharpness:10,clippedFraction:0}}),{message:'Hold steady',ready:false});
+  assert.deepEqual(settled(createCaptureGuidance(),{quality:{sharpness:10,clippedFraction:0}}),{message:'Let the camera focus',ready:false});
 });
 test('guidance resists flicker and sustained latency never claims a phone temperature', () => {
   const guide=createCaptureGuidance();
