@@ -44,7 +44,7 @@ If the first capture cannot achieve a clean repeatable contour quickly, switch t
 
 ## What to leave out
 
-Gaussian splats, full 3D lens reconstruction, face scanning, automatic prescription detection, accounts, a design marketplace, and dozens of styles. They do not close the central proof: the real lenses fit the printed frame.
+Gaussian splats, ARKit-based scanning, full 3D lens reconstruction, face scanning, automatic prescription detection, accounts, a design marketplace, and dozens of styles. They do not close the central proof: the real lenses fit the printed frame. An optional Safari AR Quick Look preview can follow the working STL export.
 
 ## Winning evidence checklist
 
