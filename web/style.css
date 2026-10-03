@@ -1,4 +1,4 @@
-:root{--paper:#f7f7f3;--white:#fff;--ink:#1c2724;--muted:#596963;--line:#d8ded8;--accent:#204c3a;--wash:#edf2ec;--focus:#a06326;font-family:"Aptos","Segoe UI",Arial,sans-serif;color:var(--ink);background:var(--paper);font-synthesis:none}
+:root{--paper:#f7f8fa;--white:#fff;--ink:#1c222b;--muted:#596572;--line:#d8dfe8;--accent:#253a54;--wash:#edf1f7;--focus:#365e8c;font-family:"Aptos","Segoe UI",Arial,sans-serif;color:var(--ink);background:var(--paper);font-synthesis:none}
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
 body{margin:0;min-width:320px}
@@ -44,9 +44,9 @@ h1{font-size:clamp(2rem,3.4vw,3.3rem);line-height:1.05;letter-spacing:-.03em;mar
 .live-actions{display:flex;gap:8px;margin:0 0 10px}
 .live-actions button{flex:1}
 .live-start{background:var(--accent);border-color:var(--accent);color:var(--white)}
-.live-start:hover{background:#143d2c;color:var(--white)}
+.live-start:hover{background:#172b43;color:var(--white)}
 .live-capture:not(:disabled){background:var(--ink);border-color:var(--ink);color:var(--white)}
-.live-capture:not(:disabled):hover{background:#34443e}
+.live-capture:not(:disabled):hover{background:#344456}
 .live-stage{position:relative;background:#101916;overflow:hidden;margin-bottom:10px;line-height:0}
 .live-stage[hidden]{display:none}
 .live-stage video{display:block;width:100%;height:auto}
@@ -71,7 +71,7 @@ details[open]>summary:after{content:" −"}
 button{border:1px solid var(--line);background:var(--white);color:var(--ink);padding:10px 13px;min-height:42px;font-size:.8rem;font-weight:650;transition:background .15s,border-color .15s,color .15s}
 button:hover{border-color:var(--accent);background:var(--wash)}
 button.active,.propose,#preview-frame,#start{border-color:var(--accent);background:var(--accent);color:var(--white)}
-button.active:hover,.propose:hover,#preview-frame:hover,#start:hover{background:#143d2c}
+button.active:hover,.propose:hover,#preview-frame:hover,#start:hover{background:#172b43}
 .proposal-select{width:100%;padding:10px;margin:0 0 10px;border:1px solid var(--line);background:var(--white);color:var(--ink)}
 .capture-state{display:flex;gap:8px 16px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding:0 0 14px}
 .capture-state p{margin:0;font-size:.75rem;color:var(--muted)}

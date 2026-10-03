@@ -87,9 +87,9 @@ export function createLiveSegmentSession({
       context.save();
       context.beginPath();
       context.arc(x, y, 16, 0, Math.PI * 2);
-      context.fillStyle = '#10241bcc';
+      context.fillStyle = '#102031cc';
       context.fill();
-      context.strokeStyle = '#e7f2de';
+      context.strokeStyle = '#e7eef8';
       context.lineWidth = 2;
       context.stroke();
       context.beginPath();
@@ -109,7 +109,7 @@ export function createLiveSegmentSession({
       else context.moveTo(px, py);
     });
     context.closePath();
-    context.strokeStyle = '#c9eb64';
+    context.strokeStyle = '#58c9ff';
     context.lineWidth = 3;
     context.stroke();
   }

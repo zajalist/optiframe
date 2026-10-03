@@ -2,36 +2,40 @@
 name: OptiFrame
 description: Editorial introduction and focused lens capture with optional illustrated guidance.
 colors:
-  welcome-ink: "#191b19"
-  welcome-paper: "#eeeee5"
-  welcome-muted: "#b7bab0"
-  welcome-accent: "#d5ef83"
-  welcome-line: "#41453d"
-  welcome-accent-hover: "#e4f6b0"
-  welcome-copy: "#d4d7cc"
-  welcome-subtle: "#a8ae9f"
-  welcome-paper-copy: "#51564c"
-  welcome-paper-line: "#bbbfb2"
-  welcome-outline: "#777d6c"
-  welcome-sheet: "#272b24"
+  welcome-ink: "#191a1c"
+  welcome-paper: "#f2f2f2"
+  welcome-muted: "#b9bdc5"
+  welcome-accent: "#e5eaf2"
+  welcome-line: "#41454d"
+  glass-hover: "#ffffff26"
+  glass-primary: "#ffffff19"
+  glass-foreground: "#f8f9fc"
+  glass-hover-foreground: "#fff"
+  scanner-live-contour: "#58c9ff"
+  welcome-copy: "#d2d5dc"
+  welcome-subtle: "#aeb4be"
+  welcome-paper-copy: "#515660"
+  welcome-paper-line: "#b9bdc5"
+  welcome-outline: "#777d87"
+  welcome-sheet: "#272b31"
   scanner-background: "#101112"
   scanner-foreground: "#f5f5f5"
   scanner-muted: "#b9babc"
-  scanner-accent: "#c8fa72"
+  scanner-accent: "#c6defa"
   scanner-stage: "#050506"
-  scanner-contour: "#e5efdc"
+  scanner-contour: "#e5eaf2"
   scanner-active: "#d7d8da"
-  guide-background: "#262b28"
-  glass-dark: "#303432"
-  glass-control: "#343b32cc"
-  glass-dialog: "#252a26ed"
-  guide-foreground: "#f5f5f2"
-  guide-muted: "#b1b5b1"
-  guide-accent: "#d4ecba"
-  guide-button-ink: "#151915"
-  guide-button-hover: "#e3eadf"
-  guide-paper: "#e8e9e3"
-  guide-contour: "#e1eadb"
+  guide-background: "#262a32"
+  glass-dark: "#292d34"
+  glass-control: "#ffffff10"
+  glass-dialog: "#20242be6"
+  guide-foreground: "#f5f6f8"
+  guide-muted: "#b6bdc8"
+  guide-accent: "#d6e5f8"
+  guide-button-ink: "#17191d"
+  guide-button-hover: "#e3eaf5"
+  guide-paper: "#e8ebf0"
+  guide-contour: "#e1e9f4"
 typography:
   welcome-display:
     fontFamily: 'Manrope, "Segoe UI", sans-serif'
@@ -93,21 +97,22 @@ spacing:
   guide-shell: "12px 24px 24px"
 components:
   welcome-primary:
-    backgroundColor: "{colors.welcome-accent}"
-    textColor: "{colors.welcome-ink}"
+    backgroundColor: "{colors.glass-primary}"
+    textColor: "{colors.glass-foreground}"
     typography: "{typography.welcome-button}"
     rounded: "{rounded.control-radius}"
     padding: "17px 23px"
   welcome-primary-hover:
-    backgroundColor: "{colors.welcome-accent-hover}"
+    backgroundColor: "{colors.glass-hover}"
+    textColor: "{colors.glass-hover-foreground}"
   welcome-outline:
-    backgroundColor: "{colors.glass-dark}"
-    textColor: "{colors.guide-foreground}"
+    backgroundColor: "{colors.glass-control}"
+    textColor: "{colors.glass-foreground}"
     rounded: "{rounded.control-radius}"
     padding: "13px 17px"
   welcome-outline-hover:
-    backgroundColor: "{colors.welcome-paper}"
-    textColor: "{colors.welcome-ink}"
+    backgroundColor: "{colors.glass-hover}"
+    textColor: "{colors.glass-hover-foreground}"
   scanner-primary:
     backgroundColor: "{colors.scanner-foreground}"
     textColor: "{colors.scanner-background}"
@@ -142,7 +147,7 @@ components:
 
 **Creative North Star: "Optically lit introduction, focused camera operation"**
 
-OptiFrame has two deliberate surface families. The welcome page is a Persuade surface: graphite, lime, editorial ivory, generous Manrope typography, and a dramatically lit frame concept. The scanner is an Operate surface: system typography, a nearly black camera stage, compact instructions, and one next action. Their typography and density remain separate. Rounded pill controls and a restrained glass finish now connect the welcome, scanner, and fitting workspace.
+OptiFrame has two deliberate surface families. The welcome page is a Persuade surface: charcoal, silver, slate, generous Manrope typography, and a dramatically lit frame concept. The scanner is an Operate surface: system typography, a nearly black camera stage, compact instructions, and one next action. Their typography and density remain separate. Rounded pill controls and a restrained glass finish now connect the welcome, scanner, and fitting workspace.
 
 The optional tutorial belongs to Operate even when opened from the welcome page. It uses a native dialog with the proportions and controls of a phone guide, restrained motion, and precise diagrams derived from existing captured contours. The concept image is explicitly a generated illustration; neither imagery nor diagrams imply proven physical accuracy or a certified product.
 
@@ -152,19 +157,19 @@ The optional tutorial belongs to Operate even when opened from the welcome page.
 - Minimal scanner contained within the viewport, without editorial sections or page scrolling.
 - Optional guidance with independent left and right contours and one illustrated step at a time.
 - Clear separation between a contour proposal and checked physical measurements.
-- Shared rounded controls and frosted secondary surfaces with opaque fallbacks.
+- Shared rounded controls and frosted primary and secondary surfaces with opaque fallbacks.
 
-Extracted from `web/welcome.html`, `web/welcome.css`, `web/welcome.js`, `web/simple.css`, `web/tutorial.css`, `web/tutorial.js`, and the overriding shared `web/glass.css`. Tokens describe the implemented defaults; responsive changes and interaction details follow below. Studio coverage here is limited to the shared control finish, panel shapes, and field radii.
+Extracted from `web/welcome.html`, `web/welcome.css`, `web/welcome.js`, `web/simple.css`, `web/simple.js`, `web/tutorial.css`, `web/tutorial.js`, and the overriding shared `web/glass.css`. Tokens describe the implemented defaults; responsive changes and interaction details follow below. Studio coverage here is limited to the shared control finish, panel shapes, and field radii.
 
 ## Colors
 
 ### Primary
 
-Welcome lime highlights the concluding phrase in the hero and the main scanner actions. Scanner lime is reserved for focus and aiming feedback. The tutorial uses a softer green for diagram annotations and progress. These are separate, existing colors, not aliases for a shared accent.
+Welcome silver highlights the concluding hero phrase. Primary landing actions use translucent white glass with a brighter bevel, and secondary actions use a quieter translucent fill. Scanner focus and tutorial technical annotations use pale blue. Live contour review uses cyan; exported outline previews use silver. These roles stay distinct.
 
 ### Neutral
 
-Welcome graphite supports ivory type and the illuminated image. The ivory process section reverses text to graphite, with its own muted copy and dividers. The reference-sheet image sits on a slightly lighter dark plane. Scanner near-black separates the camera stage from its surrounding controls; off-white carries the primary action. Guide charcoal, soft white, and muted gray support readable steps over a dark backdrop.
+Welcome charcoal supports silver-white type and the illuminated image. The neutral white process section reverses text to charcoal, with its own slate copy and dividers. The reference-sheet image sits on a slightly lighter dark plane. Scanner near-black separates the camera stage from its surrounding controls; off-white carries the primary action. Guide charcoal, soft white, and muted gray support readable steps over a dark backdrop.
 
 **The Surface Boundary Rule.** Preserve each surface's typography, density, and accent assignments while sharing the rounded control finish through glass.css.
 
@@ -190,11 +195,11 @@ Tutorial is optional and opens on request. Its native dialog is centered on larg
 
 Welcome depth comes from the illuminated object image, graphite field, tonal shifts, and thin rules. Its primary surfaces have no card shadows. The hero image uses `mix-blend-mode: lighten`; the generated illustration is captioned as a frame concept.
 
-Controls use an inset highlight and restrained lift shadows. Secondary controls receive frosted backgrounds when standard or WebKit backdrop filtering is supported; the guide uses a stronger blur, inset highlight, and dialog shadow. Opaque colors are declared first, and reduced-transparency preferences disable filtering. Exact shadows, filter declarations, focus, and motion values live in `.impeccable/design.json`.
+Glass controls combine translucent white fill, a reflective gradient, a bright upper bevel, a darker lower edge, and restrained lift shadows. Primary landing and secondary controls receive frosted backgrounds when standard or WebKit backdrop filtering is supported; the guide uses a stronger blur, inset highlight, and dialog shadow. Opaque colors are declared first, and reduced-transparency preferences disable filtering. Exact shadows, filter declarations, focus, and motion values live in `.impeccable/design.json`.
 
 **The Clear Camera Rule.** Apply glass to small controls and the optional dialog; keep live camera images and measurement overlays unblurred.
 
-The hero arrives once with a reveal and small translation. Tutorial motion explains reflected light, settling capture brackets, and printer layers; it does not automatically advance steps. Reduced-motion preferences disable these animations and smooth scrolling.
+The existing Higgsfield frame concept image is retained and rendered in grayscale. It settles once over 4.5 seconds with small translation, rotation, scale, and brightness changes. Fine-pointer hover triggers one 650ms reflection pass across landing glass controls; the hero and control reflections do not loop. Tutorial motion explains reflected light, settling capture brackets, and printer layers; it does not automatically advance steps. Reduced-motion preferences disable these animations and smooth scrolling.
 
 ## Shapes
 
@@ -206,7 +211,7 @@ Tutorial lens silhouettes are the two distinct captured contours from `gpu/fixtu
 
 ### Welcome actions and navigation
 
-The lime primary pill uses an inline arrow and directs users into the scanner. Secondary document and scanner navigation actions have frosted fills; the hero guide trigger is also a pill. Other inline guide links retain their text treatment. Primary hover lightens the fill and pill presses scale slightly. Keyboard focus uses a visible accent outline, with a darker green outline on the ivory section. The wordmark and scanner link stay available on mobile. Same-site scanner and home links preserve a session access fragment.
+The translucent primary glass pill uses an inline arrow and directs users into the scanner. Secondary document and scanner navigation actions have frosted fills; the hero guide trigger is also a pill. Other inline guide links retain their text treatment. Primary hover brightens its translucent fill and reflective gradient; pill presses scale slightly. Keyboard focus uses a visible accent outline, with a darker blue outline on the neutral white section. The wordmark and scanner link stay available on mobile. Same-site scanner and home links preserve a session access fragment.
 
 ### Scanner stage and controls
 

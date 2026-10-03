@@ -1,24 +1,24 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-03T22:58:18Z",
+  "generatedAt": "2026-10-03T23:02:48Z",
   "title": "Design System: OptiFrame",
   "extensions": {
     "colorMeta": {
       "welcome-accent": {
         "role": "primary",
-        "displayName": "Welcome lime"
+        "displayName": "Welcome silver"
       },
       "welcome-ink": {
         "role": "neutral",
-        "displayName": "Welcome graphite"
+        "displayName": "Welcome charcoal"
       },
       "welcome-paper": {
         "role": "neutral",
-        "displayName": "Editorial ivory"
+        "displayName": "Neutral white"
       },
       "scanner-accent": {
         "role": "primary",
-        "displayName": "Scanner focus lime"
+        "displayName": "Scanner focus pale blue"
       },
       "scanner-background": {
         "role": "neutral",
@@ -26,7 +26,7 @@
       },
       "guide-accent": {
         "role": "primary",
-        "displayName": "Guide soft green"
+        "displayName": "Guide technical pale blue"
       },
       "guide-background": {
         "role": "neutral",
@@ -35,6 +35,10 @@
       "glass-dark": {
         "role": "neutral",
         "displayName": "Opaque glass fallback"
+      },
+      "scanner-live-contour": {
+        "role": "primary",
+        "displayName": "Live contour cyan"
       }
     },
     "typographyMeta": {
@@ -82,8 +86,8 @@
       },
       {
         "name": "welcome-primary",
-        "value": "inset 0 1px 0 #ffffff80, 0 6px 18px #0002",
-        "purpose": "Lime primary pill highlight and lift."
+        "value": "inset 0 1px 0 #ffffff45, inset 0 -1px 0 #ffffff0a, 0 7px 20px #0003",
+        "purpose": "Reflective upper bevel, darker lower edge, and depth on glass controls."
       },
       {
         "name": "scanner-primary",
@@ -108,9 +112,9 @@
         "purpose": "Welcome primary and outlined action state changes."
       },
       {
-        "name": "welcome-object-arrive",
-        "value": "1.2s cubic-bezier(.16,1,.3,1) both",
-        "purpose": "One-time concept image reveal; clip-path inset(0 0 5% 15%) to inset(0), translation (20px,9px) to (0,0)."
+        "name": "welcome-frame-settle",
+        "value": "4.5s cubic-bezier(.16,1,.3,1) both",
+        "purpose": "One shot on the existing grayscale Higgsfield image: translate(10px,14px), rotate(-1.4deg), scale(.985), brightness(.8), then translate(0,-7px), rotate(.35deg), scale(1.008), brightness(1.1) at 42%, settling to neutral transform and brightness(1)."
       },
       {
         "name": "scanner-action",
@@ -146,6 +150,11 @@
         "name": "guide-action",
         "value": "background 140ms ease, transform 140ms ease",
         "purpose": "Guide action hover and press; active action scales to .98."
+      },
+      {
+        "name": "glass-reflection",
+        "value": "650ms cubic-bezier(.16,1,.3,1)",
+        "purpose": "One deliberate fine-pointer hover pass from translateX(-120%) to translateX(120%); no continuous loop. Disabled for reduced motion."
       }
     ],
     "breakpoints": [
@@ -200,24 +209,24 @@
       "name": "Welcome primary action",
       "kind": "button",
       "refersTo": "welcome-primary",
-      "description": "Lime pill action with an inset highlight on the graphite welcome surface.",
+      "description": "Translucent primary glass pill with a brighter beveled edge and bounded hover reflection.",
       "html": "<a class=\"ds-welcome-primary\" href=\"/\">Scan your lenses <svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M5 12h14m-6-6 6 6-6 6\"/></svg></a>",
-      "css": ".ds-welcome-primary{display:inline-flex;align-items:center;justify-content:space-between;gap:27px;min-height:56px;padding:17px 23px;background:var(--accent,#d5ef83);color:var(--ink,#191b19);font:700 14px Manrope,\"Segoe UI\",sans-serif;text-decoration:none;transition:background .18s,color .18s}.ds-welcome-primary svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}.ds-welcome-primary:hover{background:#e4f6b0}.ds-welcome-primary:focus-visible{outline:3px solid var(--accent,#d5ef83);outline-offset:6px}@media(prefers-reduced-motion:reduce){.ds-welcome-primary{transition:none}}.ds-welcome-primary{border-radius:var(--control-radius,999px);box-shadow:inset 0 1px 0 #ffffff80,0 6px 18px #0002;transition:background 180ms ease-out,box-shadow 180ms ease-out,transform 180ms ease-out}.ds-welcome-primary:active{transform:scale(.98)}@media(prefers-reduced-motion:reduce){.ds-welcome-primary{transition:none}.ds-welcome-primary:active{transform:none}}"
+      "css": ".ds-welcome-primary{display:inline-flex;align-items:center;justify-content:space-between;gap:27px;min-height:56px;padding:17px 23px;font:700 14px Manrope,\"Segoe UI\",sans-serif;text-decoration:none}.ds-welcome-primary svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}.ds-welcome-primary{position:relative;overflow:hidden;isolation:isolate;border:1px solid #ffffff60;border-radius:var(--control-radius,999px);background-color:#ffffff19;background-image:linear-gradient(150deg,#ffffff29 0%,#ffffff0b 45%,#ffffff03 70%,#ffffff14 100%);box-shadow:inset 0 1px 0 #ffffff45,inset 0 -1px 0 #ffffff0a,0 7px 20px #0003;color:#f8f9fc;transition:background 180ms ease-out,box-shadow 180ms ease-out,transform 180ms ease-out}.ds-welcome-primary:hover{color:#fff;background-color:#ffffff26;background-image:linear-gradient(150deg,#ffffff29,#ffffff09 65%,#ffffff18)}.ds-welcome-primary:active{transform:scale(.98)}.ds-welcome-primary:focus-visible{outline:3px solid var(--accent,#e5eaf2);outline-offset:6px}.ds-welcome-primary::after{content:\"\";position:absolute;inset:0;pointer-events:none;background:linear-gradient(110deg,transparent 30%,#ffffff22 48%,transparent 66%);transform:translateX(-120%)}@supports ((backdrop-filter:blur(16px)) or (-webkit-backdrop-filter:blur(16px))){.ds-welcome-primary{background-color:#ffffff19;-webkit-backdrop-filter:blur(16px) saturate(140%);backdrop-filter:blur(16px) saturate(140%)}.ds-welcome-primary:hover{background-color:#ffffff26}}@media(hover:hover) and (pointer:fine){.ds-welcome-primary:hover::after{animation:ds-glass-reflection 650ms cubic-bezier(.16,1,.3,1)}}@keyframes ds-glass-reflection{to{transform:translateX(120%)}}@media(prefers-reduced-transparency:reduce){.ds-welcome-primary{background:var(--glass-dark,#292d34);-webkit-backdrop-filter:none;backdrop-filter:none}}@media(prefers-reduced-motion:reduce){.ds-welcome-primary{transition:none}.ds-welcome-primary:active{transform:none}.ds-welcome-primary::after{animation:none}}"
     },
     {
       "name": "Welcome outline action",
       "kind": "button",
       "refersTo": "welcome-outline",
-      "description": "Frosted secondary document pill with an opaque fallback.",
+      "description": "Neutral frosted document pill with reflective gradient and opaque reduced-transparency fallback.",
       "html": "<a class=\"ds-welcome-outline\" href=\"/calibration-sheet.svg\">Open reference sheet <svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M6 18 18 6M6 6h12v12\"/></svg></a>",
-      "css": ".ds-welcome-outline{display:inline-flex;align-items:center;justify-content:space-between;gap:27px;min-height:50px;padding:13px 17px;border:1px solid #777d6c;color:var(--paper,#eeeee5);font:700 12px Manrope,\"Segoe UI\",sans-serif;text-decoration:none;transition:background .18s,color .18s}.ds-welcome-outline svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}.ds-welcome-outline:hover{background:var(--paper,#eeeee5);color:var(--ink,#191b19)}.ds-welcome-outline:focus-visible{outline:3px solid var(--accent,#d5ef83);outline-offset:6px}@media(prefers-reduced-motion:reduce){.ds-welcome-outline{transition:none}}.ds-welcome-outline{border-radius:var(--control-radius,999px);background:var(--glass-dark,#303432);box-shadow:var(--glass-highlight,inset 0 1px 0 #ffffff30)}@supports ((backdrop-filter:blur(16px)) or (-webkit-backdrop-filter:blur(16px))){.ds-welcome-outline{background:#343b32cc;-webkit-backdrop-filter:blur(16px) saturate(140%);backdrop-filter:blur(16px) saturate(140%)}}@media(prefers-reduced-transparency:reduce){.ds-welcome-outline{background:var(--glass-dark,#303432);-webkit-backdrop-filter:none;backdrop-filter:none}}.ds-welcome-outline{border-color:transparent;color:#f5f5f2;transition:background 180ms ease-out,box-shadow 180ms ease-out,transform 180ms ease-out}.ds-welcome-outline:active{transform:scale(.98)}@media(prefers-reduced-motion:reduce){.ds-welcome-outline{transition:none}.ds-welcome-outline:active{transform:none}}"
+      "css": ".ds-welcome-outline{display:inline-flex;align-items:center;justify-content:space-between;gap:27px;min-height:50px;padding:13px 17px;font:700 12px Manrope,\"Segoe UI\",sans-serif;text-decoration:none}.ds-welcome-outline svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}.ds-welcome-outline{position:relative;overflow:hidden;isolation:isolate;border:1px solid #ffffff30;border-radius:var(--control-radius,999px);background-color:var(--glass-dark,#292d34);background-image:linear-gradient(150deg,#ffffff29 0%,#ffffff0b 45%,#ffffff03 70%,#ffffff14 100%);box-shadow:inset 0 1px 0 #ffffff45,inset 0 -1px 0 #ffffff0a,0 7px 20px #0003;color:#f8f9fc;transition:background 180ms ease-out,box-shadow 180ms ease-out,transform 180ms ease-out}.ds-welcome-outline:hover{color:#fff;background-color:#ffffff26;background-image:linear-gradient(150deg,#ffffff29,#ffffff09 65%,#ffffff18)}.ds-welcome-outline:active{transform:scale(.98)}.ds-welcome-outline:focus-visible{outline:3px solid var(--accent,#e5eaf2);outline-offset:6px}.ds-welcome-outline::after{content:\"\";position:absolute;inset:0;pointer-events:none;background:linear-gradient(110deg,transparent 30%,#ffffff22 48%,transparent 66%);transform:translateX(-120%)}@supports ((backdrop-filter:blur(16px)) or (-webkit-backdrop-filter:blur(16px))){.ds-welcome-outline{background-color:#ffffff10;-webkit-backdrop-filter:blur(16px) saturate(140%);backdrop-filter:blur(16px) saturate(140%)}.ds-welcome-outline:hover{background-color:#ffffff26}}@media(hover:hover) and (pointer:fine){.ds-welcome-outline:hover::after{animation:ds-glass-reflection 650ms cubic-bezier(.16,1,.3,1)}}@keyframes ds-glass-reflection{to{transform:translateX(120%)}}@media(prefers-reduced-transparency:reduce){.ds-welcome-outline{background:var(--glass-dark,#292d34);-webkit-backdrop-filter:none;backdrop-filter:none}}@media(prefers-reduced-motion:reduce){.ds-welcome-outline{transition:none}.ds-welcome-outline:active{transform:none}.ds-welcome-outline::after{animation:none}}"
     },
     {
       "name": "Welcome navigation",
       "kind": "nav",
       "description": "Compact desktop links reduce to the scanner action on mobile.",
       "html": "<nav class=\"ds-welcome-nav\" aria-label=\"Main navigation\"><a class=\"ds-nav-process\" href=\"#process\">The process</a><button class=\"ds-nav-guide\" type=\"button\">Printing guide</button><a class=\"ds-nav-scan\" href=\"/\">Open scanner <svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M5 12h14m-6-6 6 6-6 6\"/></svg></a></nav>",
-      "css": ".ds-welcome-nav{display:flex;align-items:center;gap:34px;color:var(--paper,#eeeee5);font:600 13px Manrope,\"Segoe UI\",sans-serif}.ds-welcome-nav a{color:inherit;text-decoration:none}.ds-nav-guide{font:inherit;color:inherit;border:0;background:none;padding:12px 0;cursor:pointer}.ds-nav-process:hover,.ds-nav-guide:hover{color:var(--accent,#d5ef83)}.ds-nav-scan{display:flex;align-items:center;gap:16px;padding:13px 17px;border:1px solid #777d6c;transition:background .18s,color .18s}.ds-nav-scan svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}.ds-nav-scan:hover{background:var(--paper,#eeeee5);color:var(--ink,#191b19)}.ds-welcome-nav a:focus-visible,.ds-nav-guide:focus-visible{outline:3px solid var(--accent,#d5ef83);outline-offset:6px}@media(max-width:760px){.ds-welcome-nav{gap:0}.ds-nav-process,.ds-nav-guide{display:none}.ds-nav-scan{font-size:12px;border:0;padding:13px 0 13px 12px;gap:9px}}@media(prefers-reduced-motion:reduce){.ds-nav-scan{transition:none}}.ds-nav-scan{border-radius:var(--control-radius,999px);background:var(--glass-dark,#303432);box-shadow:var(--glass-highlight,inset 0 1px 0 #ffffff30)}@supports ((backdrop-filter:blur(16px)) or (-webkit-backdrop-filter:blur(16px))){.ds-nav-scan{background:#343b32cc;-webkit-backdrop-filter:blur(16px) saturate(140%);backdrop-filter:blur(16px) saturate(140%)}}@media(prefers-reduced-transparency:reduce){.ds-nav-scan{background:var(--glass-dark,#303432);-webkit-backdrop-filter:none;backdrop-filter:none}}.ds-nav-scan{border-color:transparent;color:#f5f5f2;transition:background 180ms ease-out,box-shadow 180ms ease-out,transform 180ms ease-out}.ds-nav-scan:active{transform:scale(.98)}@media(max-width:760px){.ds-nav-scan{padding:12px 15px}}@media(prefers-reduced-motion:reduce){.ds-nav-scan{transition:none}.ds-nav-scan:active{transform:none}}"
+      "css": ".ds-welcome-nav{display:flex;align-items:center;gap:34px;color:var(--paper,#f2f2f2);font:600 13px Manrope,\"Segoe UI\",sans-serif}.ds-welcome-nav a{text-decoration:none}.ds-nav-process{color:inherit}.ds-nav-guide{font:inherit;color:inherit;border:0;background:none;padding:12px 0;cursor:pointer}.ds-nav-process:hover,.ds-nav-guide:hover{color:var(--accent,#e5eaf2)}.ds-nav-scan{display:flex;align-items:center;gap:16px;padding:13px 17px}.ds-nav-scan svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}.ds-nav-scan{position:relative;overflow:hidden;isolation:isolate;border:1px solid #ffffff30;border-radius:var(--control-radius,999px);background-color:var(--glass-dark,#292d34);background-image:linear-gradient(150deg,#ffffff29 0%,#ffffff0b 45%,#ffffff03 70%,#ffffff14 100%);box-shadow:inset 0 1px 0 #ffffff45,inset 0 -1px 0 #ffffff0a,0 7px 20px #0003;color:#f8f9fc;transition:background 180ms ease-out,box-shadow 180ms ease-out,transform 180ms ease-out}.ds-nav-scan:hover{color:#fff;background-color:#ffffff26;background-image:linear-gradient(150deg,#ffffff29,#ffffff09 65%,#ffffff18)}.ds-nav-scan:active{transform:scale(.98)}.ds-nav-scan:focus-visible{outline:3px solid var(--accent,#e5eaf2);outline-offset:6px}.ds-nav-scan::after{content:\"\";position:absolute;inset:0;pointer-events:none;background:linear-gradient(110deg,transparent 30%,#ffffff22 48%,transparent 66%);transform:translateX(-120%)}@supports ((backdrop-filter:blur(16px)) or (-webkit-backdrop-filter:blur(16px))){.ds-nav-scan{background-color:#ffffff10;-webkit-backdrop-filter:blur(16px) saturate(140%);backdrop-filter:blur(16px) saturate(140%)}.ds-nav-scan:hover{background-color:#ffffff26}}@media(hover:hover) and (pointer:fine){.ds-nav-scan:hover::after{animation:ds-glass-reflection 650ms cubic-bezier(.16,1,.3,1)}}@keyframes ds-glass-reflection{to{transform:translateX(120%)}}@media(prefers-reduced-transparency:reduce){.ds-nav-scan{background:var(--glass-dark,#292d34);-webkit-backdrop-filter:none;backdrop-filter:none}}@media(prefers-reduced-motion:reduce){.ds-nav-scan{transition:none}.ds-nav-scan:active{transform:none}.ds-nav-scan::after{animation:none}}.ds-nav-process:focus-visible,.ds-nav-guide:focus-visible{outline:3px solid var(--accent,#e5eaf2);outline-offset:6px}@media(max-width:760px){.ds-welcome-nav{gap:0}.ds-nav-process,.ds-nav-guide{display:none}.ds-nav-scan{font-size:12px;padding:12px 15px;gap:9px}}"
     },
     {
       "name": "Scanner primary action",
@@ -225,7 +234,7 @@
       "refersTo": "scanner-primary",
       "description": "System-font confirmation action; no landing typography.",
       "html": "<button class=\"ds-scanner-primary\" type=\"button\">Confirm</button>",
-      "css": ".ds-scanner-primary{min-height:48px;padding:0 30px;border:0;border-radius:var(--control-radius,999px);box-shadow:inset 0 1px 0 #fff9,0 5px 16px #0002;background:#f5f5f5;color:#101112;font:600 .9375rem -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;cursor:pointer;transition:opacity .16s ease-out}.ds-scanner-primary:focus-visible{outline:2px solid #c8fa72;outline-offset:4px}.ds-scanner-primary:not(:disabled):active{background:#d7d8da}.ds-scanner-primary:disabled{opacity:.35;cursor:default}@media(prefers-reduced-motion:reduce){.ds-scanner-primary{transition-duration:.01ms}}"
+      "css": ".ds-scanner-primary{min-height:48px;padding:0 30px;border:0;border-radius:var(--control-radius,999px);box-shadow:inset 0 1px 0 #fff9,0 5px 16px #0002;background:#f5f5f5;color:#101112;font:600 .9375rem -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;cursor:pointer;transition:opacity .16s ease-out}.ds-scanner-primary:focus-visible{outline:2px solid #c6defa;outline-offset:4px}.ds-scanner-primary:not(:disabled):active{background:#d7d8da}.ds-scanner-primary:disabled{opacity:.35;cursor:default}@media(prefers-reduced-motion:reduce){.ds-scanner-primary{transition-duration:.01ms}}"
     },
     {
       "name": "Scanner shutter",
@@ -233,7 +242,7 @@
       "refersTo": "scanner-shutter",
       "description": "Circular capture control with a distinct inset core and press feedback.",
       "html": "<button class=\"ds-shutter\" type=\"button\" aria-label=\"Capture lens\"><span class=\"ds-shutter-core\"></span></button>",
-      "css": ".ds-shutter{width:72px;height:72px;min-height:72px;padding:4px;border:2px solid #f5f5f5;border-radius:50%;background:transparent;cursor:pointer}.ds-shutter-core{display:block;width:100%;height:100%;border-radius:50%;background:#f5f5f5;transition:transform .16s ease-out}.ds-shutter:focus-visible{outline:2px solid #c8fa72;outline-offset:4px}.ds-shutter:not(:disabled):active .ds-shutter-core{transform:scale(.91)}.ds-shutter:disabled{opacity:.35;cursor:default}@media(max-height:640px){.ds-shutter{width:56px;height:56px;min-height:56px}}@media(prefers-reduced-motion:reduce){.ds-shutter-core{transition-duration:.01ms}}.ds-shutter{box-shadow:0 4px 20px #0003}"
+      "css": ".ds-shutter{width:72px;height:72px;min-height:72px;padding:4px;border:2px solid #f5f5f5;border-radius:50%;background:transparent;cursor:pointer}.ds-shutter-core{display:block;width:100%;height:100%;border-radius:50%;background:#f5f5f5;transition:transform .16s ease-out}.ds-shutter:focus-visible{outline:2px solid #c6defa;outline-offset:4px}.ds-shutter:not(:disabled):active .ds-shutter-core{transform:scale(.91)}.ds-shutter:disabled{opacity:.35;cursor:default}@media(max-height:640px){.ds-shutter{width:56px;height:56px;min-height:56px}}@media(prefers-reduced-motion:reduce){.ds-shutter-core{transition-duration:.01ms}}.ds-shutter{box-shadow:0 4px 20px #0003}"
     },
     {
       "name": "Guide next action",
@@ -241,14 +250,14 @@
       "refersTo": "guide-next",
       "description": "Soft white guide action; the final step uses a task-specific close label.",
       "html": "<button class=\"ds-guide-next\" type=\"button\">Next</button>",
-      "css": ".ds-guide-next{min-height:48px;border:0;border-radius:var(--control-radius,999px);box-shadow:inset 0 1px 0 #fff9,0 4px 12px #0002;padding:0 18px;background:var(--oft-fg,#f5f5f2);color:#151915;font:600 15px/1.5 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;cursor:pointer;transition:background 140ms ease,transform 140ms ease}.ds-guide-next:hover{background:#e3eadf}.ds-guide-next:focus-visible{outline:2px solid var(--oft-accent,#d4ecba);outline-offset:3px}.ds-guide-next:active{transform:scale(.98)}@media(prefers-reduced-motion:reduce){.ds-guide-next{transition:none}}"
+      "css": ".ds-guide-next{min-height:48px;border:0;border-radius:var(--control-radius,999px);box-shadow:inset 0 1px 0 #fff9,0 4px 12px #0002;padding:0 18px;background:var(--oft-fg,#f5f6f8);color:#17191d;font:600 15px/1.5 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;cursor:pointer;transition:background 140ms ease,transform 140ms ease}.ds-guide-next:hover{background:#e3eaf5}.ds-guide-next:focus-visible{outline:2px solid var(--oft-accent,#d6e5f8);outline-offset:3px}.ds-guide-next:active{transform:scale(.98)}@media(prefers-reduced-motion:reduce){.ds-guide-next{transition:none}}"
     },
     {
       "name": "Guide progress",
       "kind": "custom",
       "description": "Small current-step marks inside direct-navigation touch targets.",
       "html": "<nav class=\"ds-guide-dots\" aria-label=\"Guide steps\"><button class=\"ds-guide-dot\" type=\"button\" aria-label=\"Step 1: Print to scale\" aria-current=\"step\"><span></span></button><button class=\"ds-guide-dot\" type=\"button\" aria-label=\"Step 2: Four dots. One lens.\"><span></span></button><button class=\"ds-guide-dot\" type=\"button\" aria-label=\"Step 3: Give the edge good light\"><span></span></button></nav>",
-      "css": ".ds-guide-dots{display:flex;align-items:center;justify-content:center;margin-bottom:10px}.ds-guide-dot{display:grid;place-items:center;width:44px;height:44px;min-height:44px;padding:0;border:0;border-radius:50%;background:transparent;cursor:pointer}.ds-guide-dot span{width:5px;height:5px;border-radius:4px;background:#747e75;transition:width 180ms ease,background 180ms ease}.ds-guide-dot[aria-current] span{width:19px;background:var(--oft-accent,#d4ecba)}.ds-guide-dot:hover span{background:var(--oft-fg,#f5f5f2)}.ds-guide-dot:focus-visible{outline:2px solid var(--oft-accent,#d4ecba);outline-offset:3px}@media(prefers-reduced-motion:reduce){.ds-guide-dot span{transition:none}}@media(max-height:570px){.ds-guide-dot{width:32px;height:44px;min-height:44px}}"
+      "css": ".ds-guide-dots{display:flex;align-items:center;justify-content:center;margin-bottom:10px}.ds-guide-dot{display:grid;place-items:center;width:44px;height:44px;min-height:44px;padding:0;border:0;border-radius:50%;background:transparent;cursor:pointer}.ds-guide-dot span{width:5px;height:5px;border-radius:4px;background:#747e8c;transition:width 180ms ease,background 180ms ease}.ds-guide-dot[aria-current] span{width:19px;background:var(--oft-accent,#d6e5f8)}.ds-guide-dot:hover span{background:var(--oft-fg,#f5f6f8)}.ds-guide-dot:focus-visible{outline:2px solid var(--oft-accent,#d6e5f8);outline-offset:3px}@media(prefers-reduced-motion:reduce){.ds-guide-dot span{transition:none}}@media(max-height:570px){.ds-guide-dot{width:32px;height:44px;min-height:44px}}"
     },
     {
       "name": "Frosted guide shell",
@@ -256,18 +265,18 @@
       "refersTo": "guide-dialog",
       "description": "Native dialog finish with opaque fallback, stronger supported blur, and reduced-transparency override; the camera itself remains unblurred.",
       "html": "<dialog open class=\"ds-guide-shell\" aria-labelledby=\"ds-guide-title\"><h2 id=\"ds-guide-title\">Check the real dimensions</h2><p>Compare each width and height with a ruler or calipers before printing. Take an independent photo to check the result.</p></dialog>",
-      "css": ".ds-guide-shell{width:min(480px,calc(100vw - 32px));max-width:none;max-height:calc(100dvh - 32px);padding:12px 24px 24px;border:0;border-radius:30px;background:#262b28;color:var(--oft-fg,#f5f5f2);box-shadow:inset 0 1px 0 #ffffff29,0 24px 80px #0007;font:400 15px/1.5 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif}.ds-guide-shell::backdrop{background:#03050496}.ds-guide-shell h2{margin:0 0 10px;font-size:26px;line-height:1.12;font-weight:600;letter-spacing:-.025em}.ds-guide-shell p{max-width:42ch;margin:0;color:var(--oft-muted,#b1b5b1)}@supports ((backdrop-filter:blur(16px)) or (-webkit-backdrop-filter:blur(16px))){.ds-guide-shell{background:#252a26ed;-webkit-backdrop-filter:blur(24px) saturate(125%);backdrop-filter:blur(24px) saturate(125%)}}@media(prefers-reduced-transparency:reduce){.ds-guide-shell{background:var(--glass-dark,#303432);-webkit-backdrop-filter:none;backdrop-filter:none}}"
+      "css": ".ds-guide-shell{width:min(480px,calc(100vw - 32px));max-width:none;max-height:calc(100dvh - 32px);padding:12px 24px 24px;border:0;border-radius:30px;background:#262a32;color:var(--oft-fg,#f5f6f8);box-shadow:inset 0 1px 0 #ffffff29,0 24px 80px #0007;font:400 15px/1.5 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif}.ds-guide-shell::backdrop{background:#03050496}.ds-guide-shell h2{margin:0 0 10px;font-size:26px;line-height:1.12;font-weight:600;letter-spacing:-.025em}.ds-guide-shell p{max-width:42ch;margin:0;color:var(--oft-muted,#b6bdc8)}@supports ((backdrop-filter:blur(16px)) or (-webkit-backdrop-filter:blur(16px))){.ds-guide-shell{background:#20242be6;-webkit-backdrop-filter:blur(24px) saturate(125%);backdrop-filter:blur(24px) saturate(125%)}}@media(prefers-reduced-transparency:reduce){.ds-guide-shell{background:var(--glass-dark,#292d34);-webkit-backdrop-filter:none;backdrop-filter:none}}"
     }
   ],
   "narrative": {
     "northStar": "Optically lit introduction, focused camera operation",
-    "overview": "OptiFrame has two deliberate surface families. The welcome page is a Persuade surface: graphite, lime, editorial ivory, generous Manrope typography, and a dramatically lit frame concept. The scanner is an Operate surface: system typography, a nearly black camera stage, compact instructions, and one next action. Their typography and density remain separate. Rounded pill controls and a restrained glass finish now connect the welcome, scanner, and fitting workspace.\n\nThe optional tutorial belongs to Operate even when opened from the welcome page. It uses a native dialog with the proportions and controls of a phone guide, restrained motion, and precise diagrams derived from existing captured contours. The concept image is explicitly a generated illustration; neither imagery nor diagrams imply proven physical accuracy or a certified product.",
+    "overview": "OptiFrame has two deliberate surface families. The welcome page is a Persuade surface: charcoal, silver, slate, generous Manrope typography, and a dramatically lit frame concept. The scanner is an Operate surface: system typography, a nearly black camera stage, compact instructions, and one next action. Their typography and density remain separate. Rounded pill controls and a restrained glass finish now connect the welcome, scanner, and fitting workspace.\n\nThe optional tutorial belongs to Operate even when opened from the welcome page. It uses a native dialog with the proportions and controls of a phone guide, restrained motion, and precise diagrams derived from existing captured contours. The concept image is explicitly a generated illustration; neither imagery nor diagrams imply proven physical accuracy or a certified product.",
     "keyCharacteristics": [
       "Expressive, scrollable introduction with an optically lit concept hero.",
       "Minimal scanner contained within the viewport, without editorial sections or page scrolling.",
       "Optional guidance with independent left and right contours and one illustrated step at a time.",
       "Clear separation between a contour proposal and checked physical measurements.",
-      "Shared rounded controls and frosted secondary surfaces with opaque fallbacks."
+      "Shared rounded controls and frosted primary and secondary surfaces with opaque fallbacks."
     ],
     "rules": [
       {

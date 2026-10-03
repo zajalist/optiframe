@@ -1,4 +1,4 @@
-import { createLiveSegmentSession } from './live-segment.js?v=11';
+import { createLiveSegmentSession } from './live-segment.js?v=14';
 import { sheetHomography, project, measure } from './calibration.js';
 import { detectSheetMarkers } from './marker-detect.js?v=9';
 
@@ -107,7 +107,7 @@ function drawAimTarget(target) {
   aimLoupeContext.imageSmoothingEnabled = true;
   aimLoupeContext.drawImage(source, sourceLeft, sourceTop, sourceWidth, sourceHeight,
     destLeft, destTop, sourceWidth * 160 / sample, sourceHeight * 160 / sample);
-  aimLoupeContext.strokeStyle = '#c8fa72';
+  aimLoupeContext.strokeStyle = '#58c9ff';
   aimLoupeContext.lineWidth = 2;
   aimLoupeContext.beginPath();
   aimLoupeContext.moveTo(80, 51); aimLoupeContext.lineTo(80, 73);
@@ -209,7 +209,7 @@ function renderReview(capture) {
   reviewContext.beginPath();
   capture.contour.forEach(([x, y], index) => index ? reviewContext.lineTo(x, y) : reviewContext.moveTo(x, y));
   reviewContext.closePath();
-  reviewContext.strokeStyle = '#bcf26b';
+  reviewContext.strokeStyle = '#58c9ff';
   reviewContext.lineWidth = Math.max(3, capture.width / 350);
   reviewContext.stroke();
   capture.markers.forEach(([x, y], index) => {
@@ -235,7 +235,7 @@ function drawResult(capture, pathId = 'result-path') {
   const offsetY = 15 + (150 - spanY * scale) / 2;
   const path = $(pathId);
   path.setAttribute('fill', 'none');
-  path.setAttribute('stroke', '#e5efdc');
+  path.setAttribute('stroke', '#e5eaf2');
   path.setAttribute('stroke-width', '2');
   path.setAttribute('d', points.map(([x, y], index) =>
     `${index ? 'L' : 'M'}${(offsetX + (x - minX) * scale).toFixed(2)},${(offsetY + (y - minY) * scale).toFixed(2)}`).join(' ') + ' Z');

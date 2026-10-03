@@ -2,15 +2,14 @@
    never on the live image or measurement overlays. Opaque fallbacks come first. */
 :root {
   --control-radius: 999px;
-  --glass-dark: #303432;
+  --glass-dark: #292d34;
   --glass-highlight: inset 0 1px 0 #ffffff30;
 }
 .button, .nav-scan, .primary:not(.shutter), #camera-retry,
 .photo-import, .help-button, .secondary, .lens-caption button,
 .oft-back, .oft-next { border-radius: var(--control-radius); }
 .button, .nav-scan { transition: background 180ms ease-out, box-shadow 180ms ease-out, transform 180ms ease-out; }
-.button-primary { background: #d5ef83; box-shadow: inset 0 1px 0 #ffffff80, 0 6px 18px #0002; }
-.button-primary:hover { background: #e4f6b0; }
+.button-primary { background: var(--glass-dark); color: #fff; }
 .button:active, .nav-scan:active { transform: scale(.98); }
 .nav-scan, .button-outline {
   background: var(--glass-dark); border-color: transparent;
@@ -20,22 +19,22 @@
   min-height: 48px; padding: 0 17px; border-radius: var(--control-radius);
   background: var(--glass-dark); box-shadow: var(--glass-highlight);
 }
-.hero-actions .text-action:hover { background: #424843; text-decoration: none; }
+.hero-actions .text-action:hover { background: #414751; text-decoration: none; }
 .reference-sheet { border-radius: 24px; }
 .stage { border-radius: 24px; }
 .header-actions { gap: 12px; }
 .help-button { padding: 0 15px; background: var(--glass-dark); box-shadow: var(--glass-highlight); }
 .photo-import {
-  padding: 0 15px; border-color: transparent; background: #262c29;
+  padding: 0 15px; border-color: transparent; background: #262c35;
   box-shadow: var(--glass-highlight), 0 4px 16px #0003;
 }
 .secondary, .lens-caption button {
   background: var(--glass-dark); box-shadow: var(--glass-highlight);
 }
-.secondary:hover, .lens-caption button:hover { background: #424843; text-decoration: none; }
+.secondary:hover, .lens-caption button:hover { background: #414751; text-decoration: none; }
 .primary:not(.shutter), #camera-retry { box-shadow: inset 0 1px 0 #fff9, 0 5px 16px #0002; }
 .primary.shutter { box-shadow: 0 4px 20px #0003; }
-.oft-dialog { border-radius: 30px; background: #262b28; box-shadow: inset 0 1px 0 #ffffff29, 0 24px 80px #0007; }
+.oft-dialog { border-radius: 30px; background: #262a32; box-shadow: inset 0 1px 0 #ffffff29, 0 24px 80px #0007; }
 .oft-dialog::backdrop { background: #03050496; }
 .oft-back, .oft-close { background: #ffffff0e; box-shadow: var(--glass-highlight); }
 .oft-back:hover:not(:disabled), .oft-close:hover { background: #ffffff1c; }
@@ -50,20 +49,58 @@ body[data-surface="studio"] .outline-review svg,
 body[data-surface="studio"] input[type=number],
 body[data-surface="studio"] .proposal-select { border-radius: 14px; }
 body[data-surface="studio"] .site-header .tutorial-trigger {
-  padding: 0 16px; background: #e6ebe4; box-shadow: inset 0 1px 0 #fffc;
+  padding: 0 16px; background: #e6eaf0; box-shadow: inset 0 1px 0 #fffc;
 }
 @supports ((backdrop-filter: blur(16px)) or (-webkit-backdrop-filter: blur(16px))) {
-  .nav-scan, .button-outline, .hero-actions .text-action,
+  .button-primary, .nav-scan, .button-outline, .hero-actions .text-action,
   .photo-import, .help-button, .secondary, .lens-caption button {
-    background: #343b32cc;
+    background-color: #ffffff10;
     -webkit-backdrop-filter: blur(16px) saturate(140%);
     backdrop-filter: blur(16px) saturate(140%);
   }
   .oft-dialog {
-    background: #252a26ed;
+    background: #20242be6;
     -webkit-backdrop-filter: blur(24px) saturate(125%);
     backdrop-filter: blur(24px) saturate(125%);
   }
+}
+/* Light catches the upper bevel; the darker lower edge gives glass thickness.
+   A bounded reflection moves only on deliberate hover/press, never in the camera. */
+.button-primary, .nav-scan, .button-outline, .hero-actions .text-action,
+.photo-import, .help-button, .secondary, .lens-caption button {
+  isolation: isolate;
+  border: 1px solid #ffffff30;
+  background-image: linear-gradient(150deg, #ffffff29 0%, #ffffff0b 45%, #ffffff03 70%, #ffffff14 100%);
+  box-shadow: inset 0 1px 0 #ffffff45, inset 0 -1px 0 #ffffff0a, 0 7px 20px #0003;
+  color: #f8f9fc;
+}
+.button-primary { border-color: #ffffff60; background-color: #ffffff19; }
+.button-primary:hover, .nav-scan:hover, .button-outline:hover,
+.hero-actions .text-action:hover, .help-button:hover {
+  color: #fff;
+  background-color: #ffffff26;
+  background-image: linear-gradient(150deg, #ffffff29, #ffffff09 65%, #ffffff18);
+}
+.button, .nav-scan, .hero-actions .text-action { position: relative; overflow: hidden; }
+.button::after, .nav-scan::after, .hero-actions .text-action::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(110deg, transparent 30%, #ffffff22 48%, transparent 66%);
+  transform: translateX(-120%);
+}
+@media (hover: hover) and (pointer: fine) {
+  .button:hover::after, .nav-scan:hover::after,
+  .hero-actions .text-action:hover::after { animation: glass-reflection 650ms cubic-bezier(.16,1,.3,1); }
+}
+.hero-object img {
+  filter: grayscale(1);
+  animation: frame-settle 4.5s cubic-bezier(.16,1,.3,1) both;
+  transform-origin: 70% 55%;
+}
+@keyframes glass-reflection { to { transform: translateX(120%); } }
+@keyframes frame-settle {
+  0% { transform: translate(10px,14px) rotate(-1.4deg) scale(.985); filter: grayscale(1) brightness(.8); }
+  42% { transform: translate(0,-7px) rotate(.35deg) scale(1.008); filter: grayscale(1) brightness(1.1); }
+  100% { transform: translate(0,0) rotate(0) scale(1); filter: grayscale(1) brightness(1); }
 }
 @media (max-width: 760px) {
   .site-header .nav-scan { padding: 12px 15px; }
@@ -79,11 +116,12 @@ body[data-surface="studio"] .site-header .tutorial-trigger {
   .oft-dialog .oft-dot { width: 32px; height: 44px; min-height: 44px; }
 }
 @media (prefers-reduced-transparency: reduce) {
-  .nav-scan, .button-outline, .hero-actions .text-action,
+  .button-primary, .nav-scan, .button-outline, .hero-actions .text-action,
   .photo-import, .help-button, .secondary, .lens-caption button,
   .oft-dialog { background: var(--glass-dark); -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .button, .nav-scan { transition: none; }
   .button:active, .nav-scan:active { transform: none; }
+  .hero-object img, .button::after, .nav-scan::after, .hero-actions .text-action::after { animation: none; }
 }
