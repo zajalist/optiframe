@@ -1,0 +1,23 @@
+name: iPhone capture
+on:
+  push:
+    paths:
+      - 'ios/**'
+      - '.github/workflows/ios.yml'
+  workflow_dispatch:
+jobs:
+  simulator:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate Xcode project
+        run: |
+          brew install xcodegen
+          cd ios
+          xcodegen generate
+      - name: Build unsigned simulator app
+        run: |
+          xcodebuild -project ios/OptiFrameCapture.xcodeproj -scheme OptiFrameCapture -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+      - name: Run capture math tests
+        run: |
+          xcodebuild -project ios/OptiFrameCapture.xcodeproj -scheme OptiFrameCapture -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' CODE_SIGNING_ALLOWED=NO test
