@@ -33,10 +33,12 @@ python -m pip install -r gpu/requirements.txt
 python -m uvicorn segment:app --app-dir gpu --host 127.0.0.1 --port 8765
 ```
 
-Open <http://127.0.0.1:8765>. The web app imports iPhone capture ZIPs or phone photos, proposes lens edges with image difference and GPU SAM, lets you edit each contour, and calibrates each lens independently. After marking both optical centres and entering wearer measurements, it previews the 3D front and downloads five closed STL parts. See [GPU service and frame export](gpu/README.md) and [iPhone capture app](ios/README.md).
+Open <http://127.0.0.1:8765>. The web app imports iPhone capture ZIPs, videos or phone photos, proposes lens edges with image difference and GPU SAM, lets you edit each contour, and calibrates each lens independently. After marking both optical centres and entering wearer measurements, it previews the 3D front and downloads one five-part build-plate STL plus individual closed part STLs. See [GPU service and frame export](gpu/README.md) and [iPhone capture app](ios/README.md).
 
 ## Status
 
 This is an **experimental printable prototype**, not a validated medical device or proven lens fit. Four-marker perspective rectification and in-phone caliper/repeat benchmarks are implemented. Measurement-checked export requires both lenses to pass width and height discrepancies ≤ 0.5 mm against actual calipers and an independent capture, saved-outline edge repeatability ≤ 0.5 mm after centroid translation, and confirmation of physically verified print scale. Keep the same top orientation across captures. An explicitly UNVERIFIED experimental export remains available for fit tests. The reported source/working mm per pixel includes image downsampling and does not establish edge accuracy. Run the synthetic calibration/browser tests with `node --test web/calibration.test.mjs web/measurement.test.mjs`.
 
 Android web camera capture works without ARCore and offers experimental WebXR depth capture where the browser/device supports it. Depth and raw point clouds are experimental evidence; they are not used to size clear lenses. No physical measurement accuracy or lens fit is claimed until the actual lenses and printer pass the [validation protocol](docs/validation.md).
+
+The synthetic five-part plate imported as manifold and sliced in PrusaSlicer 2.9.6 with generic settings; see the exact dimensions and limits in the [validation record](docs/validation.md). Run the local timing benchmark with `python gpu/benchmark.py --iterations 5`.
