@@ -70,6 +70,8 @@ If prescriptions are missing or a lens is unsuitable, do not label the pair read
 
 PrusaSlicer 2.9.6 console imported the downloaded-format `plate.stl` generated from two synthetic asymmetric ellipses (25 × 19 and 23 × 17 mm radii; 32/31 mm monocular PD). It reported a **manifold mesh with 5 parts**, dimensions **212.19 × 99.19 × 13.50 mm**, and minimum Z=0. With a generic 220 × 220 mm bed, 0.4 mm nozzle, 0.2 mm layers and support enabled, it exported G-code without mesh repair or scaling. The generic estimate was 2 h 5 m and 17.77 cm³ filament. This checks software slicing of one sample only; the user's printer/material profile and physical lens fit remain untested. The temporary G-code is not a printer-ready file for an unknown machine.
 
+The later independent-thickness/height version was also imported through PrusaSlicer `--info` with left/right edge thickness 2.2/3.1 mm and optical-centre heights +1.5/−1 mm. It reported 5 manifold parts, 212.20 × 99.17 × 13.50 mm and minimum Z=0. This is an import/mesh check; it was not sliced with the user's printer profile.
+
 - [ ] The **downloaded** STL, not just the in-app preview, opens in a slicer.
 - [ ] It contains the front and every other custom printed part; required screws or other hardware are listed.
 - [ ] Each mesh is closed; the slicer reports no repair or missing surfaces.
