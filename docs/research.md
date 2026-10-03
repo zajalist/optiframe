@@ -83,6 +83,16 @@ Safari **can** launch Apple's AR Quick Look from a website using a USDZ model. T
 
 **Decision:** keep the core capture, measurement, frame generation, and slicer-ready STL in a normal mobile web app. Use the phone camera plus a printed scale board for lens measurements and a browser 3D preview. Add USDZ/Quick Look only if time remains. A separate native iOS capture helper would be an additional product, not a web-only implementation.
 
+## 8. Would phone point clouds improve lens detection?
+
+Probably not for the lens contour. Apple says its scene-depth map is lower resolution than the camera image and that reflective surfaces can reduce depth accuracy. Transparent-object research reports missing or corrupted RGB-D measurements because of refraction and reflection; a sensor may report the background behind the lens instead of the lens surface. A point cloud can therefore look sparse or plausible while giving the wrong edge. [Apple ARKit 4 depth explanation](https://developer-rno.apple.com/jp/videos/play/wwdc2020/10611/), [transparent-object RGB-D research](https://arxiv.org/abs/2104.00622), [glass point-cloud completion research](https://arxiv.org/abs/2110.00087)
+
+**More reliable experiment for a clear lens:** use a fixed printed capture sheet with fiducials outside the lens area and a fine background pattern. Take one image of the empty sheet and one with the lens, align them using the fiducials, and look for the refracted/distorted pattern plus the visible rim. Research on transparent-object reconstruction uses a coded background because the pattern's displacement contains information about the object's silhouette and refraction. Our two-photo contour method is a simpler inference to test, not a proven precision scanner. [Differentiable refraction-tracing paper](https://arxiv.org/abs/2009.09144)
+
+Try a plain dark/light background and edge lighting first. If it is unreliable, try the two-photo patterned sheet. In either case, show the detected outline over the high-resolution photo and let the user correct it. Reject images with a hidden edge rather than inventing one. Evaluate against calipers and repeated captures on the exact demo lenses.
+
+**Phone app choice:** an installable progressive web app satisfies the stated mobile-web requirement and works on a phone camera. A native iOS app could access ARKit, but would change the delivery format and require supported Apple hardware. Even in a native app, use the high-resolution image and scale reference for lens-edge measurement; a face point cloud could be optional fit assistance later.
+
 ## Open risks and scope limits
 
 | Risk | Early test or response |
