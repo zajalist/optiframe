@@ -1,0 +1,27 @@
+name: Python and web tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install CPU test dependencies
+        # SAM/CUDA are loaded only by sam_mask; deterministic tests need neither.
+        run: python -m pip install fastapi python-multipart numpy opencv-python-headless Pillow shapely trimesh mapbox-earcut manifold3d httpx
+      - name: Python unit tests
+        run: python -m unittest discover -s gpu -p 'test_*.py' -v
+      - name: Web unit tests
+        run: node --test web/*.test.mjs

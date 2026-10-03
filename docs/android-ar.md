@@ -1,0 +1,55 @@
+# Android AR depth phone test
+
+Open `/android-ar.html` in **Android Chrome** on a depth supported ARCore phone. This is a capture experiment, not a lens measurement feature. No phone has been validated by this implementation yet.
+
+## Get to the page quickly
+
+Use the project's running web service over HTTPS. Alternatively connect an Android phone by USB, enable USB debugging, and forward the existing server port:
+
+```powershell
+adb reverse tcp:8765 tcp:8765
+```
+
+On the phone open `http://localhost:8765/android-ar.html`. Chrome DevTools port forwarding is another supported option. A plain `http://192.168.…` LAN URL is **not** a secure context for WebXR. Google Play Services for AR must be installed and enabled. Camera permission and CPU depth support are checked when starting; `isSessionSupported` alone cannot prove depth support.
+
+This page also works with a standalone static server for a quick experiment (no GPU service needed):
+
+```powershell
+python -m http.server 8765 --bind 127.0.0.1 --directory web
+```
+
+Photo processing requires the full service described in the README.
+
+## Fifteen-second experiment
+
+1. First scan an opaque object near a patterned board, 0.5–1 m away. Tap **Start 15-second AR scan**, accept camera access and move slowly. The heatmap shows sampled depth: brighter is nearer, black is invalid or outside the 5 m export range.
+2. Capture stops after 15 seconds, 60 successful frames, or four million raw depth entries. Stop manually from the overlay if available. Without DOM overlay the browser's exit control and automatic stop remain available.
+3. After leaving AR, download JSON and PLY separately. Confirm Chrome saves both nonempty files. Starting again replaces the in-memory capture. Reloading loses unsaved data.
+4. Repeat with the upright clear lens and an empty stand. Keep lens/board fixed during each scan. Record phone model, Android/Chrome versions, frame count, valid samples, board offset, lighting and caliper dimensions in validation notes.
+5. Inspect whether the cloud follows the board instead of the lens. The normal photo flow remains the reference contour and fallback when this test fails.
+
+## Export contract and limits
+
+`optiframe-webxr-depth-v1` JSON contains full raw row-major depth values per captured view, depth width/height, selected format, `rawValueToMeters`, the normalized view-to-depth-buffer transform, projection matrix, view-to-local matrix, viewer-to-local matrix, timestamps relative to session setup, tracking diagnostics, and a 32 × 24 grid of sampled view UVs with metric depth and local XYZ. Invalid samples are `null`. Raw float NaNs/infinities are encoded as `null`; zero depth remains zero. For luminance-alpha raw values are unsigned 16-bit entries. Multiply raw values by `rawValueToMeters` to obtain metres.
+
+Sampling uses `getDepthInMeters(u,v)` so the runtime applies depth orientation/UV mapping. Back-projection inverts the view projection, treats depth as axial distance from the camera plane, then transforms by the view pose. PLY concatenates valid 0–5 m samples; units are **metres**, axes are WebXR local (Y up, camera forward -Z). Projection and pose matrices are column-major. The XR origin is arbitrary and different on each scan. A reference-space reset stops capture to avoid combining different origins.
+
+No RGB photos, native raw-depth confidence, fiducial board pose, board registration, lens-volume crop, outlier removal, fusion, mesh or accuracy estimate is generated. The PLY is the scene, including background, with repeated samples. Compare raw maps and repeated scans before using any geometry. Transparent lenses can yield board depth or missing depth. This export is not imported into OptiFrame's frame design and provides no lens dimensions.
+
+## Runnable numerical check
+
+From the repo root, run the following Node check. It checks inverse projection, image Y direction, axial rather than radial depth, pose rotation/translation, rejection of invalid depth and PLY counts. It requires no browser or dependencies.
+
+```powershell
+node -e 'const a=require("node:assert/strict"),m=require("./web/android-ar.js"); const p=[1,0,0,0,0,1,0,0,0,0,-1.02,-1,0,0,-.202,0],i=m.inverseMatrix(p),pose=[0,0,-1,0,0,1,0,0,1,0,0,0,1,2,3,1]; function near(actual,expected){actual.forEach((v,k)=>a.ok(Math.abs(v-expected[k])<1e-8));} near(m.backProject(.5,.5,2,i,pose),[-1,2,3]); near(m.backProject(.75,.25,2,i,pose),[-1,3,2]); near(m.multiplyPoint(p,m.multiplyPoint(i,[.5,.25,-1,1])),[.5,.25,-1,1]); a.equal(m.backProject(.5,.5,0,i,pose),null); a.equal(m.backProject(.5,.5,NaN,i,pose),null); const ply=m.pointCloudPLY([{views:[{samples:[{point:[1,2,3]},{point:null}]}]}]); a.ok(ply.includes("element vertex 1")); a.ok(ply.endsWith("1 2 3\n")); console.log("Android depth math/export checks passed");'
+node --check web/android-ar.js
+```
+
+These checks do not validate physical depth scale or phone WebXR support. Run the opaque-object test against a known size and distance before scanning lenses.
+
+## API references
+
+- [Google WebXR requirements and secure port forwarding](https://developers.google.com/ar/develop/webxr/requirements)
+- [W3C WebXR Depth Sensing](https://www.w3.org/TR/webxr-depth-sensing-1/)
+- [Immersive Web depth API explainer: formats, UV transforms and axial depth](https://github.com/immersive-web/depth-sensing/blob/main/explainer.md)
+- [Google ARCore Depth overview](https://developers.google.com/ar/develop/depth)

@@ -24,6 +24,24 @@ Use this as a lab notebook during the hackathon. Report observed measurements; n
 
 Take caliper measurements at the lens's maximum horizontal and vertical extents in the chosen orientation. Record the actual values and note if curvature makes that comparison ambiguous.
 
+### In-phone measurement gate
+
+Print the sheet at 100%, without fit-to-page. Physically verify both 100 × 70 mm marker-centre spans and the 50 mm check line; homography cannot detect a uniformly mis-scaled print. Tap the white centres in order 1–4. Crossed, reversed, tiny or severely foreshortened marker layouts are rejected.
+
+For each lens, enter real caliper width and height. Save the first rectified capture dimensions, then load a different independently taken photograph of the same lens, preserving its top-mark orientation. Calibrate and review that second contour. The saved values survive loading a photo so the phone displays independent-repeat and caliper discrepancies against the current contour. Both width and height must differ by **no more than 0.5 mm** for both checks. Blank or invalid values remain pending. The evidence checkbox confirms actual calipers, an independent photo, and physically checked print scale; it resets on photo load and when saving repeat dimensions.
+
+The save button also retains the first rectified outline in millimetres and its photo identity. On a different photo, the app compares outlines after translating each polygon's area centroid to the origin. Keep the same marked top orientation: no rotation, scale fitting or shape fitting is applied. It samples each edge at spacing no greater than 0.25 mm, finds the distance to the other contour's nearest line segment in both directions, and reports the symmetric maximum sampled distance. This **edge repeatability** must be ≤ 0.5 mm for checked export. Equal bounding dimensions alone cannot pass a changed outline. This is a sampled repeatability metric, not a guarantee of continuous contour distance or edge accuracy against the real lens.
+
+The measurement-checked STL download requires these checks and a four-marker homography for both lenses. Confirmation is revoked whenever the contour, calibration, optical centre, photo or benchmark inputs change; the raw entered reference values remain available for comparison. Numerical discrepancies are recomputed against the edited geometry and the operator must confirm its physical evidence again. Both exports and the preview wait for photo loading or ZIP import to finish. Selecting a new photo or ZIP supersedes pending imports; outdated import results cannot replace it. The explicitly **UNVERIFIED experimental STL** route permits fit experiments with two-point scale or missing physical evidence. These are browser workflow gates, not server-side certification or tamper-proof evidence.
+
+The app reports worst sampled local mm per working pixel and source pixel, including its 1600-pixel image downsampling. This is sampling resolution, not a precision guarantee. Size agreement does not establish every lens-edge point within 0.5 mm: curvature, parallax above the sheet, glare, manual marker placement and contour editing still need independent physical assessment. No real-lens accuracy result has been recorded here.
+
+Run synthetic calibration and browser state checks with `node --test web/calibration.test.mjs web/measurement.test.mjs`. They test homography, invalid marker geometry, contour dimensions, the pass threshold, downsampling math, revoking evidence after edits and blocking export during photo loading; they provide no physical accuracy evidence.
+
+### Service observations (2026-10-03)
+
+Local RTX 5070, protected FastAPI `/api/segment`, SAM2.1 small on CUDA: supplied 1280 × 720 video frames returned HTTP 200 in 8.88 s (IMG_1620 at 5 s) and 9.4 s (IMG_1621 at 8 s); prior visual inspection reported contours of 81 and 88 vertices. These observations demonstrate request success and latency only. No corresponding caliper dimensions or independently measured lens-edge errors are available.
+
 ## Fit loop
 
 | Revision | Clearance / edge-thickness settings | Coupon result | Change made |
@@ -42,6 +60,10 @@ Check that the lens seats without obvious forced bending, stays captured during 
 If prescriptions are missing or a lens is unsuitable, do not label the pair ready for a wearer. A 3D preview can demonstrate geometry while optical verification remains pending.
 
 ## Export check
+
+### Synthetic slicer smoke test (2026-10-03)
+
+PrusaSlicer 2.9.6 console imported the downloaded-format `plate.stl` generated from two synthetic asymmetric ellipses (25 × 19 and 23 × 17 mm radii; 32/31 mm monocular PD). It reported a **manifold mesh with 5 parts**, dimensions **212.19 × 99.19 × 13.50 mm**, and minimum Z=0. With a generic 220 × 220 mm bed, 0.4 mm nozzle, 0.2 mm layers and support enabled, it exported G-code without mesh repair or scaling. The generic estimate was 2 h 5 m and 17.77 cm³ filament. This checks software slicing of one sample only; the user's printer/material profile and physical lens fit remain untested. The temporary G-code is not a printer-ready file for an unknown machine.
 
 - [ ] The **downloaded** STL, not just the in-app preview, opens in a slicer.
 - [ ] It contains the front and every other custom printed part; required screws or other hardware are listed.

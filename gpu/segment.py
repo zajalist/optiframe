@@ -6,22 +6,81 @@ import json
 import logging
 import threading
 import base64
+import hmac
+import os
+import math
+import tempfile
 from io import BytesIO
 from pathlib import Path
 from zipfile import BadZipFile, ZipFile
 
 import cv2
 import numpy as np
-import torch
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
+from starlette.formparsers import MultiPartException
 
 app = FastAPI(title="OptiFrame contour proposals")
 _model = None
 _processor = None
 _model_lock = threading.Lock()
+
+
+class VideoBodyLimit:
+    """Bound multipart bytes before Starlette spools the upload."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or scope["path"] != "/api/video-frames":
+            return await self.app(scope, receive, send)
+        limit = VIDEO_MAX_BYTES + 64_000  # Multipart headers and boundaries.
+        headers = dict(scope.get("headers", []))
+        try:
+            length = int(headers.get(b"content-length", b"0"))
+        except ValueError:
+            length = 0
+        rejection = Response('Video request exceeds 100 MB', status_code=413)
+        if length > limit:
+            return await rejection(scope, receive, send)
+        total = 0
+        exceeded = False
+
+        async def bounded_receive():
+            nonlocal total, exceeded
+            message = await receive()
+            total += len(message.get("body", b""))
+            if total > limit:
+                exceeded = True
+                # Starlette closes partial upload files only for parser errors.
+                # bounded_send restores 413 after its parser error becomes a 400.
+                raise MultiPartException("Video request exceeds 100 MB")
+            return message
+
+        async def bounded_send(message):
+            if exceeded:
+                if message["type"] == "http.response.start":
+                    message = {**message, "status": 413}
+            await send(message)
+
+        await self.app(scope, bounded_receive, bounded_send)
+
+
+app.add_middleware(VideoBodyLimit)
+
+
+@app.middleware("http")
+async def protect_phone_api(request: Request, call_next):
+    """A short-lived bearer key protects GPU work through a demo tunnel."""
+    required = os.environ.get("OPTIFRAME_ACCESS_TOKEN")
+    if required and request.url.path.startswith("/api/"):
+        supplied = request.headers.get("x-optiframe-key", "")
+        if not hmac.compare_digest(supplied, required):
+            return Response("Phone test key missing or incorrect", status_code=401)
+    return await call_next(request)
 
 
 def decode(data: bytes) -> np.ndarray:
@@ -41,24 +100,30 @@ def enhance(image: np.ndarray) -> np.ndarray:
 
 def difference_mask(image: np.ndarray, empty: np.ndarray) -> np.ndarray:
     if image.shape != empty.shape:
-        raise ValueError("Empty-sheet and lens images must have the same dimensions")
-    # Align the printed background. The empty view is the fixed reference.
+        h, w = image.shape[:2]
+        eh, ew = empty.shape[:2]
+        if abs((ew / eh) / (w / h) - 1) > 0.01:
+            raise ValueError("Empty-sheet photo has a different aspect ratio. Use a matching photo or set a lens box without an empty sheet.")
+        empty = cv2.resize(empty, (w, h), interpolation=cv2.INTER_AREA if ew > w else cv2.INTER_LINEAR)
+    # Keep proposals in the lens photo's coordinates by aligning the empty view.
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     base = cv2.cvtColor(empty, cv2.COLOR_BGR2GRAY)
     h, w = gray.shape
     scale = min(1.0, 1000 / max(h, w))
-    moving = cv2.resize(gray, None, fx=scale, fy=scale)
-    fixed = cv2.resize(base, None, fx=scale, fy=scale)
+    moving = cv2.resize(base, None, fx=scale, fy=scale)
+    fixed = cv2.resize(gray, None, fx=scale, fy=scale)
     warp = np.eye(2, 3, dtype=np.float32)
     try:
         cv2.findTransformECC(fixed, moving, warp, cv2.MOTION_EUCLIDEAN,
                              (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 80, 1e-5),
                              None, 5)
         warp[:, 2] /= scale
-        aligned = cv2.warpAffine(image, warp, (w, h), flags=cv2.INTER_LINEAR | cv2.WARP_INVERSE_MAP)
+        aligned = cv2.warpAffine(empty, warp, (w, h),
+                                 flags=cv2.INTER_LINEAR | cv2.WARP_INVERSE_MAP,
+                                 borderMode=cv2.BORDER_REPLICATE)
     except cv2.error:
-        aligned = image
-    delta = cv2.absdiff(enhance(aligned), enhance(empty))
+        aligned = empty
+    delta = cv2.absdiff(enhance(image), enhance(aligned))
     strength = np.max(delta, axis=2)
     strength = cv2.GaussianBlur(strength, (5, 5), 0)
     threshold = max(12, int(np.percentile(strength, 85)))
@@ -93,6 +158,8 @@ def glare_fraction(image: np.ndarray, box: tuple[int, int, int, int]) -> float:
 
 
 def sam_mask(image: np.ndarray, box: tuple[int, int, int, int]) -> np.ndarray:
+    import torch
+
     global _model, _processor
     with _model_lock:
         if not torch.cuda.is_available():
@@ -150,6 +217,10 @@ def inspect_capture(data: bytes) -> dict:
 
 @app.get("/api/health")
 def health() -> dict:
+    try:
+        import torch
+    except ImportError:
+        return {"cuda": False, "gpu": None, "modelLoaded": _model is not None}
     return {"cuda": torch.cuda.is_available(), "gpu": torch.cuda.get_device_name(0)
             if torch.cuda.is_available() else None, "modelLoaded": _model is not None}
 
@@ -162,6 +233,72 @@ def import_capture(capture: UploadFile = File(...)) -> dict:
     try:
         return inspect_capture(data)
     except (ValueError, KeyError, OSError, BadZipFile, RuntimeError, json.JSONDecodeError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+VIDEO_MAX_BYTES = 100_000_000
+VIDEO_MAX_SECONDS = 60
+VIDEO_MAX_SIDE = 4096
+VIDEO_MAX_FRAMES = 7200
+
+
+def extract_video_frames(path: str) -> dict:
+    capture = cv2.VideoCapture(path)
+    try:
+        if not capture.isOpened():
+            raise ValueError("Could not open video. Try a MOV or MP4 with H.264 video.")
+        fps = capture.get(cv2.CAP_PROP_FPS)
+        count = capture.get(cv2.CAP_PROP_FRAME_COUNT)
+        width = capture.get(cv2.CAP_PROP_FRAME_WIDTH)
+        height = capture.get(cv2.CAP_PROP_FRAME_HEIGHT)
+        if not all(math.isfinite(v) and v > 0 for v in (fps, count, width, height)):
+            raise ValueError("Video duration or dimensions could not be read")
+        duration = count / fps
+        if duration > VIDEO_MAX_SECONDS or count > VIDEO_MAX_FRAMES:
+            raise ValueError("Video must be at most 60 seconds and 7200 frames")
+        if max(width, height) > VIDEO_MAX_SIDE or width * height > 12_000_000:
+            raise ValueError("Video exceeds 4096 pixels per side or 12 megapixels")
+        indices = np.unique(np.linspace(0, int(count) - 1, min(6, int(count)), dtype=int))
+        frames = []
+        for index in indices:
+            capture.set(cv2.CAP_PROP_POS_FRAMES, int(index))
+            ok, photo = capture.read()
+            if not ok:
+                continue
+            h, w = photo.shape[:2]
+            if max(h, w) > VIDEO_MAX_SIDE or h * w > 12_000_000:
+                raise ValueError("Decoded video frame exceeds the size limit")
+            factor = min(1, 1600 / max(h, w))
+            if factor < 1:
+                photo = cv2.resize(photo, (round(w * factor), round(h * factor)))
+            ok, jpeg = cv2.imencode(".jpg", photo, [cv2.IMWRITE_JPEG_QUALITY, 90])
+            if not ok:
+                raise ValueError("Could not encode video frame")
+            frames.append({"seconds": round(int(index) / fps, 2),
+                           "image": "data:image/jpeg;base64," + base64.b64encode(jpeg).decode("ascii")})
+        if not frames:
+            raise ValueError("No readable frames found in video")
+        return {"durationSeconds": round(duration, 2), "frames": frames,
+                "measurementStatus": "uncalibrated; choose a photo, then review contour and scale"}
+    finally:
+        capture.release()
+
+
+@app.post("/api/video-frames")
+def video_frames(video: UploadFile = File(...)) -> dict:
+    # OpenCV needs a path. The upload copy is deleted on success and every error.
+    try:
+        with tempfile.TemporaryDirectory(prefix="optiframe-video-") as directory:
+            path = Path(directory) / "upload.mov"
+            total = 0
+            with path.open("wb") as output:
+                while chunk := video.file.read(1024 * 1024):
+                    total += len(chunk)
+                    if total > VIDEO_MAX_BYTES:
+                        raise HTTPException(status_code=413, detail="Video exceeds 100 MB")
+                    output.write(chunk)
+            return extract_video_frames(str(path))
+    except (ValueError, cv2.error) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
 

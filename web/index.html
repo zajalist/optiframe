@@ -20,14 +20,17 @@
 
     <div class="notice">Print the <a href="/calibration-sheet.svg" target="_blank" rel="noopener">100 × 70 mm calibration sheet</a> at 100% and verify its dimensions with a ruler. Experimental prototype: check lens edge thickness and optical centres with an eye care professional. Print a fit test and verify both hinges before use.</div>
 
+    <p><a href="/android-ar.html" style="color:#cde969">Android phone: try experimental AR depth capture →</a></p>
     <div class="panels">
       <section class="lens-panel" data-side="left">
         <div class="panel-head"><span class="eyebrow">LENS / LEFT</span><strong id="left-size">Awaiting capture</strong></div>
         <div class="inputs">
           <label>iPhone capture ZIP <input class="zip-input" type="file" accept=".zip,application/zip"></label>
+          <label>Lens video (max 60 s / 100 MB) <input class="video-input" type="file" accept="video/*,.mov,.mp4"></label>
           <label>Lens photo <input class="photo-input" type="file" accept="image/*" capture="environment"></label>
           <label>Empty sheet (optional) <input class="empty-input" type="file" accept="image/*" capture="environment"></label>
         </div>
+        <div class="video-frames" aria-label="Choose a video photo" hidden></div>
         <div class="canvas-wrap"><canvas aria-label="Left lens image and editable contour"></canvas><span class="canvas-placeholder">Add a capture to begin</span></div>
         <div class="toolbar">
           <button class="propose">Propose edge</button><button class="trace">Trace edge</button>
@@ -37,6 +40,7 @@
         <select class="proposal-select" aria-label="Contour proposal" hidden></select>
         <div class="scale-row"><label>Reference length <input class="reference-mm" type="number" min="1" step="0.1" value="50"> mm</label><span class="scale-status">Scale not set</span></div>
         <p class="marker-status">Four-marker perspective calibration recommended</p>
+        <fieldset class="benchmark"><legend>Physical measurement benchmark</legend><p>Measure maximum horizontal width and vertical height with calipers, keeping the top mark orientation. Save a capture, then load a new independent photo to compare repeatability.</p><div class="benchmark-fields"><label>Caliper width (mm)<input class="benchmark-input caliper-width" type="number" min="0.01" step="0.01"></label><label>Caliper height (mm)<input class="benchmark-input caliper-height" type="number" min="0.01" step="0.01"></label><label>Independent capture width (mm)<input class="benchmark-input repeat-width" type="number" min="0.01" step="0.001"></label><label>Independent capture height (mm)<input class="benchmark-input repeat-height" type="number" min="0.01" step="0.001"></label></div><button class="save-repeat" type="button">Save dimensions + outline for repeat capture</button><p class="benchmark-status" role="status">Checks PENDING; target each discrepancy ≤ 0.5 mm.</p><p class="resolution-status">Pixel resolution awaits calibration.</p><label><input class="evidence-confirmed" type="checkbox"> I used real calipers, compared a different independently captured photo, and physically verified the printed 100 × 70 mm marker spans and 50 mm line.</label><p>Tap white marker centres 1–4. Print scaling, incorrect centres, tilt, lens curvature and height above the sheet can bias dimensions. A size check does not validate every edge point.</p></fieldset>
         <p class="centre-status">Optical centre not set</p>
         <p class="panel-status" role="status">Capture one lens at a time on the marked sheet.</p>
       </section>
@@ -45,9 +49,11 @@
         <div class="panel-head"><span class="eyebrow">LENS / RIGHT</span><strong id="right-size">Awaiting capture</strong></div>
         <div class="inputs">
           <label>iPhone capture ZIP <input class="zip-input" type="file" accept=".zip,application/zip"></label>
+          <label>Lens video (max 60 s / 100 MB) <input class="video-input" type="file" accept="video/*,.mov,.mp4"></label>
           <label>Lens photo <input class="photo-input" type="file" accept="image/*" capture="environment"></label>
           <label>Empty sheet (optional) <input class="empty-input" type="file" accept="image/*" capture="environment"></label>
         </div>
+        <div class="video-frames" aria-label="Choose a video photo" hidden></div>
         <div class="canvas-wrap"><canvas aria-label="Right lens image and editable contour"></canvas><span class="canvas-placeholder">Add a capture to begin</span></div>
         <div class="toolbar">
           <button class="propose">Propose edge</button><button class="trace">Trace edge</button>
@@ -57,6 +63,7 @@
         <select class="proposal-select" aria-label="Contour proposal" hidden></select>
         <div class="scale-row"><label>Reference length <input class="reference-mm" type="number" min="1" step="0.1" value="50"> mm</label><span class="scale-status">Scale not set</span></div>
         <p class="marker-status">Four-marker perspective calibration recommended</p>
+        <fieldset class="benchmark"><legend>Physical measurement benchmark</legend><p>Measure maximum horizontal width and vertical height with calipers, keeping the top mark orientation. Save a capture, then load a new independent photo to compare repeatability.</p><div class="benchmark-fields"><label>Caliper width (mm)<input class="benchmark-input caliper-width" type="number" min="0.01" step="0.01"></label><label>Caliper height (mm)<input class="benchmark-input caliper-height" type="number" min="0.01" step="0.01"></label><label>Independent capture width (mm)<input class="benchmark-input repeat-width" type="number" min="0.01" step="0.001"></label><label>Independent capture height (mm)<input class="benchmark-input repeat-height" type="number" min="0.01" step="0.001"></label></div><button class="save-repeat" type="button">Save dimensions + outline for repeat capture</button><p class="benchmark-status" role="status">Checks PENDING; target each discrepancy ≤ 0.5 mm.</p><p class="resolution-status">Pixel resolution awaits calibration.</p><label><input class="evidence-confirmed" type="checkbox"> I used real calipers, compared a different independently captured photo, and physically verified the printed 100 × 70 mm marker spans and 50 mm line.</label><p>Tap white marker centres 1–4. Print scaling, incorrect centres, tilt, lens curvature and height above the sheet can bias dimensions. A size check does not validate every edge point.</p></fieldset>
         <p class="centre-status">Optical centre not set</p>
         <p class="panel-status" role="status">Capture one lens at a time on the marked sheet.</p>
       </section>
@@ -70,7 +77,7 @@
         <label>Printer bed width <input id="bed-width" type="number" min="100" step="1" value="220"> mm</label>
         <label>Printer bed depth <input id="bed-depth" type="number" min="100" step="1" value="220"> mm</label>
       </div>
-      <div class="design-actions"><button id="preview-frame">Preview 3D front</button><button id="download-frame">Download experimental STL kit</button></div>
+      <div class="design-actions"><button id="preview-frame">Preview 3D front</button><button id="download-frame">Download measurement-checked STL kit</button><button id="download-experimental">Download UNVERIFIED experimental STL kit</button></div>
       <p id="design-status" role="status">Both contours, scales and optical centres are required.</p>
       <div id="viewer" aria-label="Rotatable 3D preview of frame front"></div>
     </section>

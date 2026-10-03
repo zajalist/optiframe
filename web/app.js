@@ -1,61 +1,15 @@
 const panels = [...document.querySelectorAll('.lens-panel')];
+const accessKey = new URLSearchParams(location.hash.slice(1)).get('access');
+const arLink = document.querySelector?.('a[href="/android-ar.html"]');
+if (arLink && accessKey) arLink.hash = location.hash;
+const apiFetch = (url, options = {}) => fetch(url, {
+  ...options,
+  headers: { ...options.headers, ...(accessKey ? { 'X-OptiFrame-Key': accessKey } : {}) },
+});
+const responseData = response => response.headers.get('content-type')?.includes('json')
+  ? response.json() : response.text().then(detail => ({ detail }));
 
-function distance(a, b) {
-  return Math.hypot(a[0] - b[0], a[1] - b[1]);
-}
-
-function polygonArea(points) {
-  return Math.abs(points.reduce((sum, point, index) => {
-    const next = points[(index + 1) % points.length];
-    return sum + point[0] * next[1] - next[0] * point[1];
-  }, 0)) / 2;
-}
-
-function measure(points, mmPerPixel) {
-  if (points.length < 3 || !Number.isFinite(mmPerPixel) || mmPerPixel <= 0) return null;
-  const xs = points.map(point => point[0]);
-  const ys = points.map(point => point[1]);
-  const perimeter = points.reduce((sum, point, index) => sum + distance(point, points[(index + 1) % points.length]), 0);
-  return {
-    width: (Math.max(...xs) - Math.min(...xs)) * mmPerPixel,
-    height: (Math.max(...ys) - Math.min(...ys)) * mmPerPixel,
-    perimeter: perimeter * mmPerPixel,
-    area: polygonArea(points) * mmPerPixel ** 2,
-  };
-}
-
-function sheetHomography(corners) {
-  if (corners.length !== 4) return null;
-  const targets = [[0, 0], [100, 0], [100, 70], [0, 70]];
-  const rows = [];
-  corners.forEach(([x, y], index) => {
-    const [u, v] = targets[index];
-    rows.push([x, y, 1, 0, 0, 0, -u * x, -u * y, u]);
-    rows.push([0, 0, 0, x, y, 1, -v * x, -v * y, v]);
-  });
-  for (let col = 0; col < 8; col++) {
-    let pivot = col;
-    for (let row = col + 1; row < 8; row++) if (Math.abs(rows[row][col]) > Math.abs(rows[pivot][col])) pivot = row;
-    if (Math.abs(rows[pivot][col]) < 1e-8) throw new Error('Sheet markers are too close or crossed. Tap them again in order.');
-    [rows[col], rows[pivot]] = [rows[pivot], rows[col]];
-    const scale = rows[col][col];
-    for (let k = col; k <= 8; k++) rows[col][k] /= scale;
-    for (let row = 0; row < 8; row++) {
-      if (row === col) continue;
-      const factor = rows[row][col];
-      for (let k = col; k <= 8; k++) rows[row][k] -= factor * rows[col][k];
-    }
-  }
-  return rows.map(row => row[8]);
-}
-
-function project(point, h) {
-  const [x, y] = point;
-  const denominator = h[6] * x + h[7] * y + 1;
-  if (Math.abs(denominator) < 1e-8) throw new Error('Perspective calibration is unstable. Retake the sheet photo.');
-  return [(h[0] * x + h[1] * y + h[2]) / denominator,
-          (h[3] * x + h[4] * y + h[5]) / denominator];
-}
+import {distance,polygonArea,measure,sheetHomography,project,benchmark,pixelResolution,contourRepeatability} from './calibration.js';
 
 class LensPanel {
   constructor(element) {
@@ -71,6 +25,11 @@ class LensPanel {
     this.scaleStatus = element.querySelector('.scale-status');
     this.centreStatus = element.querySelector('.centre-status');
     this.markerStatus = element.querySelector('.marker-status');
+    this.videoFrames = element.querySelector('.video-frames');
+    this.videoRequest = 0;
+    this.photoVersion = 0;
+    this.photoLoading = false;
+    this.proposalRequest = 0;
     this.photo = null;
     this.empty = null;
     this.bitmap = null;
@@ -90,12 +49,27 @@ class LensPanel {
   }
 
   bind() {
+    this.el.querySelectorAll('.benchmark-input').forEach(input=>input.addEventListener('input',()=>{
+      this.invalidateEvidence();
+      this.updateMeasurement();
+    }));
+    this.el.querySelector('.save-repeat').addEventListener('click',()=>{
+      if(!this.homography||!this.measurement){this.message('Rectify a contour with four markers first.');return;}
+      this.el.querySelector('.repeat-width').value=this.measurement.width.toFixed(3);
+      this.el.querySelector('.repeat-height').value=this.measurement.height.toFixed(3);
+      this.repeatOutline = this.points.map(point => project(point, this.homography));
+      this.repeatPhotoVersion = this.loadedPhotoVersion;
+      this.el.querySelector('.evidence-confirmed').checked=false;
+      this.message('Dimensions and rectified outline saved. Load and rectify a new independent photo in the same top orientation to compare edge repeatability.');
+      this.updateMeasurement();
+    });
     this.el.querySelector('.photo-input').addEventListener('change', event => this.loadPhoto(event.target.files[0]));
     this.el.querySelector('.empty-input').addEventListener('change', event => {
       this.empty = event.target.files[0] || null;
       this.message(this.empty ? 'Empty-sheet photo loaded. Propose the lens edge.' : 'Empty-sheet photo removed.');
     });
     this.el.querySelector('.zip-input').addEventListener('change', event => this.loadArchive(event.target.files[0]));
+    this.el.querySelector('.video-input').addEventListener('change', event => this.loadVideo(event.target.files[0]));
     for (const mode of ['trace', 'box', 'markers', 'scale', 'optical']) {
       this.el.querySelector(`.${mode}`).addEventListener('click', () => this.setMode(this.mode === mode ? null : mode));
     }
@@ -118,29 +92,93 @@ class LensPanel {
 
   message(text) { this.status.textContent = text; }
 
+  invalidateEvidence() {
+    this.el.querySelector('.evidence-confirmed').checked = false;
+    this.caliperCheck = { pass: false, error: null };
+    this.repeatCheck = { pass: false, error: null };
+    this.edgeRepeatCheck = { pass: false, error: null };
+  }
+
+  async loadVideo(file) {
+    if (!file) return;
+    const request = ++this.videoRequest;
+    this.videoFrames.replaceChildren();
+    this.videoFrames.hidden = true;
+    if (file.size > 100_000_000) { this.message('Video exceeds 100 MB. Choose a shorter clip.'); return; }
+    this.message('Extracting video photos…');
+    try {
+      const body = new FormData();
+      body.append('video', file);
+      const response = await apiFetch('/api/video-frames', { method: 'POST', body });
+      const result = await responseData(response);
+      if (request !== this.videoRequest) return;
+      if (!response.ok) throw new Error(result.detail || 'Could not read video');
+      result.frames.forEach(frame => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.setAttribute('aria-pressed', 'false');
+        const image = document.createElement('img');
+        image.src = frame.image;
+        image.alt = `Video photo at ${frame.seconds.toFixed(1)} seconds`;
+        const caption = document.createElement('span');
+        caption.textContent = `${frame.seconds.toFixed(1)} s · Use photo`;
+        button.append(image, caption);
+        button.addEventListener('click', async () => {
+          if (request !== this.videoRequest) return;
+          this.empty = null;
+          this.el.querySelector('.empty-input').value = '';
+          const loaded = await this.loadPhoto(fetch(frame.image).then(response => response.blob()));
+          if (!loaded || request !== this.videoRequest) return;
+          this.videoFrames.querySelectorAll('button').forEach(item => item.setAttribute('aria-pressed', String(item === button)));
+          this.message('Video photo selected. Set a lens box or add a matching empty sheet, then Propose edge. Calibrate scale and review the contour.');
+        });
+        this.videoFrames.append(button);
+      });
+      this.videoFrames.hidden = false;
+      this.message('Choose the clearest photo below. Video alone does not set scale.');
+    } catch (error) { if (request === this.videoRequest) this.message(error.message); }
+  }
+
   async loadArchive(file) {
     if (!file) return;
+    const version = ++this.photoVersion;
+    this.photoLoading = true;
+    this.invalidateEvidence();
     this.message('Reading iPhone capture…');
     try {
       const body = new FormData();
       body.append('capture', file);
-      const response = await fetch('/api/import', { method: 'POST', body });
-      const result = await response.json();
+      const response = await apiFetch('/api/import', { method: 'POST', body });
+      if (version !== this.photoVersion) return;
+      const result = await responseData(response);
+      if (version !== this.photoVersion) return;
       if (!response.ok) throw new Error(result.detail || 'Could not import capture');
-      if (result.side !== this.side) this.message(`This capture says ${result.side}; check the selected side.`);
+      if (result.side !== this.side) throw new Error(`This capture is labelled ${result.side}. Load it in the ${result.side} lens panel.`);
       const photo = await fetch(result.image).then(r => r.blob());
+      if (version !== this.photoVersion) return;
       const empty = result.empty ? await fetch(result.empty).then(r => r.blob()) : null;
+      if (version !== this.photoVersion) return;
       this.empty = empty;
-      await this.loadPhoto(photo);
+      const loaded = await this.loadPhoto(photo, version);
+      if (!loaded || version !== this.photoVersion) return;
       this.message(`${result.frameCount} captured frames imported. ${result.hasDepth ? 'AR depth included. ' : ''}${result.rawCloud ? 'Raw point cloud included. ' : ''}Review the edge and set scale.`);
-    } catch (error) { this.message(error.message); }
+    } catch (error) { if (version === this.photoVersion) this.message(error.message); }
+    finally { if (version === this.photoVersion) this.photoLoading = false; }
   }
 
-  async loadPhoto(file) {
+  async loadPhoto(file, ownedVersion = null) {
     if (!file) return;
+    const version = ownedVersion ?? ++this.photoVersion;
+    if (version !== this.photoVersion) return false;
+    this.photoLoading = true;
+    this.invalidateEvidence();
     try {
+      file = await file;
+      if (version !== this.photoVersion) return false;
       const bitmap = await createImageBitmap(file);
+      if (version !== this.photoVersion) { bitmap.close(); return false; }
       this.photo = file;
+      this.loadedPhotoVersion = version;
       this.bitmap?.close();
       this.bitmap = bitmap;
       const factor = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
@@ -153,11 +191,20 @@ class LensPanel {
       this.homography = null;
       this.opticalCentre = null;
       this.mmPerPixel = null;
+      this.el.querySelector('.evidence-confirmed').checked=false;
       this.history = [];
+      this.proposals = [];
+      this.select.replaceChildren();
+      this.select.hidden = true;
+      this.scaleStatus.textContent = 'Scale not set';
+      this.markerStatus.textContent = 'Four-marker perspective calibration recommended';
+      this.centreStatus.textContent = 'Optical centre not set';
       this.placeholder.hidden = true;
       this.render();
       this.message('Photo loaded. Add an empty sheet or draw a lens box, then propose the edge.');
-    } catch { this.message('This photo could not be opened. Try a JPEG or PNG.'); }
+      return true;
+    } catch { if (version === this.photoVersion) this.message('This photo could not be opened. Try a JPEG or PNG.'); return false; }
+    finally { if (version === this.photoVersion) this.photoLoading = false; }
   }
 
   setMode(mode) {
@@ -275,16 +322,38 @@ class LensPanel {
   }
 
   updateMeasurement() {
+    const geometry = JSON.stringify([this.photoVersion, this.points, this.homography, this.mmPerPixel, this.opticalCentre]);
+    if (geometry !== this.evidenceGeometry) {
+      this.invalidateEvidence();
+      this.evidenceGeometry = geometry;
+    }
     const transformed = this.homography ? this.points.map(point => project(point, this.homography)) : this.points;
     const result = measure(transformed, this.homography ? 1 : this.mmPerPixel);
+    this.measurement=result;
+    const fields=prefix=>({width:Number(this.el.querySelector('.'+prefix+'-width').value),height:Number(this.el.querySelector('.'+prefix+'-height').value)});
+    this.caliperCheck=benchmark(result,fields('caliper'));
+    this.repeatCheck=benchmark(result,fields('repeat'));
+    this.edgeRepeatCheck = this.homography && this.loadedPhotoVersion !== this.repeatPhotoVersion
+      ? contourRepeatability(this.repeatOutline, transformed) : {pass:false,error:null};
+    const describe=(name,c)=>name+': '+(c.error?(c.pass?'PASS':'FAIL')+' (width Δ '+c.error.width.toFixed(3)+', height Δ '+c.error.height.toFixed(3)+' mm)':'PENDING');
+    this.el.querySelector('.benchmark-status').textContent=describe('Calipers',this.caliperCheck)+'. '+describe('Independent repeat',this.repeatCheck)+'. Target: each Δ ≤ 0.5 mm.';
+    this.el.querySelector('.benchmark-status').textContent += ' Edge repeatability: ' + (this.edgeRepeatCheck.error === null ? 'PENDING (save outline, then take another photo)' : (this.edgeRepeatCheck.pass ? 'PASS' : 'FAIL') + ' (symmetric max sampled edge distance '+this.edgeRepeatCheck.error.toFixed(3)+' mm; target ≤ 0.5 mm). Centroid translation only; keep the same top orientation. This is repeatability, not edge accuracy.');
+    const status=this.el.querySelector('.resolution-status');
+    if(this.bitmap&&(this.homography||this.mmPerPixel)){
+      const r=pixelResolution(this.points.length?this.points:[[this.canvas.width/2,this.canvas.height/2]],this.homography,this.mmPerPixel,this.bitmap.width/this.canvas.width,this.bitmap.height/this.canvas.height);
+      status.textContent='Worst sampled resolution: '+r.working.toFixed(4)+' mm/working pixel; '+r.source.toFixed(4)+' mm/source pixel. Image '+this.bitmap.width+'×'+this.bitmap.height+' → '+this.canvas.width+'×'+this.canvas.height+'. Sampling is not accuracy.';
+    }else status.textContent='Pixel resolution awaits calibration.';
     this.size.textContent = result ? `${result.width.toFixed(1)} × ${result.height.toFixed(1)} mm` : 'Awaiting reviewed contour + scale';
     if (result) this.size.title = `Perimeter ${result.perimeter.toFixed(1)} mm; area ${result.area.toFixed(1)} mm². Flat photo measurement only.`;
   }
 
   async propose() {
+    if (this.photoLoading) { this.message('Wait for the selected photo to load.'); return; }
     if (!this.photo) { this.message('Add a lens photo first.'); return; }
     if (!this.empty && !this.box) { this.message('Add an empty-sheet photo or drag a box around the lens first.'); return; }
     this.message('Analyzing lens edge…');
+    const version = this.photoVersion;
+    const request = ++this.proposalRequest;
     try {
       const data = new FormData();
       data.append('image', this.photo, 'lens.jpg');
@@ -298,8 +367,9 @@ class LensPanel {
           Math.ceil(Math.max(a[0], b[0]) * sx), Math.ceil(Math.max(a[1], b[1]) * sy),
         ]));
       }
-      const response = await fetch('/api/segment', { method: 'POST', body: data });
-      const result = await response.json();
+      const response = await apiFetch('/api/segment', { method: 'POST', body: data });
+      const result = await responseData(response);
+      if (version !== this.photoVersion || request !== this.proposalRequest) return;
       if (!response.ok) throw new Error(result.detail || 'Segmentation failed');
       const sx = this.canvas.width / result.width;
       const sy = this.canvas.height / result.height;
@@ -311,7 +381,7 @@ class LensPanel {
       if (this.proposals.length) this.useProposal(0);
       const glare = result.clippedFraction > 0.02 ? ' Strong clipped highlights: recapture with softer light.' : '';
       this.message(`${this.proposals.length} edge proposal(s). Inspect and edit the contour; this is not a certified fit.${glare}`);
-    } catch (error) { this.message(error.message); }
+    } catch (error) { if (version === this.photoVersion && request === this.proposalRequest) this.message(error.message); }
   }
 
   useProposal(index) {
@@ -382,6 +452,8 @@ const designStatus = document.querySelector('#design-status');
 const number = id => Number(document.getElementById(id).value);
 
 function framePayload() {
+  if ([leftPanel, rightPanel].some(panel => panel.photoLoading))
+    throw new Error('Wait for both selected photos to finish loading before previewing or exporting.');
   const left = leftPanel.millimetreOutline();
   const right = rightPanel.millimetreOutline();
   if (!left || !right) throw new Error('Each lens needs at least 12 contour points, a sheet calibration or two-point scale, and an optical centre.');
@@ -392,15 +464,19 @@ function framePayload() {
   } };
 }
 
-async function makeFrame(preview) {
+async function makeFrame(preview, experimental = false) {
   try {
+    if ([leftPanel, rightPanel].some(panel => panel.photoLoading))
+      throw new Error('Wait for both selected photos to finish loading before previewing or exporting.');
+    if(!preview&&!experimental&&[leftPanel,rightPanel].some(p=>!p.homography||!p.caliperCheck?.pass||!p.repeatCheck?.pass||!p.edgeRepeatCheck?.pass||!p.el.querySelector('.evidence-confirmed').checked))
+      throw new Error('Checked export requires four markers, caliper/repeat width-height checks and saved-outline edge repeatability ≤ 0.5 mm for each lens, plus confirmed physical evidence. Use UNVERIFIED experimental export for a test.');
     const payload = framePayload();
     designStatus.textContent = preview ? 'Building 3D preview…' : 'Generating and checking closed STL meshes…';
-    const response = await fetch(preview ? '/api/frame-preview' : '/api/frame', {
+    const response = await apiFetch(preview ? '/api/frame-preview' : '/api/frame', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
     });
     if (!response.ok) {
-      const error = await response.json();
+      const error = await responseData(response);
       throw new Error(error.detail || 'Frame generation failed');
     }
     const blob = await response.blob();
@@ -412,14 +488,15 @@ async function makeFrame(preview) {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = 'optiframe-experimental-kit.zip';
+      link.download = experimental ? 'optiframe-UNVERIFIED-experimental-kit.zip' : 'optiframe-measurement-checked-kit.zip';
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
-      designStatus.textContent = 'STL kit downloaded. Slice at 100% in millimetres, print a fit test and inspect lens retention before use.';
+      designStatus.textContent = (experimental ? 'UNVERIFIED experimental kit. ' : 'Measurement checks passed; physical fit unverified. ') + 'STL kit downloaded. Slice at 100% in millimetres, print a fit test and inspect lens retention before use.';
     }
   } catch (error) { designStatus.textContent = error.message; }
 }
 
 document.getElementById('preview-frame').addEventListener('click', () => makeFrame(true));
 document.getElementById('download-frame').addEventListener('click', () => makeFrame(false));
+document.getElementById('download-experimental').addEventListener('click', () => makeFrame(false, true));
 export { distance, polygonArea, measure, sheetHomography, project };

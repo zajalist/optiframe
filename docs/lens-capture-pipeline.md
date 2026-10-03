@@ -1,6 +1,6 @@
 # Low-cost transparent-lens capture pipeline
 
-**Decision:** build a calibrated **2.5D lens model**: an accurate 2D perimeter plus a few manual side measurements. Do not make a LiDAR point cloud or Gaussian splat the source of the printable rim. The model's job is to hold existing lenses, not reconstruct their optical surfaces.
+**Baseline:** build a calibrated **2.5D lens model**: an accurate 2D perimeter plus a few manual side measurements. In parallel, test real point-cloud modes and use their depth where they pass physical validation. The model's job is to hold existing lenses, not reconstruct their optical surfaces. See [capture-mode-experiments.md](capture-mode-experiments.md).
 
 This is a proposed workflow to test on actual lenses, not a claim of achieved accuracy.
 
@@ -53,13 +53,14 @@ Test the actual workflow on at least one visibly asymmetric pair and, if availab
 
 If the two-shot method does not improve the contour on the test lenses, remove it and keep the single-photo capture plus manual correction. If neither photo gives a visible rim, use a guided manual trace with a ruler-verified scale; do not fabricate an automatic scan.
 
-## Point clouds: narrow use cases
+## Point clouds: experimental use cases
 
 | Point-cloud source | Use for this hackathon? | Reason |
 | --- | --- | --- |
-| Phone LiDAR aimed at a clear lens | **No, for lens measurement** | Missing, background, or reflected depth can corrupt the edge; lower resolution than the photo. |
-| Multi-view photogrammetry or Gaussian splats of the lens | **No, for lens measurement** | Refraction and specular appearance make recovered geometry unreliable without special methods. |
-| Sampled 2D contour with side-view heights | **Yes, as a 2.5D CAD input** | Explicit, inspectable approximation sufficient to test a retaining rim. |
+| Android WebXR/ARCore depth aimed at a clear lens | **Test** | Multi-view parallax may help; compare raw cloud against the backdrop, photo contour, and calipers. |
+| Multi-view silhouettes | **Test** | A visual-hull point cloud can recover a coarse outer volume if lens silhouettes and camera poses are accurate. |
+| SiteSplat/photogrammetry of the lens | **Test** | Inspect actual point or mesh geometry; refraction and specular appearance can attach features to the background. |
+| Sampled 2D contour with side-view heights | **Keep as baseline CAD input** | Explicit, inspectable approximation and fallback for a retaining rim. |
 | Face scan for nose/temple shape | **Later** | Could improve wearer fit, but does not solve transparent-lens detection or optical-centre placement. |
 
 ## Research status

@@ -33,9 +33,10 @@
 
 If the first capture cannot achieve a clean repeatable contour quickly, switch to manual trace over the rectified image. That preserves the end-to-end demo and still provides measured geometry.
 
-For difficult transparent lenses, test a two-shot capture on a printed pattern: empty sheet, then sheet with lens, aligned using markers. Use the difference as an edge proposal and retain manual correction. Do not spend the hackathon building a point-cloud or Gaussian-splat lens scanner.
+For difficult transparent lenses, test a two-shot capture on a printed pattern: empty sheet, then sheet with lens, aligned using markers. Use the difference as an edge proposal and retain manual correction. In parallel, test Android WebXR depth, multi-view silhouettes, and a SiteSplat backend against the same physical lens. Promote cloud geometry into the printable rim only when it improves a measured fit.
 
 The concrete capture algorithm and its validation gate are in [lens-capture-pipeline.md](lens-capture-pipeline.md).
+The point-cloud experiments and comparison gates are in [capture-mode-experiments.md](capture-mode-experiments.md).
 
 ## Live demo script (about 90 seconds)
 
@@ -48,7 +49,7 @@ The concrete capture algorithm and its validation gate are in [lens-capture-pipe
 
 ## What to leave out
 
-Gaussian splats, ARKit-based scanning, full 3D lens reconstruction, face scanning, automatic prescription detection, accounts, a design marketplace, and dozens of styles. They do not close the central proof: the real lenses fit the printed frame. An optional Safari AR Quick Look preview can follow the working STL export.
+Unvalidated Gaussian-splat geometry in the printable model, ARKit-only scanning, face scanning, automatic prescription detection, accounts, a design marketplace, and dozens of styles. These do not close the central proof: the real lenses fit the printed frame. An optional Safari AR Quick Look preview can follow the working STL export.
 
 ## Winning evidence checklist
 
