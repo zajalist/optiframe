@@ -82,6 +82,18 @@ final class LensCapture: NSObject, ObservableObject, ARSessionDelegate {
 
     func stop() { session.pause() }
 
+    func newLens() {
+        queue.async { [self] in
+            records.removeAll()
+            points.removeAll()
+            folder = nil
+            DispatchQueue.main.async {
+                self.frameCount = 0
+                self.start()
+            }
+        }
+    }
+
     func capture(side: LensSide, kind: FrameKind) {
         guard let frame = session.currentFrame else {
             status = "Camera is starting. Try again."
@@ -90,16 +102,23 @@ final class LensCapture: NSObject, ObservableObject, ARSessionDelegate {
         status = "Saving frame…"
         queue.async { [self] in
             do {
+                if let first = records.first, first.side != side {
+                    DispatchQueue.main.async {
+                        self.status = "Export the \(first.side.rawValue) lens before capturing the other side."
+                    }
+                    return
+                }
                 let folder = try workingFolder()
                 let index = records.count + 1
                 let result = try processor.save(frame: frame, side: side, kind: kind,
                                                 index: index, folder: folder)
                 records.append(result.frame)
-                points.append(contentsOf: result.points)
+                if kind == .arc { points.append(contentsOf: result.points) }
+                let emptyClipping = records.first { $0.kind == .empty }?.clippedFraction ?? 0
                 DispatchQueue.main.async {
                     self.frameCount = index
-                    self.status = result.frame.clippedFraction > 0.25
-                        ? "Saved. Bright clipping is high; try another angle."
+                    self.status = result.frame.clippedFraction > max(0.25, emptyClipping + 0.08)
+                        ? "Saved. Bright clipping rose; try another angle."
                         : "Saved. Take another angle or export."
                 }
             } catch {
