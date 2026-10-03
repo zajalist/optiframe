@@ -2,15 +2,32 @@
 
 Researched 2026-10-03. Sources below are primary research, standards bodies, or official tool documentation where possible. The challenge brief supplied by the team defines four judging stages: **measurement, AI, design, validation**. We have not found a longer public rubric, so no unverified point weighting is assumed.
 
+## 0. The actual problem: match lenses to a person, then build the frame
+
+The humanitarian use case is an inventory mismatch: available frames may not fit a recipient, and a person may need different corrections in the right and left eyes. A geometrically compatible frame is useful only after a qualified eye-care provider verifies that *each* lens's optical properties suit that person. The app should help position and mount suitable lenses, not treat every donated lens as usable.
+
+This boundary matters. WHO's 2025 guidance advises against offering recycled spectacles directly to users in low- and middle-income countries, citing prescription mismatch, condition, hygiene, and effects on local eye-care services. OptiFrame should be framed as a tool for local providers working with inspected lenses and local fitting, not a substitute for eye care or a generic shipment of used glasses. [WHO, *Summary guide on quality standards for spectacles*, p. 18](https://iris.who.int/bitstream/handle/10665/381356/9789240109483-eng.pdf?sequence=9)
+
+There are **two matching problems**:
+
+| Match | Required inputs | App output |
+| --- | --- | --- |
+| Optical | Recipient's right/left prescription; provider-verified lens power, axis, type, orientation, and marked optical centres | Accept only lenses the provider has approved; retain their identity and orientation. |
+| Geometric | Lens contours and thickness; recipient's monocular pupil positions, fitting heights, and basic face/bridge width | Position left and right lenses independently; derive bridge, rims, and temples; flag impossible placements. |
+
+A frame can move existing lenses relative to the eyes, but it cannot change their optical power. Cutting or reshaping a lens requires optical equipment and may move the usable optical zone; it is outside the hackathon's automatic workflow. Professional dispensing workflows measure lens power with lensometry and separately measure pupil distance and optical-centre/fitting-cross heights. [American Optometric Association, 2026 paraoptometric handbook](https://www.aoa.org/AOA/Documents/Education/Education_PDFs/2026%20Paraoptometric%20Handbook%20FINAL%202.5.2026.pdf), [ZEISS fitting guide](https://www.zeiss.com/content/dam/Vision%20Care/Vision/en_us/PDF/ECP/ZEISS_Individual_PAL_SV_Fitting_and_Dispensing_Guide_16030.pdf)
+
+**Decision:** model each lens as a verified inventory item with its own contour, prescription metadata, optical-centre mark, and top orientation. Model the wearer with separate right/left pupil offsets and heights. If a required optical value is missing, the app says **verification needed** rather than claiming a safe match.
+
 ## 1. What needs measuring
 
-The frame needs the *outer boundary of each actual lens* in millimetres, plus its orientation and enough information about the edge to retain it. Left and right must be independent; mirroring one lens would miss the challenge's asymmetric case. The bridge controls their relative placement, not their shape.
+The frame needs the *outer boundary of each actual lens* in millimetres, its optical-centre location and orientation, and enough information about the edge to retain it. Left and right must be independent; mirroring one lens would miss the challenge's asymmetric case. The wearer's pupil positions constrain relative lens placement; the bridge is then designed to join those positions and fit the nose.
 
 ISO 8624 is the current spectacle-frame measuring system and vocabulary. It provides a sound basis for reporting boxed lens width, height, and bridge distance. Its stated scope is symmetrical frame fronts, so our asymmetric design should use its terms without claiming conformity. [ISO 8624:2020](https://www.iso.org/standard/75385.html)
 
-A 2D photo cannot recover the lens edge profile or optical prescription. We should record left/right and top orientation before capture, ask for an edge thickness measurement or side photo, and test the retention geometry physically. Mounted prescription lenses have separate requirements relative to the prescription order. A hackathon prototype should not claim to verify those requirements. [ISO 21987:2017](https://www.iso.org/standard/65161.html), [ISO technical report on 3D lens properties and markings](https://www.iso.org/standard/83919.html)
+A 2D photo cannot recover the lens edge profile or optical prescription. We should record left/right, optical-centre mark, and top orientation before capture, ask for an edge thickness measurement or side photo, and test the retention geometry physically. Mounted prescription lenses have separate requirements relative to the prescription order. A hackathon prototype should not claim to verify those requirements. [ISO 21987:2017](https://www.iso.org/standard/65161.html), [ISO technical report on 3D lens properties and markings](https://www.iso.org/standard/83919.html)
 
-**Decision:** measure the contour from a controlled top-down image; request one manual edge-thickness value per lens; retain the lenses with a testable printed rim. Preserve the orientation marks in the model and UI.
+**Decision:** measure the contour from a controlled top-down image; request one manual edge-thickness value per lens; retain the lenses with a testable printed rim. Preserve optical-centre and orientation marks in the model and UI.
 
 ## 2. Why not Gaussian splats for metrology
 
@@ -63,5 +80,7 @@ These gates are ambitious targets. The observed results should be recorded in [v
 | Transparent edge cannot be reliably segmented | Try alternate lighting; use a manual contour editor; keep AI proposal optional. |
 | Lens is curved or sits above marker plane | Photograph farther away and near-perpendicular; compare with calipers; choose modest-curve demo lenses. |
 | Lens slips or is squeezed | Print a short rim coupon and tune clearance and lip geometry before a whole frame. |
-| Different lens powers or optical centres | Preserve left/right/top markings; demonstrate geometry only; have an optician assess any wearable prescription pair. |
+| Available lenses do not match the person's prescription | Reject the pair for that recipient; a new frame cannot fix lens power. |
+| Optical centres cannot align while rims and bridge fit | Flag the geometry as infeasible; choose another lens pair or have the provider revise the fitting plan. |
+| Different lens powers or optical centres | Preserve lens identity, left/right/top and centre markings; have a provider verify any wearable pair. |
 | Demo printer unavailable | Have a printable 1:1 paper outline and slicer-verified STL as fallback, but treat physical fit as unverified. |
