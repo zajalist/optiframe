@@ -10,25 +10,26 @@ const { createLiveSegmentSession } = await import('./live-segment.js');
 
 function element() {
   const handlers = {};
-  return {
-    handlers, disabled: false, width: 0, height: 0, textContent: '',
+  const node = {
+    handlers, disabled: false, width: 0, height: 0, textContent: '', strokeCount: 0,
     addEventListener(type, listener) { handlers[type] = listener; },
     getBoundingClientRect() { return { left: 0, top: 0, width: 640, height: 480 }; },
     setPointerCapture() {},
     getContext() {
       return { clearRect() {}, strokeRect() {}, setLineDash() {}, beginPath() {},
         save() {}, restore() {}, arc() {}, fill() {},
-        moveTo() {}, lineTo() {}, closePath() {}, stroke() {}, drawImage() {},
+        moveTo() {}, lineTo() {}, closePath() {}, stroke() { node.strokeCount++; }, drawImage() {},
         getImageData() { return { data: new Uint8ClampedArray(this.width * this.height * 4) }; } };
     },
   };
+  return node;
 }
 
 function setup(fetcher, onCapture = async () => {}, options = {}) {
   globalThis.document = {
     createElement() {
       return { width: 0, height: 0, getContext: () => ({ drawImage() {},
-        getImageData: () => ({ data: new Uint8ClampedArray(160 * 120 * 4).fill(180) }) }),
+        getImageData: (_x,_y,width,height) => ({ width,height,data: new Uint8ClampedArray(160 * 120 * 4).fill(180) }) }),
         toBlob(callback) { callback(new Blob(['frame'], { type: 'image/jpeg' })); } };
     },
   };
@@ -74,6 +75,37 @@ test('changing lighting invalidates the old outline and waits for exposure befor
 
 const autoOutline = Array.from({length: 80}, (_, i) => [50 + 25 * Math.cos(i * Math.PI / 40), 35 + 20 * Math.sin(i * Math.PI / 40)]);
 const autoOptions = {autoCapture: true, calibrateFrame: () => ({markers: [[80,50],[560,50],[560,386],[80,386]], contour: autoOutline})};
+
+test('current-plane tracking retains the segmentation pixel budget so small markers remain visible', async () => {
+  const trackedWidths=[];
+  const fixture=setup(async()=>({ok:true,json:async()=>({...result,presence:{detected:true},quality:{score:.7,sharpness:180}})}),
+    async()=>{}, {...autoOptions,stillCapture:true,calibrateFrame:(pixels,contour)=>{
+      if(!contour.length) trackedWidths.push(pixels.width);
+      return pixels.width>=600 ? autoOptions.calibrateFrame() : null;
+    }});
+  try {
+    await fixture.session.start(); await pause(100);
+    assert.ok(trackedWidths.length>0);
+    assert.ok(trackedWidths.every(width=>width===640));
+    assert.ok(fixture.overlay.strokeCount>0,'a valid current plane must draw its reprojected outline');
+    assert.notEqual(fixture.status.textContent,'Lens found');
+  } finally {fixture.session.stop();}
+});
+
+test('a sampled calibration cannot trigger capture when the current camera plane is lost', async () => {
+  let captures=0,stills=0;
+  const fixture=setup(async()=>({ok:true,json:async()=>({...result,presence:{detected:true},quality:{score:.7,sharpness:180}})}),
+    async()=>{captures++;},{...autoOptions,stillCapture:true,
+      calibrateFrame:(_pixels,contour)=>contour.length ? autoOptions.calibrateFrame() : null,
+      captureFrame:async()=>{stills++;throw Error('must not take a still from stale calibration');}});
+  try {
+    await fixture.session.start(); await pause(750);
+    assert.equal(captures,0);assert.equal(stills,0);
+    assert.equal(fixture.captureButton.disabled,true);
+    assert.equal(fixture.status.textContent,'Show all four dots');
+    assert.equal(fixture.overlay.strokeCount,0);
+  } finally {fixture.session.stop();}
+});
 
 test('explicit lens replacement releases the removal gate without reopening the camera or accepting a stale reply', async () => {
   let release, calls=0, captured=null; const changes=[];

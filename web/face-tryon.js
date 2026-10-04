@@ -1,4 +1,4 @@
-import { facePose, opticalAnchors, landmarkToView } from './face-tryon-geometry.js?v=36';
+import { facePose, opticalAnchors, landmarkToView, frameRenderLayer } from './face-tryon-geometry.js?v=37';
 
 const VISION_VERSION = '0.10.32';
 const VISION_ROOT = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${VISION_VERSION}`;
@@ -66,11 +66,12 @@ export async function openFaceTryOn({ assembly, leftPd, rightPd }) {
       video.srcObject = stream;
       await video.play();
       if (stopped) return;
-      say('Loading try-on…');
+      say('Loading face tracking…');
       const [THREE, vision] = await Promise.all([import('three'), import(`${VISION_ROOT}/vision_bundle.mjs`)]);
       if (stopped) return;
       const files = await vision.FilesetResolver.forVisionTasks(`${VISION_ROOT}/wasm`);
       if (stopped) return;
+      say('Starting face tracking…');
       const options = { baseOptions: { modelAssetPath: MODEL, delegate: 'GPU' }, runningMode: 'VIDEO',
         numFaces: 1, minFaceDetectionConfidence: .65, minFacePresenceConfidence: .65, minTrackingConfidence: .65 };
       let loaded;
@@ -83,6 +84,7 @@ export async function openFaceTryOn({ assembly, leftPd, rightPd }) {
       if (stopped) { loaded.close(); return; }
       model = loaded;
       renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+      renderer.autoClear = false;
       renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.5));
       stage.appendChild(renderer.domElement);
       scene = new THREE.Scene();
@@ -108,15 +110,16 @@ export async function openFaceTryOn({ assembly, leftPd, rightPd }) {
         geometry.setAttribute('position', new THREE.Float32BufferAttribute(part.vertices.flat(), 3));
         geometry.setIndex(part.faces.flat()); geometry.computeVertexNormals();
         const lens = part.kind === 'lens';
-        cad.add(new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({
+        const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({
           color: lens ? 0xd4e1e9 : 0x26272a, roughness: .32, metalness: .12,
           transparent: lens, opacity: lens ? .08 : 1, depthWrite: !lens, side: THREE.DoubleSide,
-        })));
+        }));
+        mesh.layers.set(frameRenderLayer(part));cad.add(mesh);
       }
       // Centre on optical references, preserving asymmetric frames and fitting offsets.
       const anchor = new THREE.Vector3(...anchors.centre);
-      scene.add(new THREE.HemisphereLight(0xffffff, 0x5d6170, 3));
-      const light = new THREE.DirectionalLight(0xffffff, 3); light.position.set(-200, 400, 700); scene.add(light);
+      const ambient=new THREE.HemisphereLight(0xffffff, 0x5d6170, 3);ambient.layers.enableAll();scene.add(ambient);
+      const light = new THREE.DirectionalLight(0xffffff, 3);light.layers.enableAll(); light.position.set(-200, 400, 700); scene.add(light);
       const resizeView = () => {
         const width = stage.clientWidth, height = stage.clientHeight;
         renderer.setSize(width, height);
@@ -149,7 +152,7 @@ export async function openFaceTryOn({ assembly, leftPd, rightPd }) {
               targetPosition.set(...pose.centre).sub(anchor.clone().applyQuaternion(targetQuaternion).multiplyScalar(pose.scale));
               // Appearance offset only: leave room between rendered lenses and the eyes.
               // This is never saved as a wearer measurement or used for an STL.
-              targetPosition.add(new THREE.Vector3(...pose.targetBasis[2]).multiplyScalar(10 * pose.scale));
+              targetPosition.add(new THREE.Vector3(...pose.targetBasis[2]).multiplyScalar(18 * pose.scale));
               if (!hasPose) { frame.quaternion.copy(targetQuaternion); frame.position.copy(targetPosition); frame.scale.setScalar(pose.scale); }
               else { frame.quaternion.slerp(targetQuaternion, .6); frame.position.lerp(targetPosition, .6); frame.scale.lerp(new THREE.Vector3().setScalar(pose.scale), .6); }
               hasPose = true; say('');
@@ -162,7 +165,10 @@ export async function openFaceTryOn({ assembly, leftPd, rightPd }) {
           frame.visible = false; skin.visible = false; hasPose = false;
           say('Camera paused');
         }
-        renderer.render(scene, camera);
+        renderer.clear();
+        camera.layers.set(0);renderer.render(scene, camera);
+        renderer.clearDepth();
+        camera.layers.set(1);renderer.render(scene, camera);
         animation = requestAnimationFrame(loop);
       };
       say('Look toward the camera'); animation = requestAnimationFrame(loop);

@@ -1,5 +1,5 @@
 import { createAutoCaptureGate } from './auto-capture.js?v=23';
-import { createCaptureGuidance, frameBrightness, optimizeCameraTrack } from './capture-guidance.js?v=23';
+import { createCaptureGuidance, frameBrightness, optimizeCameraTrack } from './capture-guidance.js?v=37';
 import { captureSharpFrame } from './sharp-frame.js?v=22';
 import { fuseContours } from './contour-fusion.js?v=22';
 import { sheetHomography, project, unproject } from './calibration.js?v=22';
@@ -215,9 +215,10 @@ export function createLiveSegmentSession({
     latest.displayContour = null;
     if (!trackingContext || !calibrateFrame || !latest.sheetContour?.length || !video.videoWidth || !video.videoHeight) return;
     try {
-      const scale = Math.min(1, 480 / Math.max(video.videoWidth, video.videoHeight));
-      const width = Math.max(1, Math.round(video.videoWidth * scale));
-      const height = Math.max(1, Math.round(video.videoHeight * scale));
+      // A half-resolution tracking image can erase the white centres of small
+      // markers that were detected successfully in the segmentation frame.
+      // Use the same pixel budget for both paths; never draw a stale plane.
+      const [width, height] = dimensions();
       trackingCanvas.width = width; trackingCanvas.height = height;
       trackingContext.drawImage(video, 0, 0, width, height);
       const current = calibrateFrame(trackingContext.getImageData(0, 0, width, height), []);
@@ -243,6 +244,11 @@ export function createLiveSegmentSession({
     if (autoCapture) {
       trackSheetPlane();
       draw();
+      if (!latest.displayContour?.length) {
+        autoGate.invalidate();
+        captureButton.disabled = true;
+        message('Show all four dots');
+      }
       return;
     }
     try {
@@ -388,7 +394,7 @@ export function createLiveSegmentSession({
         const decision = autoGate.update({ presence: data.presence, quality: data.quality, brightness, calibration, sampledAt: startedAt,
           now: performance.now(), id: sampledId, dragging: Boolean(target) });
         setAutoState(decision.state);
-        const advice = guidance.update({ calibration, width, height, minMarkerSpan: sharpStill ? 225 : 300, quality: data.quality, presence: data.presence,
+        const advice = guidance.update({ calibration, width, height, quality: data.quality, presence: data.presence,
           brightness, latencyMs: performance.now() - startedAt, now: performance.now(), state: autoState });
         message(advice.message);
         return;
@@ -414,6 +420,11 @@ export function createLiveSegmentSession({
         trackingBase = null;
         trackSheetPlane();
         lastTrackAt = performance.now();
+        if (!latest.displayContour?.length) {
+          clearResult();
+          message('Show all four dots');
+          return;
+        }
       } else {
         try { trackingBase = grayFrame(frame); } catch { trackingBase = null; }
       }
@@ -435,7 +446,7 @@ export function createLiveSegmentSession({
       draw();
       if (autoCapture) {
         if (sharpStill && updatedAt < refinementRetryAt) { message(refinementHint); return; }
-        const advice = guidance.update({ calibration, width, height, minMarkerSpan: sharpStill ? 225 : 300, quality: data.quality, presence: data.presence,
+        const advice = guidance.update({ calibration, width, height, quality: data.quality, presence: data.presence,
           brightness, latencyMs, now: updatedAt, state: autoState });
         const decision = autoGate.update({ ...data, quality: advice.ready ? data.quality : null, calibration, sampledAt: startedAt,
           now: updatedAt, id: sampledId, dragging: Boolean(target) });
@@ -459,7 +470,7 @@ export function createLiveSegmentSession({
         const blocker = {stale:'Connection is slow. Retrying…', calibration:'Show all four dots',
           blur:'Let the camera focus', quality:'Edge unclear. Adjust the light', outline:'Keep one lens inside the dots'}[decision.reason];
         message(decision.state === 'remove' ? 'Remove the first lens' : !advice.ready ? advice.message
-          : blocker || (decision.state === 'steady' ? 'Lens found' : advice.message));
+          : blocker || (decision.state === 'steady' ? 'Hold steady' : advice.message));
         if (decision.capture) {
           if (sharpStill) await captureStill(token, job.abort.signal);
           else await capture(best, true);

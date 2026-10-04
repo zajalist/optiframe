@@ -53,3 +53,14 @@ test('ambiguous shadow boundaries show a recovery cue and cannot qualify', () =>
   assert.deepEqual(settled(createCaptureGuidance(), {presence:{detected:false,reason:'edge-refinement-unsupported'}}),
     {message:'Edge unclear. Soften the light',ready:false});
 });
+
+test('undersampled sheet takes priority over ambiguous-edge lighting advice', () => {
+  // Reproduced marker span from the user's phone screenshot at 960px preview.
+  const calibration={markers:[[148,403],[383,402],[394,565],[146,570]]};
+  for(const presence of [{detected:true},{detected:false,reason:'edge-refinement-unsupported'}]) {
+    assert.deepEqual(settled(createCaptureGuidance(),{width:539,height:960,calibration,presence}),
+      {message:'Move closer',ready:false});
+  }
+  assert.deepEqual(settled(createCaptureGuidance(),{calibration:null,presence:{detected:false,reason:'edge-refinement-unsupported'}}),
+    {message:'Show all four dots',ready:false});
+});

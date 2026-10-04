@@ -99,3 +99,7 @@ access key from the process environment and sends requests only to
 are local temporary artifacts under `%TEMP%/optiframe-recording-validation/`:
 `report.json`, both `*-contact.jpg` files, and both `*-overlays.jpg` files. Images
 and full contour reports are not committed as public research assets.
+# Follow-up: small lens / missing overlay screenshot
+
+The 21:49 iPhone screenshot reproduced a separate client failure: the camera crop's four markers were found at the 960-pixel segmentation resolution (about 235 pixels across), but all four were lost by the 480-pixel live plane tracker. The inferred outline was consequently hidden while the status still said "Lens found". v37 tracks at the same resolution as inference, requires a currently tracked plane before automatic capture, and invalidates stability after marker loss. Distance guidance now takes precedence over a generic edge/light hint; the 300-pixel marker-span floor asks this setup to move closer. This is a reproduced UI/tracking failure, not evidence of physical edge accuracy. The four relevant capture test suites passed 64 tests.
+

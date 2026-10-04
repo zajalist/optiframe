@@ -42,7 +42,7 @@ $('retry').addEventListener('click',build);
 $('sample').addEventListener('click',()=>{outlines=null;void build();});
 $('try').addEventListener('click',async()=>{
   if(!assembly||opening)return;const current=assembly;opening=true;ready(true);$('try').textContent='Opening…';
-  try{const {openFaceTryOn}=await import('./face-tryon.js?v=36');closeTryOn=await openFaceTryOn({assembly:current});}
+  try{const {openFaceTryOn}=await import('./face-tryon.js?v=37');closeTryOn=await openFaceTryOn({assembly:current});}
   catch(error){$('status').textContent=error.message;}
   finally{opening=false;$('try').textContent='Try on';ready(Boolean(assembly));}
 });

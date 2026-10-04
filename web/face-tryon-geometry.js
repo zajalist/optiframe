@@ -5,6 +5,10 @@ const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a
 const middle = (a, b) => a.map((v, i) => (v + b[i]) / 2);
 const finitePoint = p => Array.isArray(p) && p.length === 3 && p.every(Number.isFinite);
 
+// A monocular face mesh is too approximate to cut holes through a front rim.
+// Occlude only the temples; render the complete front in its own depth pass.
+export const frameRenderLayer = part => part.name?.endsWith('-temple') ? 0 : 1;
+
 // Same centre crop as object-fit: cover. Rendering and video are mirrored together.
 export function landmarkToView(p, videoWidth, videoHeight, width, height) {
   const scale = Math.max(width / videoWidth, height / videoHeight);

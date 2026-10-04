@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { opticalAnchors, landmarkToView, facePose } from './face-tryon-geometry.js';
+import { opticalAnchors, landmarkToView, facePose, frameRenderLayer } from './face-tryon-geometry.js';
+
+test('approximate face depth only occludes temples, never cuts rims or bridge',()=>{
+  for(const name of ['front','left-retainer','right-retainer','left-lens','right-lens','left-snap-pin-0'])assert.equal(frameRenderLayer({name}),1);
+  assert.equal(frameRenderLayer({name:'left-temple'}),0);assert.equal(frameRenderLayer({name:'right-temple'}),0);
+});
 
 test('front-facing CAD references preserve different pupil distances and optical heights', () => {
   const anchors = opticalAnchors({ opticalCentres: [[-32, 3, 2.15], [29, -2, 2.15]] });

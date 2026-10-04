@@ -19,13 +19,13 @@ export function createCaptureGuidance() {
       slowCount = latencyMs > 700 ? slowCount + 1 : 0;
       if (state === 'remove') message = 'Remove the first lens';
       else if (Number.isFinite(brightness) && brightness < 45) { message = 'Add soft light'; ready = false; }
-      else if (presence?.reason === 'edge-refinement-unsupported') { message = 'Edge unclear. Soften the light'; ready = false; }
       else if (markers?.length === 4) {
         nearEdge = markers.some(([x, y]) => x < width * .025 || x > width * .975 || y < height * .025 || y > height * .975);
         const span = Math.min(Math.hypot(markers[1][0] - markers[0][0], markers[1][1] - markers[0][1]),
           Math.hypot(markers[2][0] - markers[3][0], markers[2][1] - markers[3][1]));
         if (nearEdge) { message = 'Move back slightly'; ready = false; }
         else if (span < minMarkerSpan) { message = 'Move closer'; ready = false; }
+        else if (presence?.reason === 'edge-refinement-unsupported') { message = 'Edge unclear. Soften the light'; ready = false; }
         else if (quality?.clippedFraction > .025 && !(presence?.detected === true &&
             presence.evidence?.edgeSupport >= .64 && presence.evidence?.sectorsSupported >= 7)) {
           message = 'Soften the light'; ready = false;
@@ -34,7 +34,7 @@ export function createCaptureGuidance() {
       } else {
         ready = false;
         if (nearEdge) message = 'Move back slightly';
-        else if (presence?.detected === true) message = 'Show all four dots';
+        else if (presence?.detected === true || presence?.reason === 'edge-refinement-unsupported') message = 'Show all four dots';
         else if (presence?.reason === 'background-shape') message = 'Use the capture sheet';
       }
       if (!message && slowCount >= 4) message = 'Processing slowly';

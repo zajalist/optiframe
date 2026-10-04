@@ -1,4 +1,4 @@
-import { createLiveSegmentSession } from './live-segment.js?v=28';
+import { createLiveSegmentSession } from './live-segment.js?v=37';
 import { sheetHomography, project, measure } from './calibration.js';
 import { detectSheetMarkers } from './marker-detect.js?v=9';
 import { photoReviewLayout } from './photo-review.js?v=23';
