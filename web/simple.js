@@ -1,4 +1,4 @@
-import { createLiveSegmentSession } from './live-segment.js?v=39';
+import { createLiveSegmentSession } from './live-segment.js?v=40';
 import { sheetHomography, project, measure } from './calibration.js';
 import { detectSheetMarkers } from './marker-detect.js?v=9';
 import { photoReviewLayout } from './photo-review.js?v=23';
@@ -66,6 +66,22 @@ function validationSound() {
     oscillator.start(now); oscillator.stop(now + .23);
     oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
   } catch { /* A sound failure must not block capture. */ }
+}
+
+// The desktop GPU can take several seconds per SAM proposal. Capture one fresh
+// full-resolution original after the preview agrees, then validate that still
+// independently. A five-frame burst cannot fit the live service's GPU budget.
+function captureSingleStill(video, { maxSide = 1600, signal } = {}) {
+  if (signal?.aborted) throw new DOMException('Capture cancelled', 'AbortError');
+  if (!video.videoWidth || !video.videoHeight || video.readyState < 2)
+    throw new Error('Camera is not ready');
+  const scale = Math.min(1, maxSide / Math.max(video.videoWidth, video.videoHeight));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+  canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+  canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+  return { canvas, sampledAt: performance.now(), capturedAt: new Date().toISOString(),
+    id: Number.isFinite(video.currentTime) ? video.currentTime : performance.now() };
 }
 
 const aimOverlay = document.createElement('div');
@@ -454,7 +470,8 @@ async function segmentPhotoAt(x, y) {
 controller = createLiveSegmentSession({
   video, overlay: $('camera-overlay'), status, captureButton: controllerButton,
   apiFetch, side: 'lens', removalLabel: 'left', onCapture: acceptCapture, minimalStatus: true,
-  autoCapture: true,
+  autoCapture: true, captureFrame: captureSingleStill,
+  requestTimeoutMs: 30000, maxResultAgeMs: 30000,
   onRemovalChange(waiting) {
     if (side !== 'right' || !captures.left?.confirmed) return;
     awaitingRemoval = waiting;

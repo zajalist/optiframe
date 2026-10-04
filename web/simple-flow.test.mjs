@@ -56,7 +56,8 @@ function harness({ cameraError = null, storageError = null, deferReads = false, 
   const context = vm.createContext({
     document: { getElementById: $, createElement: element, body },
     window: { addEventListener(name,callback) { windowListeners.set(name,callback); }, AudioContext }, location, FileReader,
-    URLSearchParams, Blob, File, FormData, sheetHomography, project, measure, photoReviewLayout,
+    URLSearchParams, Blob, File, FormData, DOMException, performance,
+    sheetHomography, project, measure, photoReviewLayout,
     detectSheetMarkers: () => [[0, 0], [1000, 0], [1000, 700], [0, 700]],
     createLiveSegmentSession(options) { callbacks = options; return controller; },
     createImageBitmap: async () => ({ width: 1000, height: 700, close() {} }),
@@ -86,6 +87,17 @@ test('camera requests access on load and a failed request keeps photo import and
 test('guided sweep is explicitly selected by the test link', () => {
   assert.equal(harness().controllerOptions.viewSweep, false);
   assert.equal(harness({search:'?capture=sweep&v=24'}).controllerOptions.viewSweep, true);
+});
+
+test('slow GPU scanner accepts a delayed proposal and refines one fresh still', () => {
+  const app=harness();
+  const options=app.controllerOptions;
+  assert.ok(options.requestTimeoutMs>11000);
+  assert.ok(options.maxResultAgeMs>11000);
+  const still=options.captureFrame({videoWidth:1920,videoHeight:1080,readyState:4,currentTime:12.5});
+  assert.equal(still.canvas.width,1600);
+  assert.equal(still.canvas.height,900);
+  assert.equal(still.frames,undefined,'the slow single-GPU path must avoid a timed-out burst');
 });
 
 test('flashlight control is shown in every live camera session and reflects supported, busy, and unavailable states',async()=>{

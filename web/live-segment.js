@@ -554,7 +554,7 @@ export function createLiveSegmentSession({
       context.drawImage(selected.canvas,0,0,overlay.width,overlay.height);
       message('Refining…');
       const started = performance.now();
-      const deadline=started+Math.min(requestTimeoutMs,8000);
+      const deadline=started+requestTimeoutMs;
       for (let index=0;index<frames.length;index++) {
         if(token!==generation || signal.aborted)return;
         const candidate=frames[index], id=candidate.id??candidate.sampledAt??index;
