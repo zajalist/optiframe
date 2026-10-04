@@ -14,8 +14,9 @@ export function landmarkToView(p, videoWidth, videoHeight, width, height) {
 export function opticalAnchors(assembly, leftPd, rightPd) {
   const centres = assembly.opticalCentres || [[-Number(leftPd), 0, 2.15], [Number(rightPd), 0, 2.15]];
   if (centres.length !== 2 || !centres.every(finitePoint)) throw new Error('Frame optical centres are missing. Rebuild the preview.');
-  // The CAD front is viewed from -Z. Rotate it into the selfie camera's +Z view.
-  const [left, right] = centres.map(([x, y, z]) => [-x, y, -z]);
+  // CAD wearer-left is -X; selfie face coordinates use +X for that eye.
+  // Keep depth: the actual temples extend behind the front along negative Z.
+  const [left, right] = centres.map(([x, y, z]) => [-x, y, z]);
   const distance = length(sub(left, right));
   if (distance < 30 || distance > 90) throw new Error('Frame pupil distances are invalid.');
   return { left, right, centre: middle(left, right), distance };

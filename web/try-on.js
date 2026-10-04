@@ -1,0 +1,53 @@
+import {visualFitPayload,captureOutlines,nativeTryOnFile} from './visual-fit.js?v=36';
+const $=id=>document.getElementById(id);
+const access=new URLSearchParams(location.hash.slice(1)).get('access');
+$('home').hash=location.hash;
+let outlines=null,assembly=null,style='classic',sequence=0,controller,closeTryOn=null,opening=false;
+const cache=new Map();
+try {
+  const transferred=sessionStorage.getItem('optiframe-visual-outlines');
+  if(transferred){outlines=JSON.parse(transferred);$('source').textContent='Your lens shapes · Illustrative fit';}
+  else {const raw=sessionStorage.getItem('optiframe-captures');if(raw){outlines=captureOutlines(JSON.parse(raw));$('source').textContent='Your lens shapes · Illustrative fit';}}
+} catch { $('status').textContent='Could not open your lens outlines.'; }
+async function sample(){const r=await fetch('/assets/review-lens-pair.json');if(!r.ok)throw new Error('Sample frames could not load. Retry.');const pair=await r.json();outlines=[pair.left,pair.right];$('source').textContent='Sample lenses · Illustrative fit';}
+function ready(value){$('try').disabled=!value||opening;$('native').disabled=!value;}
+async function build(){
+  const request=++sequence;controller?.abort();controller=new AbortController();const currentController=controller;const signal=currentController.signal;const timer=setTimeout(()=>currentController.abort(),60000);
+  assembly=null;ready(false);$('viewer').dataset.stale='true';$('status').textContent='Preparing frame…';$('retry').hidden=true;$('sample').hidden=true;
+  for(const b of document.querySelectorAll('[data-style]'))b.setAttribute('aria-pressed',String(b.dataset.style===style));
+  try {
+    if(!outlines)await sample();
+    if(request!==sequence)return;
+    const payload=visualFitPayload(outlines,style),key=JSON.stringify(payload);
+    let result=cache.get(key);
+    if(!result){
+      let response;
+      for(let attempt=0;attempt<3;attempt++){
+        response=await fetch('/api/frame-preview',{method:'POST',headers:{'Content-Type':'application/json',...(access?{'X-OptiFrame-Key':access}:{})},body:JSON.stringify(payload),signal});
+        if(response.status!==503||attempt===2)break;
+        await new Promise(resolve=>setTimeout(resolve,700));if(signal.aborted)throw new DOMException('Cancelled','AbortError');
+      }
+      if(!response.ok){const error=await response.json().catch(()=>({}));throw new Error(response.status===401?'Open your private try-on link.':error.detail||'Frame unavailable. Retry or use sample frames.');}
+      result=await response.json();cache.set(key,result);
+    }
+    if(request!==sequence)return;
+    const {showSTL}=await import('./viewer.js?v=30');if(request!==sequence)return;
+    showSTL(new TextEncoder().encode(JSON.stringify(result)).buffer,$('viewer'));
+    assembly=nativeTryOnFile(result);$('viewer').dataset.stale='false';$('status').textContent='';ready(true);
+  }catch(error){if(request!==sequence)return;$('status').textContent=error.name==='AbortError'?'Preview timed out. Retry.':error.message;$('retry').hidden=false;$('sample').hidden=false;}
+  finally{clearTimeout(timer);}
+}
+for(const b of document.querySelectorAll('[data-style]'))b.addEventListener('click',()=>{if(style===b.dataset.style)return;style=b.dataset.style;void build();});
+$('retry').addEventListener('click',build);
+$('sample').addEventListener('click',()=>{outlines=null;void build();});
+$('try').addEventListener('click',async()=>{
+  if(!assembly||opening)return;const current=assembly;opening=true;ready(true);$('try').textContent='Opening…';
+  try{const {openFaceTryOn}=await import('./face-tryon.js?v=36');closeTryOn=await openFaceTryOn({assembly:current});}
+  catch(error){$('status').textContent=error.message;}
+  finally{opening=false;$('try').textContent='Try on';ready(Boolean(assembly));}
+});
+$('native').addEventListener('click',()=>{
+  if(!assembly)return;const url=URL.createObjectURL(new Blob([JSON.stringify(assembly)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=`optiframe-${style}-visual-tryon.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);$('native-note').hidden=false;
+});
+window.addEventListener('pagehide',()=>{++sequence;controller?.abort();closeTryOn?.();});
+void build();

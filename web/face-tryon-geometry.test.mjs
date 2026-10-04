@@ -4,9 +4,9 @@ import { opticalAnchors, landmarkToView, facePose } from './face-tryon-geometry.
 
 test('front-facing CAD references preserve different pupil distances and optical heights', () => {
   const anchors = opticalAnchors({ opticalCentres: [[-32, 3, 2.15], [29, -2, 2.15]] });
-  assert.deepEqual(anchors.left, [32, 3, -2.15]);
-  assert.deepEqual(anchors.right, [-29, -2, -2.15]);
-  assert.deepEqual(anchors.centre, [1.5, .5, -2.15]);
+  assert.deepEqual(anchors.left, [32, 3, 2.15]);
+  assert.deepEqual(anchors.right, [-29, -2, 2.15]);
+  assert.deepEqual(anchors.centre, [1.5, .5, 2.15]);
   assert.equal(anchors.distance, Math.hypot(61, 5));
   assert.throws(() => opticalAnchors({ opticalCentres: [[NaN, 0, 0], [30, 0, 0]] }));
 });

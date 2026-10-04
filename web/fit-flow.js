@@ -1,7 +1,7 @@
-import { leftPanel, rightPanel, capturesReady, makeFrame, project, getFrameStyle, setFrameStyle, getRetentionStyle, setRetentionStyle, getFrameAssembly } from './app.js?v=35';
+import { leftPanel, rightPanel, capturesReady, makeFrame, project, getFrameStyle, setFrameStyle, getRetentionStyle, setRetentionStyle, getFrameAssembly } from './app.js?v=36';
 import { validateFaceFit, lensReady, marksReady } from './fit-validation.js';
 import { mountPupilMeasurements } from './pupil-measurements.js?v=27';
-import { mountFrameCatalog } from './frame-catalog.js?v=31';
+import { mountFrameCatalog } from './frame-catalog.js?v=36';
 import { mountThicknessMeasurements } from './thickness-measurements.js?v=35';
 
 if (new URLSearchParams(location.search).get('advanced') !== '1') void startFitFlow();
@@ -34,6 +34,16 @@ async function startFitFlow() {
     const b = document.createElement('button'); b.type = 'button'; b.textContent = text; b.className = className; b.addEventListener('click', action); return b;
   }
   function note(text) { const p = document.createElement('p'); p.className = 'fit-note'; p.textContent = text; body.append(p); return p; }
+  function visualTryOn() {
+    try {
+      if(!panels.every(lensReady))throw new Error('Scan both lenses first.');
+      const outlines=panels.map(p=>p.points.map(point=>project(point,p.homography)));
+      sessionStorage.setItem('optiframe-visual-outlines',JSON.stringify(outlines));
+      // Keep the fitting flow recoverable when returning from visual try-on.
+      if(captureBackup)sessionStorage.setItem('optiframe-captures',JSON.stringify(captureBackup));
+      location.href='/try-on.html?v=36'+location.hash;
+    } catch(error){message.textContent=error.message;}
+  }
   function inputs(ids) {
     const group = document.createElement('div'); group.className = 'fit-fields design-inputs';
     ids.forEach(id => group.append(fields(id).closest('label'))); body.append(group);
@@ -109,9 +119,11 @@ async function startFitFlow() {
       const a = document.createElement('a'); a.className = 'fit-link'; a.href = '/'+location.hash; a.textContent = 'Scan lenses'; body.append(a);
     } else {
       const a = document.createElement('a'); a.className = 'fit-link'; a.href = '/'+location.hash; a.textContent = 'Rescan'; body.append(a);
+      body.append(button('Just try on',visualTryOn,'fit-link'));
     }
   }
   function methodScreen() {
+    body.append(button('Just try on',visualTryOn,'catalog-tryon'));
     const group = document.createElement('fieldset'); group.className='fit-methods';
     const legend = document.createElement('legend'); legend.textContent='Measurement source'; group.append(legend);
     for(const [value,label] of [['manual','Enter measurements'],['native','Import face scan']]) {
@@ -172,7 +184,7 @@ async function startFitFlow() {
     if(step===3)cleanupStep=mountThicknessMeasurements(body,fields('left-edge-thickness'),fields('right-edge-thickness'));
     if(step===4||step===5)markScreen(step===4?left:right);
     if(step===6){inputs(['left-vertical-offset','right-vertical-offset','temple-length']);note('Zero offsets and 130 mm temples are starting settings. Adjust for the wearer.');}
-    if(step===7)cleanupStep=mountFrameCatalog({body,viewer,status:designStatus,panels,getStyle:getFrameStyle,setStyle:setFrameStyle,getRetention:getRetentionStyle,setRetention:setRetentionStyle,getAssembly:getFrameAssembly,rebuild:()=>makeFrame(true),onUpdate:update,leftPd:()=>Number(fields('left-pd').value),rightPd:()=>Number(fields('right-pd').value)});
+    if(step===7)cleanupStep=mountFrameCatalog({body,viewer,status:designStatus,panels,getStyle:getFrameStyle,setStyle:setFrameStyle,getRetention:getRetentionStyle,setRetention:setRetentionStyle,getAssembly:getFrameAssembly,rebuild:()=>makeFrame(true),onUpdate:update,leftPd:()=>Number(fields('left-pd').value),rightPd:()=>Number(fields('right-pd').value),visualTryOn});
     if(step===8){inputs(['bed-width','bed-depth']);note(panels.some(p=>p.illustrativeAlignment)?'Prototype alignment · unverified fit-test STL only.':'Unverified fit-test STL kit. Slice at 100% in millimetres.');body.append(designStatus);const a=document.createElement('a');a.className='fit-link';a.href='?advanced=1'+location.hash;a.textContent='Physical checks';a.addEventListener('click',event=>{
       try {
         if(!Array.isArray(captureBackup))throw new Error('Return to Scanner to transfer both captures again.');

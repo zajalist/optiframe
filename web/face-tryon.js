@@ -1,4 +1,4 @@
-import { facePose, opticalAnchors, landmarkToView } from './face-tryon-geometry.js';
+import { facePose, opticalAnchors, landmarkToView } from './face-tryon-geometry.js?v=36';
 
 const VISION_VERSION = '0.10.32';
 const VISION_ROOT = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${VISION_VERSION}`;
@@ -102,7 +102,7 @@ export async function openFaceTryOn({ assembly, leftPd, rightPd }) {
       faceGeometry.setIndex(triangles);
       const skin = new THREE.Mesh(faceGeometry, new THREE.MeshBasicMaterial({ colorWrite: false, side: THREE.DoubleSide }));
       skin.frustumCulled = false; skin.visible = false; skin.renderOrder = -1; scene.add(skin);
-      const cad = new THREE.Group(); cad.rotation.y = Math.PI; frame.add(cad);
+      const cad = new THREE.Group(); cad.scale.x = -1; frame.add(cad);
       for (const part of assembly.meshes) {
         const geometry = new THREE.BufferGeometry();
         geometry.setAttribute('position', new THREE.Float32BufferAttribute(part.vertices.flat(), 3));

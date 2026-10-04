@@ -6,7 +6,7 @@ const styles = [
   {id:'brow', name:'Brow', rim:10.6},
 ];
 
-export function mountFrameCatalog({body, viewer, status, panels, getStyle, setStyle, getRetention, setRetention, getAssembly, rebuild, onUpdate, leftPd, rightPd}) {
+export function mountFrameCatalog({body, viewer, status, panels, getStyle, setStyle, getRetention, setRetention, getAssembly, rebuild, onUpdate, leftPd, rightPd, visualTryOn}) {
   let alive = true, busy = false, building = false, closeTryOn = null;
   if (!document.querySelector('link[data-frame-catalog]')) {
     const css=document.createElement('link');css.rel='stylesheet';css.href=new URL('./frame-catalog.css?v=31',import.meta.url).href;
@@ -64,10 +64,12 @@ export function mountFrameCatalog({body, viewer, status, panels, getStyle, setSt
   const retry=document.createElement('button');retry.type='button';retry.className='fit-link';retry.textContent='Rebuild';
   retry.addEventListener('click',build);
   tryOn.addEventListener('click',async()=>{
-    const assembly=getAssembly(); if(!assembly||busy||building||viewer.dataset.stale!=='false')return;
+    if(busy||building)return;
+    const assembly=getAssembly();
+    if(!assembly||viewer.dataset.stale!=='false'){visualTryOn?.();return;}
     busy=true;refresh();
     try {
-      const {openFaceTryOn}=await import('./face-tryon.js?v=27');
+      const {openFaceTryOn}=await import('./face-tryon.js?v=36');
       if(!alive)return;
       closeTryOn=await openFaceTryOn({assembly,leftPd:leftPd(),rightPd:rightPd()});
       if(!alive)closeTryOn?.();
@@ -87,7 +89,7 @@ export function mountFrameCatalog({body, viewer, status, panels, getStyle, setSt
     choices.setAttribute('aria-busy',String(building));
     for(const button of choices.children){button.setAttribute('aria-pressed',String(button.dataset.style===getStyle()));button.disabled=building;}
     for(const button of retention.children){button.setAttribute('aria-pressed',String(button.dataset.retention===getRetention()));button.disabled=building;}
-    tryOn.disabled=!ready||busy||building;tryOn.textContent=busy?'Opening…':'Try on';retry.hidden=ready||building;
+    tryOn.disabled=(!ready&&!visualTryOn)||busy||building;tryOn.textContent=busy?'Opening…':!ready&&visualTryOn?'Just try on':'Try on';retry.hidden=ready||building;
   }
   const observer=new MutationObserver(refresh);observer.observe(viewer,{attributes:true,attributeFilter:['class','data-stale']});
   refresh();void build();

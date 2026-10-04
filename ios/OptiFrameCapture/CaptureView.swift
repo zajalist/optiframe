@@ -10,6 +10,7 @@ struct CaptureView: View {
     @State private var export: CaptureExport?
     @State private var reviewing = false
     @State private var faceFitting = false
+    @State private var tryingOn = false
     @State private var gpuServer = ""
     @State private var gpuToken = ""
     @Environment(\.scenePhase) private var scenePhase
@@ -30,6 +31,13 @@ struct CaptureView: View {
             .buttonStyle(.bordered)
             .disabled(capture.isBusy || capture.isRecording || capture.frameCount > 0)
             .accessibilityHint("Available before a lens session. Export existing lens frames and start a new lens first.")
+            Button("Try on a frame") {
+                capture.stop()
+                tryingOn = true
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(capture.isBusy || capture.isRecording || capture.frameCount > 0)
+            .accessibilityHint("Import a website frame preview. Available before a lens capture session.")
             CameraPreview(session: capture.session, contour: [],
                           showBox: mode == .liveSegmentation)
                 .frame(height: 260)
@@ -123,6 +131,9 @@ struct CaptureView: View {
         .fullScreenCover(isPresented: $faceFitting, onDismiss: {
             if scenePhase == .active { capture.start() }
         }) { FaceFitView() }
+        .fullScreenCover(isPresented: $tryingOn, onDismiss: {
+            if scenePhase == .active { capture.start() }
+        }) { TryOnView() }
         .sheet(isPresented: $reviewing) {
             NavigationStack {
                 ScrollView {

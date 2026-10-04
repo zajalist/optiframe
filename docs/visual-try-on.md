@@ -1,0 +1,9 @@
+# Visual try-on without fitting measurements
+
+`/try-on.html` builds an appearance preview using projected lens shapes, geometric centres and illustrative clearance. It never reads or updates pupil distances, optical marks, thickness inputs or print-fit settings. The summary and measurement-source screens offer **Just try on**. A failed printable frame preview also offers this route, so random measurements cannot trap users behind a disabled camera button.
+
+When transferred captures are present, their sheet homography supplies the shapes. Otherwise the page explicitly labels the saved example as sample lenses. Preview defaults include 2 mm edge thickness, 130 mm temples and a 16 mm gap between lens bounding boxes. Shapes wider than 60 mm are uniformly scaled only in this appearance preview. These are not wearer measurements or a printable fit. There is no STL export on this page.
+
+The website uses MediaPipe face landmarks with a local front-camera stream. It is not ARKit, and face frames are not uploaded. The **iPhone app file** exports the assembled mesh JSON with `purpose: visual-try-on`, `alignmentSource: illustrative` and `requiresFitVerification: true`. The native app imports that file using ARKit face tracking; see `ios/README.md`. The native implementation has not been compiled or tested on an iPhone from this Windows workspace.
+
+Verification: visual-fit projection/default isolation, malformed inputs, preview recovery, camera permission/cleanup and face pose tests passed (16 tests). Public Classic and Bold preview builds succeeded. A phone-sized 390×700 browser layout has no document overflow. Browser camera permission was denied in the desktop test; recovery appeared correctly. Actual iPhone face tracking remains a device test.

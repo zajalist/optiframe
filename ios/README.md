@@ -2,6 +2,20 @@
 
 This is OptiFrame's own SwiftUI/ARKit capture app. It records **one lens per ZIP**. Use the marked capture sheet and verify its printed scale with a ruler before measuring a lens in the web app.
 
+## Native visual try-on
+
+In the website's frame preview, download the **iPhone app preview** JSON to Files. Open **Try on a frame** in this app, then **Import frame**. No optician measurements are required to view an already-generated model. The app imports the actual assembled meshes; it does not generate new prescription or fitting measurements. Leave an existing lens capture session by exporting it and starting a new lens before entering try-on.
+
+The front-camera ARKit face anchor follows head movement, with depth-only face geometry hiding rear frame parts behind the face. Imported millimetre dimensions are preserved: there is no automatic scale-to-face fit. Placement uses the tracked eye midpoint plus an illustrative 18 mm forward offset. This is a visual preview, not a lens-retention, optical-alignment or comfort check. Lens placeholders are flat sections from the CAD model, not measured optical surfaces. No face geometry, images, or eye positions are saved or uploaded by try-on.
+
+The importer accepts the direct `/frame-preview` schema: `schemaVersion: 1`, `units: "millimetres"`, `opticalCentres` with two XYZ triples, and `meshes` containing `name`, `kind` (`printed` or `lens`), `vertices` and triangular `faces`. Limits are 20 MB, 32 meshes, 160,000 vertices and 250,000 triangles, finite coordinates within ±500 mm, and valid nondegenerate index triples. Unknown fields are ignored. Exported STL/build-plate geometry is not accepted. CAD coordinates transform to ARFaceAnchor coordinates as `(-x, y, z) / 1000` after centring on the two optical references; triangle winding is reversed to account for the X reflection. Wearer's left maps to ARKit +X and rearward temples remain -Z.
+
+Support uses `ARFaceTrackingConfiguration.isSupported`, independently of rear LiDAR or a TrueDepth hardware assumption. Camera permission is requested only after choosing a frame. Backgrounding, camera interruptions, serious thermal pressure and tracking loss hide the overlay; returning/retrying resets tracking. A permission response arriving after dismissal cannot restart capture.
+
+**Build status:** these new Swift sources and `TryOnModelTests` were authored on Windows and have not been compiled, signed or run on an iPhone. This is not an App Store/TestFlight release. XcodeGen includes the new files automatically. On a Mac run the existing Xcode build/test workflow below; then test import, left/right orientation, size, face occlusion, head turns, denied permission, interruption, background/foreground, unsupported device and thermal pause on a physical iPhone. Confirm the full frame is visible and temples point behind the head before using screenshots in a demo. The simulator cannot validate live face tracking.
+
+Apple references: [ARFaceAnchor coordinates](https://developer.apple.com/documentation/arkit/arfaceanchor), [device support and permission](https://developer.apple.com/documentation/arkit/verifying-device-support-and-user-permission), [tracking and visualizing faces](https://developer.apple.com/documentation/arkit/tracking-and-visualizing-faces).
+
 ## Experimental face fitting
 
 Before capturing a lens, choose **Face measurements** for the optional front-camera ARKit estimate. Hold still and face the camera; a stable capture completes automatically. Export the JSON and import it in the web fitting page, or enter provider measurements manually. Left/right refer to the wearer. The estimate uses ARKit eye-transform origins and must be verified by an eye-care provider; it is not clinical pupil metrology.
