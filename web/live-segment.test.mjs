@@ -186,6 +186,23 @@ test('small preview edge jitter triggers a separately measured sharp still inste
   } finally { fixture.session.stop(); }
 });
 
+test('supported phone contour advances automatically from live preview through the final still', {timeout: 4000}, async () => {
+  let captured=null, calls=0;
+  const proposal={...result,presence:{detected:true,evidence:{edgeSupport:.984,sectorsSupported:8}},
+    edgeRefinement:{accepted:true},quality:{score:.1818,sharpness:45.46,clippedFraction:.00063}};
+  const fixture=setup(async()=>{calls++;return {ok:true,json:async()=>proposal};},
+    value=>{captured=value;},{...autoOptions,stillCapture:true,
+      captureFrame:async()=>{const canvas=document.createElement('canvas');canvas.width=640;canvas.height=480;
+        return {canvas,sampledAt:performance.now(),capturedAt:new Date().toISOString()};}});
+  try {
+    await fixture.session.start();
+    await pause(800);
+    assert.ok(captured,'valid GPU segmentation must reach the review callback');
+    assert.equal(captured.source,'sharp-still');
+    assert.ok(calls>=3,'the final still is independently segmented');
+  } finally {fixture.session.stop();}
+});
+
 test('a good preview never substitutes for a blurry or missing lens in the final still', {timeout:5000}, async () => {
   for (const invalid of [{presence:{detected:false},contour:[]}, {quality:{score:.7,sharpness:5}}]) {
     let captured=null, still=false;

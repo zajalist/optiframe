@@ -1,5 +1,5 @@
 import { createAutoCaptureGate } from './auto-capture.js?v=24';
-import { createCaptureGuidance, frameBrightness, optimizeCameraTrack } from './capture-guidance.js?v=38';
+import { createCaptureGuidance, frameBrightness, optimizeCameraTrack } from './capture-guidance.js?v=39';
 import { captureSharpFrame } from './sharp-frame.js?v=22';
 import { fuseContours } from './contour-fusion.js?v=22';
 import { sheetHomography, project, unproject } from './calibration.js?v=22';

@@ -13,7 +13,7 @@ export function createCaptureGuidance({ removalLabel = 'first' } = {}) {
   let pending = '', pendingSince = 0, current = '', slowCount = 0, nearEdge = false;
   return {
     reset() { pending = ''; pendingSince = 0; current = ''; slowCount = 0; nearEdge = false; },
-    update({ calibration, width, height, quality, presence, brightness, latencyMs, now, state, minMarkerSpan = 300 }) {
+    update({ calibration, width, height, quality, presence, brightness, latencyMs, now, state, minMarkerSpan = Math.min(300, Math.round(Math.min(width, height) * .45)) }) {
       let message = '', ready = true;
       const markers = calibration?.markers;
       slowCount = latencyMs > 700 ? slowCount + 1 : 0;

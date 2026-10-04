@@ -228,10 +228,11 @@ def _warm_predictor():
         image = Image.new("RGB", (256, 256), (180, 180, 180))
         inputs = _processor(images=image, input_boxes=[[[48, 48, 208, 208]]],
                             return_tensors="pt").to("cuda")
-        with torch.inference_mode():
+        with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16,
+                                                  enabled=torch.cuda.is_bf16_supported()):
             result = _model(**inputs)
         # Postprocessing and synchronization verify readiness beyond loading weights.
-        _processor.post_process_masks(result.pred_masks.cpu(), inputs["original_sizes"])
+        _processor.post_process_masks(result.pred_masks.float().cpu(), inputs["original_sizes"])
         torch.cuda.synchronize()
 
 
@@ -243,12 +244,13 @@ def sam_mask(image: np.ndarray, box: tuple[int, int, int, int]) -> np.ndarray:
             rgb = cv2.cvtColor(crop.image, cv2.COLOR_BGR2RGB)
             inputs = _processor(images=Image.fromarray(rgb), input_boxes=[[list(crop.box)]],
                                 return_tensors="pt").to("cuda")
-            with torch.inference_mode():
+            with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16,
+                                                      enabled=torch.cuda.is_bf16_supported()):
                 result = _model(**inputs)
-            masks = _processor.post_process_masks(result.pred_masks.cpu(),
+            masks = _processor.post_process_masks(result.pred_masks.float().cpu(),
                                                    inputs["original_sizes"])[0]
             candidates = masks.reshape(-1, *masks.shape[-2:]).numpy()
-            scores = result.iou_scores.reshape(-1).cpu().numpy()
+            scores = result.iou_scores.reshape(-1).float().cpu().numpy()
             try:
                 return restore_best_lens_mask(candidates, scores, crop)
             except ValueError:

@@ -64,3 +64,12 @@ test('undersampled sheet takes priority over ambiguous-edge lighting advice', ()
   assert.deepEqual(settled(createCaptureGuidance(),{calibration:null,presence:{detected:false,reason:'edge-refinement-unsupported'}}),
     {message:'Show all four dots',ready:false});
 });
+
+test('a clear sheet filling a low-resolution phone preview is not blocked by a fixed 300px rule', () => {
+  const calibration={markers:[[134,317],[382,316],[398,481],[125,482]]};
+  const result=settled(createCaptureGuidance(),{width:472,height:1024,calibration,
+    quality:{score:.1818,sharpness:45.46,clippedFraction:.00063},
+    presence:{detected:true,evidence:{edgeSupport:.984,sectorsSupported:8}},
+    brightness:170,state:'steady'});
+  assert.deepEqual(result,{message:'Hold steady',ready:true});
+});
