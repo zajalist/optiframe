@@ -74,6 +74,17 @@ test('busy GPU responses back off and recover without hammering the service', as
   } finally {fixture.session.stop();}
 });
 
+test('repeated service failures reveal the server reason instead of waiting forever', async () => {
+  const fixture=setup(async()=>({status:503,ok:false,json:async()=>({detail:'Account verification unavailable'})}));
+  try {
+    await fixture.session.start();
+    await pause(30);
+    assert.equal(fixture.status.textContent,'Waiting for scanner…');
+    await pause(1100);
+    assert.equal(fixture.status.textContent,'Account verification unavailable');
+  } finally {fixture.session.stop();}
+});
+
 test('changing lighting invalidates the old outline and waits for exposure before sampling',async()=>{
   let enabled=false,calls=0,stopped=false;
   const track={getCapabilities:()=>({torch:true}),getSettings:()=>({torch:enabled}),

@@ -73,7 +73,7 @@ export function createLiveSegmentSession({
   let startupAbort = null;
   let manualTarget = false;
   let lastLocateAt = -Infinity;
-  let busyRetryMs = 0;
+  let busyRetryMs = 0, busyFailures = 0;
   let frameId = 0;
   let refinementRetryAt = 0, refinementHint = '';
   const sweepMode = autoCapture && viewSweep;
@@ -383,6 +383,7 @@ export function createLiveSegmentSession({
       const data = await boundedStartup(segmentFrame(body, job.abort.signal, frame, prompt),
         requestTimeoutMs, job.abort.signal, 'Connection is slow. Retrying…');
       busyRetryMs = 0;
+      busyFailures = 0;
       if (token !== generation || promptVersion !== boxVersion) return;
       const sampledId = Number.isFinite(mediaTime) ? mediaTime : ++frameId;
       let calibration = null;
@@ -486,9 +487,11 @@ export function createLiveSegmentSession({
     } catch (error) {
       if (token === generation && error.name !== 'AbortError') {
         busyRetryMs = error.busy ? Math.min(3000, Math.max(1000, busyRetryMs * 1.5)) : 0;
+        busyFailures = error.busy ? busyFailures + 1 : 0;
         if (sweepMode) sweep.reset();
         clearResult();
-        message(error.busy ? 'Waiting for scanner…' : performance.now()<refinementRetryAt ? refinementHint : `No lens edge yet. ${error.message}`);
+        message(error.busy ? busyFailures < 2 ? 'Waiting for scanner…' : error.message
+          : performance.now()<refinementRetryAt ? refinementHint : `No lens edge yet. ${error.message}`);
       }
     } finally {
       job.abort.abort();
@@ -678,6 +681,7 @@ export function createLiveSegmentSession({
   }
   function stop() {
     busyRetryMs = 0;
+    busyFailures = 0;
     torch.attach(null);
     lightingPending=false;lightingReadyAt=0;
     sweep.reset();
