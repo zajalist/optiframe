@@ -113,7 +113,7 @@ export function showSTL(buffer, element) {
     camera.aspect = Math.max(1, element.clientWidth) / Math.max(1, element.clientHeight);
     camera.updateProjectionMatrix();
     renderer.setSize(element.clientWidth, element.clientHeight);
-    invalidate();
+    setView(selectedView);
   });
   resize.observe(element);
   let visible = true;
