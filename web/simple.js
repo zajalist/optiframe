@@ -1,4 +1,4 @@
-import { createLiveSegmentSession } from './live-segment.js?v=23';
+import { createLiveSegmentSession } from './live-segment.js?v=24';
 import { sheetHomography, project, measure } from './calibration.js';
 import { detectSheetMarkers } from './marker-detect.js?v=9';
 import { photoReviewLayout } from './photo-review.js?v=23';
@@ -438,6 +438,7 @@ controller = createLiveSegmentSession({
   video, overlay: $('camera-overlay'), status, captureButton: controllerButton,
   apiFetch, side: 'lens', onCapture: acceptCapture, minimalStatus: true,
   autoCapture: true,
+  viewSweep: new URLSearchParams(location.search || '').get('capture') === 'sweep',
   calibrateFrame(imageData, contour) {
     const markers = detectSheetMarkers(imageData);
     if (markers?.length !== 4) return null;

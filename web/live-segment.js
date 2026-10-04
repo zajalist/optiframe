@@ -3,6 +3,7 @@ import { createCaptureGuidance, frameBrightness, optimizeCameraTrack } from './c
 import { captureSharpFrame } from './sharp-frame.js?v=22';
 import { fuseContours } from './contour-fusion.js?v=22';
 import { sheetHomography, project, unproject } from './calibration.js?v=22';
+import { createViewSweep, countDistinctViews } from './view-sweep.js?v=24';
 // Live camera proposals are only inputs to the existing photo review flow.
 const MAX_SIDE = 1280;
 const INTERVAL_MS = 50;
@@ -39,7 +40,7 @@ export function createLiveSegmentSession({
   requestTimeoutMs = 8000, maxResultAgeMs = 2000,
   locateTarget = null, minimalStatus = false,
   autoCapture = false, calibrateFrame = null,
-  stillCapture = true, captureFrame = captureSharpFrame,
+  stillCapture = true, captureFrame = captureSharpFrame, viewSweep = false,
 }) {
   if (!video || !overlay || !status || !captureButton || typeof onCapture !== 'function')
     throw new TypeError('Live segmentation needs video, overlay, status, captureButton and onCapture');
@@ -68,10 +69,12 @@ export function createLiveSegmentSession({
   let lastLocateAt = -Infinity;
   let frameId = 0;
   let refinementRetryAt = 0, refinementHint = '';
-  const sharpStill = autoCapture && stillCapture;
+  const sweepMode = autoCapture && viewSweep;
+  const sweep = createViewSweep();
+  const sharpStill = autoCapture && stillCapture && !sweepMode;
   // Preview agreement only triggers a new still; it is never exported as measurement evidence.
   const autoGate = createAutoCaptureGate({ maxAgeMs: maxResultAgeMs,
-    ...(sharpStill ? {durationMs: 350, minFrames: 2, toleranceMm: 1.5} : {}) });
+    ...(sweepMode ? {durationMs:0,minFrames:1} : sharpStill ? {durationMs: 350, minFrames: 2, toleranceMm: 1.5} : {}) });
   const guidance = createCaptureGuidance();
   let autoState = 'searching';
   const trackingCanvas = document.createElement('canvas');
@@ -91,7 +94,7 @@ export function createLiveSegmentSession({
   function dimensions() {
     const width = video.videoWidth;
     const height = video.videoHeight;
-    const factor = Math.min(1, (sharpStill ? 960 : MAX_SIDE) / Math.max(width, height));
+    const factor = Math.min(1, (sweepMode ? 1600 : sharpStill ? 960 : MAX_SIDE) / Math.max(width, height));
     return [Math.max(1, Math.round(width * factor)), Math.max(1, Math.round(height * factor))];
   }
   function draw() {
@@ -347,7 +350,7 @@ export function createLiveSegmentSession({
       const promptVersion = boxVersion;
       const capturedAt = new Date().toISOString();
       const startedAt = performance.now();
-      const blob = await canvasBlob(frame, sharpStill ? .78 : .86);
+      const blob = await canvasBlob(frame, sweepMode ? .95 : sharpStill ? .78 : .86);
       if (token !== generation || promptVersion !== boxVersion) return;
       const prompt = [Math.floor(box[0] * width), Math.floor(box[1] * height),
         Math.ceil(box[2] * width), Math.ceil(box[3] * height)];
@@ -369,6 +372,7 @@ export function createLiveSegmentSession({
         catch { /* Missing or unstable calibration cannot qualify for capture. */ }
       }
       if (data.presence?.detected === false || (autoCapture && data.presence?.detected !== true)) {
+        if (sweepMode) sweep.reset();
         clearResult(true);
         const decision = autoGate.update({ presence: data.presence, quality: data.quality, brightness, calibration, sampledAt: startedAt,
           now: performance.now(), id: sampledId, dragging: Boolean(target) });
@@ -395,6 +399,7 @@ export function createLiveSegmentSession({
       latest = { ...data, offset: [0, 0],
         sheetContour: calibration?.contour?.map(point => [...point]), displayContour: null };
       if (autoCapture) {
+        if (sweepMode && updatedAt < refinementRetryAt) { message(refinementHint); return; }
         trackingBase = null;
         trackSheetPlane();
         lastTrackAt = performance.now();
@@ -424,6 +429,22 @@ export function createLiveSegmentSession({
         const decision = autoGate.update({ ...data, quality: advice.ready ? data.quality : null, calibration, sampledAt: startedAt,
           now: updatedAt, id: sampledId, dragging: Boolean(target) });
         autoState = decision.state;
+        if (sweepMode) {
+          if (decision.state==='remove') {sweep.reset();message('Remove the first lens');return;}
+          if (!calibration?.markers?.length || decision.reason==='calibration') {
+            sweep.reset();message('Show all four dots');return;
+          }
+          if (decision.capture) autoGate.reset();
+          const sweepResult=sweep.update({...data,quality:advice.ready?data.quality:null,
+            calibration,blob,width,height,capturedAt,sampledAt:startedAt,id:sampledId,
+            dragging:Boolean(target)},updatedAt);
+          if (sweepResult.ready) await captureSweep(sweepResult,token,job.abort.signal);
+          else if (sweepResult.state==='retry') {
+            sweep.reset();refinementRetryAt=updatedAt+1200;
+            refinementHint='Move slowly around the lens';message(refinementHint);
+          } else message(!advice.ready?advice.message||'Keep all four dots visible':'Move slowly around the lens');
+          return;
+        }
         const blocker = {stale:'Connection is slow. Retrying…', calibration:'Show all four dots',
           blur:'Let the camera focus', quality:'Edge unclear. Adjust the light', outline:'Keep one lens inside the dots'}[decision.reason];
         message(decision.state === 'remove' ? 'Remove the first lens' : !advice.ready ? advice.message
@@ -435,6 +456,7 @@ export function createLiveSegmentSession({
       } else message('Lens found. Hold steady and capture.', true);
     } catch (error) {
       if (token === generation && error.name !== 'AbortError') {
+        if (sweepMode) sweep.reset();
         clearResult();
         message(performance.now()<refinementRetryAt ? refinementHint : `No lens edge yet. ${error.message}`);
       }
@@ -446,6 +468,42 @@ export function createLiveSegmentSession({
         working = null;
         schedule(token);
       }
+    }
+  }
+
+  async function captureSweep(result,token,signal) {
+    const pending={};capturePending=pending;clearTimeout(resultExpiry);
+    try {
+      const combined=fuseContours(result.frames.map(frame=>({id:frame.id,contour:frame.calibration.contour})));
+      const accepted=result.frames.filter(frame=>combined.diagnostics.acceptedIds.includes(frame.id));
+      const acceptedViews=countDistinctViews(accepted);
+      if(acceptedViews<3){const error=new Error('Need three agreeing views. Try a smaller arc.');error.code='CONTOUR_FUSION_UNSTABLE';throw error;}
+      const reference=accepted.reduce((a,b)=>b.quality.score>a.quality.score ||
+        (b.quality.score===a.quality.score&&b.quality.sharpness>a.quality.sharpness)?b:a);
+      if(token!==generation||signal.aborted)return;
+      const refinement={...combined.diagnostics,inputFrames:result.frames.length,
+        captureMode:'view-sweep',viewCount:acceptedViews,observedViews:result.viewCount,collectionMs:result.elapsedMs,
+        views:result.frames.map(frame=>({id:frame.id,capturedAt:frame.capturedAt,
+          sampledAt:frame.sampledAt,normalizedMarkerQuad:frame.normalizedMarkerQuad,homography:frame.homography})),
+        rawContours:result.frames.map(frame=>({id:frame.id,capturedAt:frame.capturedAt,
+          contour:(frame.rawContour||frame.contour).map(p=>project(p,frame.homography))})),
+        imageRefinedContours:result.frames.map(frame=>({id:frame.id,contour:frame.calibration.contour,diagnostics:frame.edgeRefinement})),
+        rawReferenceContour:(reference.rawContour||reference.contour).map(p=>[...p])};
+      message('Refining…');
+      await onCapture({file:new File([reference.blob],`${side}-sweep.jpg`,{type:'image/jpeg'}),
+        contour:combined.contour.map(p=>unproject(p,reference.homography)),width:reference.width,height:reference.height,
+        markers:reference.calibration.markers.map(p=>[...p]),refinement,quality:reference.quality,
+        capturedAt:reference.capturedAt,latencyMs:performance.now()-Math.min(...result.frames.map(frame=>frame.sampledAt)),source:'view-sweep'});
+      if(token===generation)stop();
+    } catch(error) {
+      if(token===generation&&error.name!=='AbortError') {
+        refinementRetryAt=performance.now()+1500;
+        refinementHint=error.code==='CONTOUR_FUSION_UNSTABLE'?'Edges disagree. Try a smaller arc.':error.message;
+      }
+      throw error;
+    } finally {
+      if(capturePending===pending)capturePending=null;
+      if(token===generation){sweep.reset();autoGate.reset();}
     }
   }
 
@@ -562,7 +620,7 @@ export function createLiveSegmentSession({
     message('Opening camera…', true);
     try {
       const acquired = await boundedStartup(mediaDevices.getUserMedia({
-        audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: sharpStill ? 1920 : 1280 } },
+        audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: sharpStill || sweepMode ? 1920 : 1280 } },
       }), startupTimeoutMs, signal, 'Camera permission timed out. Open in Safari or use a photo.',
       late => late.getTracks().forEach(track => track.stop()));
       if (token !== generation) { acquired.getTracks().forEach(track => track.stop()); return; }
@@ -587,6 +645,7 @@ export function createLiveSegmentSession({
     }
   }
   function stop() {
+    sweep.reset();
     capturePending = null;
     refinementRetryAt=0; refinementHint='';
     autoGate.reset();

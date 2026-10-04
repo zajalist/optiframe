@@ -8,7 +8,7 @@ import { photoReviewLayout } from './photo-review.js';
 const source = (await readFile(new URL('./simple.js', import.meta.url), 'utf8')).replace(/^import .*;\r?\n/gm, '');
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
-function harness({ cameraError = null, storageError = null, deferReads = false } = {}) {
+function harness({ cameraError = null, storageError = null, deferReads = false, search = '' } = {}) {
   const nodes = new Map();
   const imageDraws = [];
   const encodings = [];
@@ -39,7 +39,7 @@ function harness({ cameraError = null, storageError = null, deferReads = false }
   }
   const body = { dataset: {} };
   const storage = new Map(), pendingReads = [];
-  const location = {hash:'#access=test-key',href:''};
+  const location = {hash:'#access=test-key',href:'',search};
   class FileReader {
     readAsDataURL() {
       const done = () => { this.result = 'data:image/jpeg;base64,test'; this.onload(); };
@@ -57,7 +57,7 @@ function harness({ cameraError = null, storageError = null, deferReads = false }
     requestAnimationFrame: callback => callback(), fetch() {}, sessionStorage: { setItem(key,value) { if(storageError) throw new Error(storageError); storage.set(key,value); } },
   });
   vm.runInContext(source, context);
-  return { $, body, payload, context, storage, location, pendingReads, startOptions, imageDraws, encodings, get starts() { return starts; }, get sounds() { return sounds; },
+  return { $, body, payload, context, storage, location, pendingReads, startOptions, imageDraws, encodings, get controllerOptions() { return callbacks; }, get starts() { return starts; }, get sounds() { return sounds; },
     accept: value => callbacks.onCapture(value), click: id => $(id).handlers.click?.({ preventDefault() {} }) };
 }
 
@@ -72,6 +72,11 @@ test('camera requests access on load and a failed request keeps photo import and
   app.click('camera-retry');
   await tick();
   assert.equal(app.starts, 2);
+});
+
+test('guided sweep is explicitly selected by the test link', () => {
+  assert.equal(harness().controllerOptions.viewSweep, false);
+  assert.equal(harness({search:'?capture=sweep&v=24'}).controllerOptions.viewSweep, true);
 });
 
 async function confirmPair(app) {

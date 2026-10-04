@@ -26,6 +26,12 @@ def _distance_to_loop(points, loop):
     return np.linalg.norm(points[:, None]-nearest, axis=2).min(axis=1)
 
 
+def _outward_normals(points):
+    tangent = np.roll(points, -1, axis=0)-np.roll(points, 1, axis=0)
+    normal = np.column_stack([tangent[:, 1], -tangent[:, 0]])
+    return normal/np.maximum(np.linalg.norm(normal, axis=1)[:, None], 1e-9)
+
+
 def refine_lens_edge(image_rgb, contour, max_shift_px=12.0):
     """Return (contour, diagnostics), retaining input on unsupported proposals.
 
@@ -57,8 +63,9 @@ def refine_lens_edge(image_rgb, contour, max_shift_px=12.0):
     span = np.ptp(local, axis=0)
     if min(span) < 40:
         return reject('too-small')
-    # A grid line spans much farther than one local curve segment.
-    length = max(35, int(min(span) * .4))
+    # Require a near-object-width straight run. Short runs also match the broad
+    # top/bottom rim of a small lens and must not be erased as printed grid.
+    length = max(35, int(max(span) * .8))
     ink = cv2.subtract(cv2.GaussianBlur(gray, (0, 0), 7), gray)
     grid = np.zeros_like(gray)
     signed = gray.astype(np.int16)
@@ -79,12 +86,14 @@ def refine_lens_edge(image_rgb, contour, max_shift_px=12.0):
     radii = np.linalg.norm(local-centre, axis=1)
     order = np.argsort(theta)
     base = _smooth_periodic(np.interp(angles, theta[order], radii[order], period=2*np.pi), 3)
+    base_points = np.column_stack([centre[0]+base*np.cos(angles), centre[1]+base*np.sin(angles)])
+    normal = _outward_normals(base_points)
     offsets = np.arange(-max_shift_px, max_shift_px+.01, .5)
     rr = base[:, None] + offsets
     xx = (centre[0]+rr*np.cos(angles[:, None])).astype(np.float32)
     yy = (centre[1]+rr*np.sin(angles[:, None])).astype(np.float32)
-    edge = abs(cv2.remap(gx, xx, yy, cv2.INTER_LINEAR)*np.cos(angles[:, None])
-               + cv2.remap(gy, xx, yy, cv2.INTER_LINEAR)*np.sin(angles[:, None]))
+    edge = abs(cv2.remap(gx, xx, yy, cv2.INTER_LINEAR)*normal[:, 0, None]
+               + cv2.remap(gy, xx, yy, cv2.INTER_LINEAR)*normal[:, 1, None])
     unary = -30*edge + .002*offsets**2
     pair = .3*(offsets[:, None]-offsets[None, :])**2
     cost = unary[0].copy()
@@ -100,17 +109,18 @@ def refine_lens_edge(image_rgb, contour, max_shift_px=12.0):
     path = np.asarray(path[::-1])[count:2*count]
     rr = base+offsets[path]
     new = _smooth_periodic(np.column_stack([centre[0]+rr*np.cos(angles), centre[1]+rr*np.sin(angles)]), 1)
+    normal = _outward_normals(new)
     # Inpainted pixels guide continuity but are never positive evidence.
     original = cv2.GaussianBlur(gray.astype(np.float32)/255, (0, 0), .8)
     ox = cv2.Scharr(original, cv2.CV_32F, 1, 0)/32
     oy = cv2.Scharr(original, cv2.CV_32F, 0, 1)/32
     nx = new[:, 0].astype(np.float32).reshape(-1, 1)
     ny = new[:, 1].astype(np.float32).reshape(-1, 1)
-    support = abs(cv2.remap(ox, nx, ny, cv2.INTER_LINEAR).ravel()*np.cos(angles)
-                  + cv2.remap(oy, nx, ny, cv2.INTER_LINEAR).ravel()*np.sin(angles))
+    support = abs(cv2.remap(ox, nx, ny, cv2.INTER_LINEAR).ravel()*normal[:, 0]
+                  + cv2.remap(oy, nx, ny, cv2.INTER_LINEAR).ravel()*normal[:, 1])
     occluded = cv2.remap(grid, nx, ny, cv2.INTER_NEAREST).ravel() > 0
-    original_profile = abs(cv2.remap(ox, xx, yy, cv2.INTER_LINEAR)*np.cos(angles[:, None])
-                           + cv2.remap(oy, xx, yy, cv2.INTER_LINEAR)*np.sin(angles[:, None]))
+    original_profile = abs(cv2.remap(ox, xx, yy, cv2.INTER_LINEAR)*normal[:, 0, None]
+                           + cv2.remap(oy, xx, yy, cv2.INTER_LINEAR)*normal[:, 1, None])
     profile_masked = cv2.remap(grid, xx, yy, cv2.INTER_NEAREST) > 0
     separated = abs(offsets[None, :]-offsets[path, None]) >= 5
     competing = np.max(np.where(separated & ~profile_masked, original_profile, 0), axis=1)
@@ -122,7 +132,10 @@ def refine_lens_edge(image_rgb, contour, max_shift_px=12.0):
     supported = sum(float(np.mean(sector)) >= .35 for sector in np.array_split(evidence, 8))
     visible = support[~occluded]
     if supported < 7 or len(visible) < count*.45 or float(np.median(visible)) < .01:
-        return reject('weak-edge-evidence')
+        return unchanged, {'accepted': False, 'reason': 'weak-edge-evidence',
+                           'supportedSectors': supported, 'maskedFraction': float(np.mean(occluded)),
+                           'edgeSupportFraction': float(np.mean(evidence)),
+                           'ambiguousEdgeFraction': ambiguous_fraction}
     if np.mean((path == 0) | (path == len(offsets)-1)) > .05:
         return reject('search-band-exhausted')
     new += lo

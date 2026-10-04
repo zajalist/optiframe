@@ -46,6 +46,18 @@ After deployment, the five synthetic variants passed the public burst endpoint i
 
 The photo-import fallback also uses the refined endpoint, with a 1600-pixel cap and JPEG quality 95%. It requires explicit edge support and matching image dimensions. Ambiguous refinement cannot count as removing the first lens between captures. Release checks: 136 web tests and 71 Python tests passed; original-photo import and both confirmation views were checked in the browser at 390 × 844 with no page overflow.
 
-## Endpoint contract
+## Broad rim versus printed grid, v24
+
+A camera-region crop from a reported failure reproduced `competing-edges` despite a supported raw SAM contour. At this small image scale, the line-removal kernel treated broad, nearly horizontal portions of the lens rim as printed lines. Requiring a straight run of approximately 80% of the larger lens span, rather than 40% of the smaller span, preserves these rim segments. Edge scoring now projects gradients onto the curve's local normals instead of assuming the radial direction is the normal.
+
+The screenshot reproduction changed from 39% competing-edge evidence and rejection to approximately 21% and acceptance, with all eight original-image sectors supported. Acceptance thresholds were not relaxed. A generated broad-rim/grid regression reproduces the old failure; empty grids and comparable double boundaries remain rejected. These results establish a false-rejection fix, not the exact physical edge position: the screenshot's thick right-hand band remains ambiguous as rim, bevel or cast shadow.
+
+**Subsequent user validation:** the bottom-right accepted boundary follows the cast shadow, not the lens. The ambiguity described above is therefore a confirmed selection failure in this setup. Acceptance and smoothing must not be reported as a successful accuracy fix. Increasing contrast or merely collecting agreeing copies of that boundary does not resolve it.
+
+CLAHE and division by a blurred illumination estimate were compared as edge-scoring variants, retaining original-image evidence checks. Neither materially improved this reproduction; CLAHE slightly increased the competing-edge fraction. Neither is enabled by default. A preprocessing method that makes a contour look cleaner is insufficient evidence that its position is more accurate.
+
+Backend regression suite: 72 tests passed. Source photos, edge-refined contours and preprocessing diagnostics remain distinct.
+
+## Burst API
 
 `POST /api/segment-burst`: repeated multipart `images` fields (3–5), plus `boxes` as a JSON array of pixel boxes in matching order. Maximum 6 MB per image and 20 MB total; 1600 pixels per side and 2.6 megapixels. Response `{frames:[...]}` preserves order. Individual unsupported images/refinements return an `error` entry. Malformed counts/boxes return 422; upload limits return 413; unavailable/busy GPU returns 503. The browser bounds the entire refinement request and pauses briefly after rejection to show one actionable cue.

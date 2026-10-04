@@ -53,6 +53,21 @@ class EdgeRefineTests(unittest.TestCase):
         self.assertTrue(info['accepted'], info)
         self.assertLess(float(np.max(abs(np.ptp(np.asarray(refined), axis=0)-[200, 150]))), 3)
 
+    def test_small_lens_broad_rim_is_not_erased_as_short_grid_line(self):
+        image = np.full((180, 220, 3), 210, np.uint8)
+        for x in range(0, 220, 12):
+            cv2.line(image, (x, 0), (x, 179), (180, 180, 180), 1)
+        for y in range(0, 180, 12):
+            cv2.line(image, (0, y), (219, y), (180, 180, 180), 1)
+        a = np.linspace(0, 2*np.pi, 256, endpoint=False)
+        points = np.column_stack([110+65*np.sign(np.cos(a))*abs(np.cos(a))**.5,
+                                  90+45*np.sign(np.sin(a))*abs(np.sin(a))**.5])
+        cv2.polylines(image, [np.round(points).astype(np.int32)], True, (100, 100, 100), 2, cv2.LINE_AA)
+        refined, info = refine_lens_edge(image, points)
+        self.assertTrue(info['accepted'], info)
+        self.assertGreaterEqual(info['supportedSectors'], 7)
+        self.assertLess(float(np.max(abs(np.ptp(np.asarray(refined), axis=0)-[130, 90]))), 5)
+
     def test_broad_corners_are_not_replaced_with_an_ellipse(self):
         image = np.full((300, 340, 3), 220, np.uint8)
         shape = np.array([[70, 65], [240, 65], [275, 95], [265, 200], [230, 235], [95, 225], [60, 180], [55, 95]], np.int32)
