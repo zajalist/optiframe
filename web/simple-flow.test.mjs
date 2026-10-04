@@ -25,12 +25,14 @@ function harness({ cameraError = null, storageError = null, deferReads = false, 
     };
   }
   const $ = id => { if (!nodes.has(id)) nodes.set(id, element()); return nodes.get(id); };
-  let starts = 0, sounds = 0, callbacks;
+  let starts = 0, sounds = 0, replacements = 0, callbacks;
   const startOptions = [];
   const ellipse = Array.from({ length: 80 }, (_, i) => [500 + 250 * Math.cos(i * Math.PI / 40), 350 + 200 * Math.sin(i * Math.PI / 40)]);
   const payload = { file: { name: 'lens.jpg' }, contour: ellipse, width: 1000, height: 700 };
-  const controller = { async start(options) { starts++; startOptions.push(options); if (cameraError) throw new Error(cameraError); $('controller-capture').disabled = false; },
-    stop() {}, async capture() { return callbacks.onCapture(payload); } };
+  const controller = { async start(options) { starts++; startOptions.push(options); if (cameraError) throw new Error(cameraError); callbacks.onRemovalChange?.(Boolean(options.requireRemoval)); $('controller-capture').disabled = false; },
+    stop() { callbacks.onRemovalChange?.(false); },
+    confirmLensChanged() { replacements++; callbacks.onRemovalChange(false); return true; },
+    async capture() { return callbacks.onCapture(payload); } };
   class AudioContext {
     state = 'suspended'; currentTime = 0;
     async resume() { this.state = 'running'; }
@@ -57,7 +59,7 @@ function harness({ cameraError = null, storageError = null, deferReads = false, 
     requestAnimationFrame: callback => callback(), fetch() {}, sessionStorage: { setItem(key,value) { if(storageError) throw new Error(storageError); storage.set(key,value); } },
   });
   vm.runInContext(source, context);
-  return { $, body, payload, context, storage, location, pendingReads, startOptions, imageDraws, encodings, get controllerOptions() { return callbacks; }, get starts() { return starts; }, get sounds() { return sounds; },
+  return { $, body, payload, context, storage, location, pendingReads, startOptions, imageDraws, encodings, get replacements() { return replacements; }, get controllerOptions() { return callbacks; }, get starts() { return starts; }, get sounds() { return sounds; },
     accept: value => callbacks.onCapture(value), click: id => $(id).handlers.click?.({ preventDefault() {} }) };
 }
 
@@ -77,6 +79,28 @@ test('camera requests access on load and a failed request keeps photo import and
 test('guided sweep is explicitly selected by the test link', () => {
   assert.equal(harness().controllerOptions.viewSweep, false);
   assert.equal(harness({search:'?capture=sweep&v=24'}).controllerOptions.viewSweep, true);
+});
+
+test('second lens can be acknowledged without discarding the confirmed first lens', async () => {
+  const app=harness(); await tick();
+  assert.equal(app.$('lens-placed').hidden,true);
+  await app.accept(app.payload); app.click('primary'); await tick();
+  assert.equal(app.body.dataset.phase,'live');
+  assert.equal(app.$('lens-placed').hidden,false);
+  app.click('lens-placed');
+  assert.equal(app.replacements,1); assert.equal(app.starts,2);
+  assert.equal(app.$('lens-placed').hidden,true);
+  app.click('lens-placed'); assert.equal(app.replacements,1);
+  await app.accept(app.payload); app.click('primary');
+  assert.equal(app.body.dataset.phase,'pair');
+  assert.equal(app.$('lens-placed').hidden,true);
+});
+
+test('observing the empty sheet hides the replacement button automatically', async () => {
+  const app=harness(); await tick(); await app.accept(app.payload); app.click('primary'); await tick();
+  assert.equal(app.$('lens-placed').hidden,false);
+  app.controllerOptions.onRemovalChange(false);
+  assert.equal(app.$('lens-placed').hidden,true);
 });
 
 async function confirmPair(app) {

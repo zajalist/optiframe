@@ -46,6 +46,7 @@ function setup(fetcher, onCapture = async () => {}, options = {}) {
     startupTimeoutMs: options.startupTimeoutMs ?? 12000, locateTarget: options.locateTarget,
     requestTimeoutMs: options.requestTimeoutMs ?? 8000, maxResultAgeMs: options.maxResultAgeMs ?? 2000,
     autoCapture: options.autoCapture, calibrateFrame: options.calibrateFrame,
+    onRemovalChange: options.onRemovalChange,
     stillCapture: options.stillCapture ?? false, captureFrame: options.captureFrame });
   return { session, video, overlay, status, captureButton, get stopped() { return stopped; } };
 }
@@ -56,6 +57,25 @@ const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 const autoOutline = Array.from({length: 80}, (_, i) => [50 + 25 * Math.cos(i * Math.PI / 40), 35 + 20 * Math.sin(i * Math.PI / 40)]);
 const autoOptions = {autoCapture: true, calibrateFrame: () => ({markers: [[80,50],[560,50],[560,386],[80,386]], contour: autoOutline})};
+
+test('explicit lens replacement releases the removal gate without reopening the camera or accepting a stale reply', async () => {
+  let release, calls=0, captured=null; const changes=[];
+  const fixture=setup(async()=>{
+    calls++;
+    if(calls===1) await new Promise(resolve=>{release=resolve;});
+    return {ok:true,json:async()=>({...result,presence:{detected:true},quality:{score:.7,sharpness:180}})};
+  },value=>{captured=value;},{...autoOptions,onRemovalChange:value=>changes.push(value)});
+  try {
+    await fixture.session.start({requireRemoval:true});
+    await pause(20);
+    assert.equal(fixture.session.confirmLensChanged(),true);
+    assert.equal(fixture.stopped,0,'confirmation must keep the existing camera stream');
+    assert.equal(fixture.session.confirmLensChanged(),false,'confirmation is only valid while waiting for removal');
+    release(); await pause(60); assert.equal(captured,null,'old and insufficient new observations cannot capture');
+    await pause(1200); assert.ok(captured,'fresh observations may capture after explicit replacement');
+    assert.ok(changes.includes(true)); assert.equal(changes.at(-1),false);
+  } finally {release?.();fixture.session.stop();}
+});
 
 test('small preview edge jitter triggers a separately measured sharp still instead of holding forever', {timeout: 4000}, async () => {
   let captured = null, calls = 0, bursts = 0;

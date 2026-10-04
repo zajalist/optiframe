@@ -1,4 +1,4 @@
-import { createLiveSegmentSession } from './live-segment.js?v=24';
+import { createLiveSegmentSession } from './live-segment.js?v=25';
 import { sheetHomography, project, measure } from './calibration.js';
 import { detectSheetMarkers } from './marker-detect.js?v=9';
 import { photoReviewLayout } from './photo-review.js?v=23';
@@ -23,6 +23,7 @@ const apiFetch = (url, options = {}) => fetch(url, {
 
 let side = 'left';
 let phase = 'idle';
+let waitingForReplacement = false;
 let captureGeneration = 0;
 let controller;
 let pendingPhoto = null;
@@ -178,6 +179,7 @@ function setPhase(next, message) {
   primary.setAttribute('aria-label', next === 'pair' ? 'Confirm both lenses and fit frame' : 'Confirm lens');
   photoLabel.hidden = !cameraPhase;
   $('camera-retry').hidden = next !== 'idle';
+  $('lens-placed').hidden = next !== 'live' || !waitingForReplacement;
   $('empty').textContent = next === 'idle' ? 'Camera unavailable. Retry or use a photo.' : 'Opening camera…';
   secondary.hidden = !['markers', 'aim', 'result'].includes(next);
   secondary.textContent = 'Retry';
@@ -438,6 +440,10 @@ controller = createLiveSegmentSession({
   video, overlay: $('camera-overlay'), status, captureButton: controllerButton,
   apiFetch, side: 'lens', onCapture: acceptCapture, minimalStatus: true,
   autoCapture: true,
+  onRemovalChange(waiting) {
+    waitingForReplacement = waiting;
+    $('lens-placed').hidden = phase !== 'live' || !waiting;
+  },
   viewSweep: new URLSearchParams(location.search || '').get('capture') === 'sweep',
   calibrateFrame(imageData, contour) {
     const markers = detectSheetMarkers(imageData);
@@ -487,6 +493,9 @@ secondary.addEventListener('click', () => retryLens());
 $('retry-left').addEventListener('click', () => retryLens('left'));
 $('retry-right').addEventListener('click', () => retryLens('right'));
 $('camera-retry').addEventListener('click', () => { enableSound(); void startCamera(); });
+$('lens-placed').addEventListener('click', () => {
+  if (phase === 'live' && waitingForReplacement) controller.confirmLensChanged();
+});
 $('review-photo').addEventListener('click', () => selectResultView('photo'));
 $('review-outline').addEventListener('click', () => selectResultView('outline'));
 photoLabel.addEventListener('click', enableSound);

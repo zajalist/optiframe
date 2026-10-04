@@ -41,6 +41,7 @@ export function createLiveSegmentSession({
   locateTarget = null, minimalStatus = false,
   autoCapture = false, calibrateFrame = null,
   stillCapture = true, captureFrame = captureSharpFrame, viewSweep = false,
+  onRemovalChange = () => {},
 }) {
   if (!video || !overlay || !status || !captureButton || typeof onCapture !== 'function')
     throw new TypeError('Live segmentation needs video, overlay, status, captureButton and onCapture');
@@ -77,6 +78,11 @@ export function createLiveSegmentSession({
     ...(sweepMode ? {durationMs:0,minFrames:1} : sharpStill ? {durationMs: 350, minFrames: 2, toleranceMm: 1.5} : {}) });
   const guidance = createCaptureGuidance();
   let autoState = 'searching';
+  function setAutoState(next) {
+    const changed = (autoState === 'remove') !== (next === 'remove');
+    autoState = next;
+    if (changed) onRemovalChange(next === 'remove');
+  }
   const trackingCanvas = document.createElement('canvas');
   const trackingContext = trackingCanvas.getContext('2d', { willReadFrequently: true });
 
@@ -376,7 +382,7 @@ export function createLiveSegmentSession({
         clearResult(true);
         const decision = autoGate.update({ presence: data.presence, quality: data.quality, brightness, calibration, sampledAt: startedAt,
           now: performance.now(), id: sampledId, dragging: Boolean(target) });
-        autoState = decision.state;
+        setAutoState(decision.state);
         const advice = guidance.update({ calibration, width, height, minMarkerSpan: sharpStill ? 225 : 300, quality: data.quality, presence: data.presence,
           brightness, latencyMs: performance.now() - startedAt, now: performance.now(), state: autoState });
         message(advice.message);
@@ -428,7 +434,7 @@ export function createLiveSegmentSession({
           brightness, latencyMs, now: updatedAt, state: autoState });
         const decision = autoGate.update({ ...data, quality: advice.ready ? data.quality : null, calibration, sampledAt: startedAt,
           now: updatedAt, id: sampledId, dragging: Boolean(target) });
-        autoState = decision.state;
+        setAutoState(decision.state);
         if (sweepMode) {
           if (decision.state==='remove') {sweep.reset();message('Remove the first lens');return;}
           if (!calibration?.markers?.length || decision.reason==='calibration') {
@@ -609,7 +615,7 @@ export function createLiveSegmentSession({
   async function start({ requireRemoval = false } = {}) {
     stop();
     autoGate.reset({ requireRemoval });
-    autoState = requireRemoval ? 'remove' : 'searching';
+    setAutoState(requireRemoval ? 'remove' : 'searching');
     manualTarget = false;
     lastLocateAt = -Infinity;
     box = [...centerBox];
@@ -650,7 +656,7 @@ export function createLiveSegmentSession({
     refinementRetryAt=0; refinementHint='';
     autoGate.reset();
     guidance.reset();
-    autoState = 'searching';
+    setAutoState('searching');
     generation++;
     startupAbort?.abort();
     startupAbort = null;
@@ -712,6 +718,20 @@ export function createLiveSegmentSession({
     void capture().catch(error => message(error.message));
   });
   captureButton.disabled = true;
-  return { start, stop, capture, setBoxNormalized,
+  function confirmLensChanged() {
+    if (!stream || !autoCapture || autoState !== 'remove') return false;
+    // Explicit user confirmation replaces only the empty-sheet requirement.
+    // Discard pending/accumulated observations; new frames still pass all gates.
+    boxVersion++;
+    request?.abort();
+    sweep.reset();
+    clearResult();
+    autoGate.reset();
+    guidance.reset();
+    setAutoState('searching');
+    message('');
+    return true;
+  }
+  return { start, stop, capture, setBoxNormalized, confirmLensChanged,
     get active() { return !!stream; } };
 }
