@@ -56,3 +56,50 @@
 @media(max-height:720px){.fit-shell{gap:8px;padding:12px 18px max(10px,env(safe-area-inset-bottom))}.fit-body{gap:12px}.fit-fields{gap:14px}.fit-fields input{min-height:50px;font-size:22px}.fit-heading h1{font-size:24px}.fit-navigation button{min-height:48px}.fit-note{font-size:13px}}
 @media(max-height:500px){.fit-flow>.site-header{height:48px}.fit-shell{height:calc(var(--fit-height,100dvh) - 48px);padding-top:6px;gap:6px}.fit-heading h1{font-size:20px}.fit-fields{grid-template-columns:1fr 1fr;gap:10px}.fit-fields label{font-size:12px}.fit-fields input{min-height:42px;font-size:20px}.fit-body{gap:6px}.fit-body>.fit-note{font-size:12px}.fit-navigation button{min-height:44px;padding:8px 16px}.fit-methods{grid-template-columns:1fr 1fr;gap:8px}.fit-methods label{min-height:44px;padding:10px;font-size:14px}.fit-flow #viewer{min-height:70px}.fit-pair svg{max-height:110px}}
 @media(prefers-reduced-motion:no-preference){.fit-navigation button,.fit-mark-modes button{transition:background-color .15s ease,color .15s ease}}
+
+/* Pupil distances: a single measurement surface, sized for the open keyboard. */
+.fit-shell[data-step="2"] .fit-body{gap:16px;justify-content:center}
+.pupil-diagram{width:min(100%,380px);align-self:center;flex:0 1 auto;min-height:0}
+.pupil-diagram svg{display:block;width:100%;max-height:270px;overflow:hidden;border-radius:16px}
+.pupil-diagram image{opacity:.85}
+.pupil-lens{fill:none;stroke:#acb4bf;stroke-width:1.5;stroke-linejoin:round}
+.pupil-centre{fill:none;stroke:#a7aeb8;stroke-width:1;stroke-dasharray:3 4}
+.pupil-measure{fill:#59616d;stroke:#59616d;stroke-width:1.2}
+.pupil-measure text{stroke:#f0f2f5;stroke-width:5px;paint-order:stroke fill;stroke-linejoin:round;font:500 12px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;text-anchor:middle}
+.pupil-measure.is-empty{visibility:hidden}
+.pupil-diagram[data-active="left"] [data-pupil="left"],.pupil-diagram[data-active="right"] [data-pupil="right"]{fill:#20242a;stroke:#20242a;stroke-width:1.8}
+.fit-shell .pupil-fields{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;margin:0}
+.fit-shell .pupil-fields label{position:relative;display:flex;flex-direction:column;align-items:stretch;gap:8px;padding:15px 16px 12px;border-radius:16px;background:rgba(255,255,255,.8);border:1px solid #dce0e5;font-weight:500}
+.fit-shell .pupil-fields label:focus-within{border-color:#59616d;background:#fff}
+.fit-shell .pupil-fields label span.pupil-field-name{padding:0;font-size:13px;color:#555e69;line-height:1.25}
+.fit-shell .pupil-fields input{appearance:textfield;-moz-appearance:textfield;border:0;border-radius:0;background:transparent;box-shadow:none;margin:0;padding:0 28px 0 0;min-height:44px;font-size:34px;line-height:1.25;font-weight:500;letter-spacing:-.02em;color:#20242a;caret-color:#20242a;outline:none}
+.fit-shell .pupil-fields input::-webkit-inner-spin-button,.fit-shell .pupil-fields input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.fit-shell .pupil-fields input::placeholder{color:#727b86;opacity:1}
+.fit-shell .pupil-fields label span:not(.pupil-field-name){position:absolute;right:16px;bottom:22px;font-size:13px;color:#59616d;padding:0;pointer-events:none}
+.fit-shell .pupil-fields label:has(input:focus-visible){outline:2px solid #59616d;outline-offset:-2px}
+.fit-shell .pupil-fields input[aria-invalid="true"]{color:#923d35}
+.pupil-hint{margin:0;text-align:center;color:#59616d;font-size:13px;line-height:1.4}
+.pupil-error{margin:0;min-height:18px;text-align:center;color:#923d35;font-size:13px;line-height:1.4}
+.pupil-error:empty{display:none}
+.fit-shell.is-keyboard .pupil-fields label:not(:focus-within){display:flex}
+.fit-shell.is-compact[data-step="2"] .fit-body{gap:10px}
+.fit-shell.is-compact .pupil-diagram svg{max-height:130px}
+.fit-shell.is-compact .pupil-fields label{padding:10px 14px 8px;gap:3px}
+.fit-shell.is-compact .pupil-fields input{font-size:28px;min-height:38px}
+.fit-shell.is-compact .pupil-fields label span:not(.pupil-field-name){bottom:17px;right:14px}
+.fit-shell.is-keyboard[data-step="2"] .fit-body{justify-content:center}
+@media(max-height:400px){.fit-shell[data-step="2"] .pupil-diagram{display:none}}
+@media(prefers-reduced-motion:no-preference){.pupil-fields label{transition:background-color .18s ease,border-color .18s ease}.pupil-measure{transition:fill .18s ease,stroke .18s ease}}
+
+.fit-shell[data-step="7"] .fit-body{justify-content:flex-start;gap:12px}
+.frame-catalog{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;flex-shrink:0}
+.fit-flow .frame-style{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0;padding:10px 8px 12px;border-radius:16px!important;border:1px solid transparent;background:rgba(255,255,255,.55);color:#535c68;font-size:13px;font-weight:500;box-shadow:none}
+.fit-flow .frame-style[aria-pressed="true"]{border-color:#404956;background:#fff;color:#20242a}
+.frame-style svg{width:100%;height:52px;overflow:visible}
+.frame-style path{fill:none;stroke:#303740;stroke-linejoin:round;stroke-linecap:round}
+.catalog-actions{display:flex;justify-content:center;gap:8px;flex-shrink:0}
+.catalog-actions [hidden]{display:none!important}
+.fit-flow .catalog-tryon{min-height:44px;min-width:120px;border-radius:28px;border:1px solid #ffffffd9;padding:10px 22px;background:rgba(255,255,255,.72);color:#20242a;box-shadow:0 4px 16px #1c25310c;font-size:14px;backdrop-filter:blur(16px)}
+.catalog-tryon:disabled{opacity:.5}
+.fit-flow .frame-style:focus-visible,.fit-flow .catalog-tryon:focus-visible{outline:2px solid #59616d;outline-offset:2px}
+@media(max-height:560px){.frame-style svg{height:30px}.fit-flow .frame-style{padding:6px}.fit-shell[data-step="7"] .fit-body{gap:6px}.fit-shell[data-step="7"] #viewer{min-height:80px}.catalog-tryon{padding:6px 16px}}

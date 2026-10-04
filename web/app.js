@@ -14,6 +14,17 @@ import {createPreviewScheduler} from './preview-scheduler.js';
 
 let activeLivePanel = null;
 let automaticPreview = null;
+let frameStyle = 'classic', frameAssembly = null;
+try { const saved = sessionStorage.getItem('optiframe-frame-style'); if (['classic','bold','brow'].includes(saved)) frameStyle = saved; } catch {}
+function getFrameStyle() { return frameStyle; }
+function getFrameAssembly() { return frameAssembly; }
+function setFrameStyle(value) {
+  if (!['classic','bold','brow'].includes(value)) throw new Error('Unknown frame style');
+  if (frameStyle === value) return;
+  frameStyle = value;
+  try { sessionStorage.setItem('optiframe-frame-style', value); } catch {}
+  invalidateFrameResult();
+}
 
 class LensPanel {
   constructor(element) {
@@ -644,6 +655,7 @@ const number = id => {
 };
 
 function invalidateFrameResult() {
+  frameAssembly = null;
   makeFrame.sequence = (makeFrame.sequence || 0) + 1;
   const viewer = document.getElementById?.('viewer');
   const showingPreview = viewer?.classList?.contains?.('active');
@@ -652,8 +664,8 @@ function invalidateFrameResult() {
     viewer.setAttribute('aria-label', 'Stale 3D preview. Rebuild after input changes.');
     const badge = document.createElement('div');
     badge.className = 'preview-stale-badge';
-    badge.textContent = 'Updating fit';
-    badge.style.cssText = 'position:absolute;left:10px;right:10px;bottom:10px;z-index:2;padding:10px;background:#621e22;color:white;font-weight:700;border-radius:6px;text-align:center';
+    badge.textContent = 'Updating…';
+    badge.style.cssText = 'position:absolute;left:50%;bottom:16px;transform:translateX(-50%);z-index:2;padding:9px 18px;background:#ffffffde;color:#293340;font-size:13px;border-radius:24px;text-align:center;backdrop-filter:blur(16px)';
     viewer.appendChild(badge);
   }
   if (showingPreview || makeFrame.pending)
@@ -700,6 +712,7 @@ function framePayload() {
   const leftThickness = number('left-edge-thickness');
   const rightThickness = number('right-edge-thickness');
   return { left, right, settings: {
+    frame_style: frameStyle,
     left_pd: number('left-pd'), right_pd: number('right-pd'),
     edge_thickness: leftThickness, left_edge_thickness: leftThickness, right_edge_thickness: rightThickness,
     left_vertical_offset: number('left-vertical-offset'), right_vertical_offset: number('right-vertical-offset'),
@@ -738,6 +751,7 @@ async function makeFrame(preview, experimental = false) {
       if (!isCurrentFrameRequest(request, snapshot)) return;
       const viewer = document.getElementById('viewer');
       showSTL(buffer, viewer);
+      frameAssembly = JSON.parse(new TextDecoder().decode(buffer));
       viewer.dataset.stale = 'false';
       viewer.setAttribute('aria-label', 'Rotatable 3D preview of current frame assembly');
       designStatus.textContent = 'Frame preview. Lens curvature is not measured.';
@@ -762,4 +776,4 @@ automaticPreview = createPreviewScheduler({
   shouldRender: () => !document.body.classList.contains('fit-flow') || document.getElementById('viewer').offsetParent !== null,
   render: () => makeFrame(true),
 });
-export { distance, polygonArea, measure, sheetHomography, project, leftPanel, rightPanel, capturesReady, framePayload, makeFrame };
+export { distance, polygonArea, measure, sheetHomography, project, leftPanel, rightPanel, capturesReady, framePayload, makeFrame, getFrameStyle, setFrameStyle, getFrameAssembly };

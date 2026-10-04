@@ -12,10 +12,10 @@
   const sheet = (withLens = true) => `<rect class="oft-paper" x="59" y="23" width="242" height="187" rx="2"/><path class="oft-grid" d="M80 48H280V188H80Z M100 48V188 M120 48V188 M140 48V188 M160 48V188 M180 48V188 M200 48V188 M220 48V188 M240 48V188 M260 48V188 M80 68H280 M80 88H280 M80 108H280 M80 128H280 M80 148H280 M80 168H280"/>${[[80,48],[280,48],[280,188],[80,188]].map(([x,y],i)=>`<rect fill="#151719" x="${x-6}" y="${y-6}" width="12" height="12"/><circle fill="#fff" cx="${x}" cy="${y}" r="1.6"/>${text(x+(i===0||i===3?-13:13),y+4,String(i+1),'oft-ink')}`).join('')}${withLens ? lens('left',180,118,2,'oft-on-paper') : ''}`;
   const pair = () => `${lens('left',105,116,1.7)}${lens('right',258,116,1.7)}${text(105,187,'LEFT')}${text(258,187,'RIGHT')}`;
   const illustrations = {
-    sheet: () => `${sheet(false)}<path class="oft-ink-stroke" d="M130 118H230 M130 111V125 M230 111V125"/>${text(180,103,'50 mm','oft-ink')}${text(180,158,'100% · ACTUAL SIZE','oft-ink')}`,
+    sheet: () => `${sheet(false)}<rect class="oft-paper" x="104" y="77" width="152" height="84" rx="4"/>${text(180,98,'100%','oft-ink oft-scale-label')}<path class="oft-ink-stroke" d="M130 123H230 M130 116V130 M230 116V130"/>${text(180,146,'50 mm','oft-ink')}`,
     place: () => `${sheet()}<path class="oft-accent oft-brackets" d="M65 59V33H91 M269 33H295V59 M295 177V203H269 M91 203H65V177"/>`,
     light: () => `${sheet()}<path class="oft-reflection" d="M151 85L190 151 M164 85L203 151"/><path class="oft-accent" d="M19 86V15H92 M268 15H341V86 M341 153V224H268 M92 224H19V153"/>`,
-    confirm: () => `${pair()}<path class="oft-accent" d="M92 48l8 8 16-16 M245 48l8 8 16-16"/><path class="oft-muted-stroke" d="M170 116h24 m-6-6 6 6-6 6"/>`,
+    confirm: () => `${pair()}<path class="oft-accent" d="M92 48l8 8 16-16 M245 48l8 8 16-16"/>`,
     measure: () => `${lens('left',180,110,2.3)}<path class="oft-accent" d="M110 182H250 M110 176V188 M250 176V188 M277 61V160 M271 61H283 M271 160H283"/><path class="oft-muted-stroke" d="M110 163V172 M250 163V172 M257 61H265 M257 160H265"/>${text(180,205,'CHECK WIDTH')}${text(180,29,'CHECK HEIGHT')}`,
     marks: () => `${lens('left',180,122,2.6)}${cross(164,112)}<path class="oft-accent" d="M180 46V22 m-5 5 5-5 5 5"/><path class="oft-muted-stroke" d="M157 106L101 57H55"/>${text(80,46,'OPTICAL CENTRE')}${text(180,212,'PROVIDER-MARKED TOP + CENTRE')}`,
     fit: () => `${pair()}${cross(110,105)}${cross(252,116)}<path class="oft-muted-stroke" d="M180 35V154"/><path class="oft-accent" d="M110 68H175 M185 68H252 M110 62V74 M252 62V74"/>${text(143,49,'LEFT PD')}${text(219,49,'RIGHT PD')}`,
@@ -27,24 +27,24 @@
 
   const guides = {
     capture: {
-      name: 'Capture guide', done: 'Ready to capture',
+      name: 'Capture guide', done: 'Done',
       steps: [
-        ['Print to scale', 'Print the calibration sheet at 100%, with no “fit to page”. Check the 50 mm bar with a ruler.', 'sheet', 'Print sheet'],
-        ['Four dots. One lens.', 'Lay the sheet flat on a matte surface. Place the lens inside the four white marker centres.', 'place'],
-        ['Give the edge good light', 'Use diffuse light and move reflections off the rim. Hold your phone close, with all four dots visible.', 'light'],
-        ['Left, then right', 'Hold still for automatic capture, then inspect and confirm. Remove the first lens before placing the second.', 'confirm'],
-        ['Check the real dimensions', 'Compare each width and height with a ruler or calipers before printing. Take an independent photo to check the result.', 'measure'],
+        ['Print at 100%', 'Turn off “fit to page”. Check that the printed bar measures 50 mm.', 'sheet', 'Print sheet'],
+        ['Place one lens', 'Flatten the sheet on a matte surface. Keep the lens inside all four dots.', 'place'],
+        ['Keep the rim clear', 'Use soft, even light. Move closer with all four dots visible and reflections off the edge.', 'light'],
+        ['Capture each lens', 'Hold still, check the outline, then confirm. Swap lenses; tap “Second lens placed” if asked.', 'confirm'],
+        ['Verify the size', 'Compare width and height with a ruler or calipers. Check a separate capture before printing.', 'measure'],
       ],
     },
     printing: {
-      name: 'Printing guide', done: 'Ready to fit',
+      name: 'Printing guide', done: 'Done',
       steps: [
-        ['Start with the provider’s marks', 'An eye-care provider checks prescription suitability and marks the top and optical centre. The optical centre may differ from the geometric centre.', 'marks'],
-        ['Fit each side separately', 'Enter measured left and right pupil distances and edge thicknesses. Check height offsets, temple length and printer bed size.', 'fit'],
-        ['Look around both rims', 'Rotate the frame preview and inspect both lens seats, retainers and hinges. Confirm the lens orientation and wearer fit with the provider.', 'preview'],
-        ['Download the whole kit', 'The STL kit contains a front, two retainers and two temples. Use the individual parts or the arranged plate.', 'kit'],
-        ['Slice for your printer', 'Import in millimetres at 100% scale with your actual printer and material profile. Inspect orientation and add supports where needed.', 'slice'],
-        ['Check the physical fit', 'Use eight M2 retainer fasteners, two M2 hinge screws and matching nuts; check lengths and clearances. Test lens fit gently and have the provider verify alignment before wear.', 'assembly'],
+        ['Mark the optical centres', 'Ask an eye-care provider to check the prescription and mark each lens’s top and optical centre—not its geometric centre.', 'marks'],
+        ['Measure each side', 'Enter each pupil distance and lens edge thickness. Check height offsets, temple length and printer bed size.', 'fit'],
+        ['Inspect the frame', 'Rotate the preview. Check seats, retainers and hinges; confirm lens orientation and wearer fit with the provider.', 'preview'],
+        ['Download the parts', 'One front, two retainers and two temples. Download separate STLs or the arranged plate.', 'kit'],
+        ['Print at actual size', 'Import in millimetres at 100%. Choose your printer and material profile; check orientation and supports.', 'slice'],
+        ['Assemble and check', 'Use eight M2 retainer fasteners, two M2 hinge screws and matching nuts. Check lengths, clearances and lens fit. Have the provider verify alignment before wear.', 'assembly'],
       ],
     },
   };
@@ -60,9 +60,8 @@
     get('.oft-description').textContent = description;
     get('.oft-visual').innerHTML = `<svg viewBox="0 0 360 240" aria-hidden="true" focusable="false">${illustrations[illustration]()}</svg>`;
     get('.oft-sheet-link').hidden = !link;
-    get('.oft-back').disabled = step === 0;
+    get('.oft-back').hidden = step === 0;
     get('.oft-next').textContent = step === guide.steps.length - 1 ? guide.done : 'Next';
-    get('.oft-dots').innerHTML = guide.steps.map(([label], i) => `<button type="button" class="oft-dot" data-step="${i}" aria-label="Step ${i + 1}: ${label.replaceAll('"', '&quot;')}" ${i === step ? 'aria-current="step"' : ''}><span></span></button>`).join('');
   }
   function move(delta) {
     const target = step + delta;
@@ -80,17 +79,12 @@
       <header class="oft-header"><span class="oft-guide-name"></span><span class="oft-count" aria-label="Step progress"></span><button type="button" class="oft-close" aria-label="Close guide"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12 M6 18 18 6"/></svg></button></header>
       <div class="oft-visual"></div>
       <div class="oft-copy"><h2 id="oft-title" class="oft-title" tabindex="-1"></h2><p id="oft-description" class="oft-description"></p><a class="oft-sheet-link" href="/calibration-sheet.svg" target="_blank" rel="noopener">Print sheet</a></div>
-      <footer class="oft-footer"><nav class="oft-dots" aria-label="Guide steps"></nav><div class="oft-actions"><button type="button" class="oft-back">Back</button><button type="button" class="oft-next">Next</button></div></footer>
+      <footer class="oft-footer"><div class="oft-actions"><button type="button" class="oft-back">Back</button><button type="button" class="oft-next">Next</button></div></footer>
     </div>`;
     document.body.append(dialog);
     get('.oft-close').addEventListener('click', () => dialog.close());
     get('.oft-back').addEventListener('click', () => move(-1));
     get('.oft-next').addEventListener('click', () => step === guides[topic].steps.length - 1 ? dialog.close() : move(1));
-    get('.oft-dots').addEventListener('click', (event) => {
-      const button = event.target.closest('[data-step]');
-      if (!button) return;
-      move(Number(button.dataset.step) - step);
-    });
     dialog.addEventListener('click', (event) => {
       if (event.target !== dialog) return;
       const rect = dialog.getBoundingClientRect();

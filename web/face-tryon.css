@@ -1,0 +1,17 @@
+.face-tryon{position:fixed;inset:0;width:100%;max-width:none;height:100dvh;max-height:none;margin:0;padding:0;border:0;background:#101113;color:#fff;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.face-tryon::backdrop{background:#101113}
+.face-tryon-stage{position:absolute;inset:0;overflow:hidden}
+.face-tryon-stage video,.face-tryon-stage canvas{position:absolute;inset:0;width:100%;height:100%;transform:scaleX(-1)}
+.face-tryon-stage video{object-fit:cover}
+.face-tryon-stage canvas{pointer-events:none}
+.face-tryon-header{position:relative;display:flex;align-items:center;justify-content:space-between;gap:20px;padding:calc(16px + env(safe-area-inset-top)) 20px 28px;background:linear-gradient(#0009,transparent)}
+.face-tryon-header h2{margin:0;color:#fff;font:600 18px/1.3 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:-.02em}
+.face-tryon button.face-tryon-close{display:grid;place-items:center;width:48px;height:48px;min-height:48px;padding:0;border:1px solid #ffffff40;border-radius:50%;background:#383a4099;color:#fff;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);box-shadow:0 6px 20px #0002;cursor:pointer}
+.face-tryon-close svg{width:22px;height:22px;stroke:currentColor;stroke-width:1.7;fill:none}
+.face-tryon-close:hover{background:#50525abf}
+.face-tryon-close:focus-visible{outline:3px solid #fff;outline-offset:4px}
+.face-tryon-footer{position:absolute;bottom:0;left:0;right:0;display:grid;justify-items:center;gap:10px;margin:0;border:0;padding:36px 24px calc(24px + env(safe-area-inset-bottom));background:linear-gradient(transparent,#000b);text-align:center;pointer-events:none}
+.face-tryon-status{margin:0;max-width:30ch;padding:11px 18px;border-radius:28px;background:#25272dd9;color:#fff;font-size:15px;line-height:1.4;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
+.face-tryon-status:empty{visibility:hidden}
+.face-tryon-disclaimer{margin:0;color:#fff;font-size:12px;line-height:1.4;text-shadow:0 1px 3px #000}
+@media(prefers-reduced-motion:no-preference){.face-tryon[open]{animation:face-tryon-enter .18s ease-out}@keyframes face-tryon-enter{from{opacity:.8}to{opacity:1}}}

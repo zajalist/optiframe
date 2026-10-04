@@ -1,5 +1,7 @@
-import { leftPanel, rightPanel, capturesReady, makeFrame, project } from './app.js?v=18';
+import { leftPanel, rightPanel, capturesReady, makeFrame, project, getFrameStyle, setFrameStyle, getFrameAssembly } from './app.js?v=27';
 import { validateFaceFit, lensReady, marksReady } from './fit-validation.js';
+import { mountPupilMeasurements } from './pupil-measurements.js?v=27';
+import { mountFrameCatalog } from './frame-catalog.js?v=27';
 
 if (new URLSearchParams(location.search).get('advanced') !== '1') void startFitFlow();
 
@@ -19,6 +21,7 @@ async function startFitFlow() {
   const viewer = fields('viewer'), designStatus = fields('design-status');
   let step = 0, method = 'manual', face = null, faceReviewed = false, loading = true, exporting = false;
   let markMode = 'optical';
+  let cleanupStep = () => {};
   let captureBackup = null;
   try { captureBackup = JSON.parse(sessionStorage.getItem('optiframe-captures') || 'null'); } catch { /* Recovery remains available via Scanner. */ }
   const titles = ['Your lenses','Fit measurements','Pupil distances','Lens thickness','Left lens marks','Right lens marks','Frame fit','Your frame','Print test kit'];
@@ -125,16 +128,17 @@ async function startFitFlow() {
     body.append(nudges);
   }
   function render(focus=false) {
+    cleanupStep(); cleanupStep = () => {};
     stash(); message.textContent=''; title.textContent=titles[step]; shell.dataset.step=String(step);
     shell.querySelector('.fit-progress').textContent=`${step+1} / ${titles.length}`;
     back.textContent=step===0?'Scanner':'Back';next.textContent=step===0?'Confirm':step===7?'Prepare print':step===8?'Download test kit':'Continue';
     if(step===0)summary();
     if(step===1)methodScreen();
-    if(step===2){note('From the nose centre to each pupil, in millimetres.');inputs(['left-pd','right-pd']);}
+    if(step===2) cleanupStep = mountPupilMeasurements(body, fields('left-pd'), fields('right-pd'));
     if(step===3){note('Measure each lens edge with calipers, in millimetres.');inputs(['left-edge-thickness','right-edge-thickness']);}
     if(step===4||step===5)markScreen(step===4?left:right);
     if(step===6){inputs(['left-vertical-offset','right-vertical-offset','temple-length']);note('Zero offsets and 130 mm temples are starting settings. Adjust for the wearer.');}
-    if(step===7){body.append(viewer,designStatus);body.append(button('Update preview',()=>void makeFrame(true),'fit-link'));void makeFrame(true).then(update);}
+    if(step===7)cleanupStep=mountFrameCatalog({body,viewer,status:designStatus,panels,getStyle:getFrameStyle,setStyle:setFrameStyle,getAssembly:getFrameAssembly,rebuild:()=>makeFrame(true),onUpdate:update,leftPd:()=>Number(fields('left-pd').value),rightPd:()=>Number(fields('right-pd').value)});
     if(step===8){inputs(['bed-width','bed-depth']);note('Unverified fit-test STL kit. Slice at 100% in millimetres.');body.append(designStatus);const a=document.createElement('a');a.className='fit-link';a.href='?advanced=1'+location.hash;a.textContent='Physical checks';a.addEventListener('click',event=>{
       try {
         if(!Array.isArray(captureBackup))throw new Error('Return to Scanner to transfer both captures again.');
@@ -156,7 +160,7 @@ async function startFitFlow() {
   shell.addEventListener('input',update);shell.addEventListener('change',update);
   panels.forEach(p=>p.canvas.addEventListener('pointerup',update));
   new MutationObserver(update).observe(viewer,{attributes:true,attributeFilter:['class','data-stale']});
-  const resize=()=>{const viewport=window.visualViewport;const height=viewport?.height||window.innerHeight;shell.style.setProperty('--fit-height',`${height}px`);shell.classList.toggle('is-keyboard',height<window.innerHeight*.78);};
+  const resize=()=>{const viewport=window.visualViewport;const height=viewport?.height||window.innerHeight;shell.style.setProperty('--fit-height',`${height}px`);shell.classList.toggle('is-keyboard',height<window.innerHeight*.78);shell.classList.toggle('is-compact',height<560);};
   window.visualViewport?.addEventListener('resize',resize);window.addEventListener('resize',resize);resize();
   render();await capturesReady;loading=false;panels.forEach(p=>{p.guidedCapture=false;});render();
 }

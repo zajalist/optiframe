@@ -1,11 +1,11 @@
 html.oft-guide-open { overflow: hidden; }
-.oft-dialog { --oft-fg: #f5f6f8; --oft-muted: #b6bdc8; --oft-accent: #d6e5f8; color-scheme: dark; box-sizing: border-box; width: min(480px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 32px); padding: 0; border: 0; border-radius: 20px; background: #202329; color: var(--oft-fg); box-shadow: 0 24px 80px #0006; font: 400 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; overscroll-behavior: contain; }
+.oft-dialog { --oft-fg: #f5f6f8; --oft-muted: #b6bdc8; --oft-accent: #d6e5f8; color-scheme: dark; box-sizing: border-box; width: min(440px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 32px); padding: 0; border: 0; border-radius: 30px; background: #202329; color: var(--oft-fg); box-shadow: 0 24px 80px #0006; font: 400 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; overscroll-behavior: contain; }
 .oft-dialog *, .oft-dialog *::before, .oft-dialog *::after { box-sizing: border-box; }
 .oft-dialog::backdrop { background: #030504b8; }
 .oft-dialog::selection, .oft-dialog ::selection { color: #17191d; background: #d6e5f8; }
 .oft-dialog[open] { animation: oft-arrive 260ms cubic-bezier(.16, 1, .3, 1); }
-.oft-shell { display: grid; grid-template-rows: auto minmax(100px, 240px) auto auto; padding: 12px 24px 24px; }
-.oft-header { display: flex; align-items: center; gap: 12px; min-height: 44px; color: var(--oft-muted); font-size: 13px; }
+.oft-shell { display: grid; grid-template-rows: auto clamp(130px, 25dvh, 208px) auto auto; padding: 12px 24px 24px; }
+.oft-header { display: flex; align-items: center; gap: 14px; min-height: 44px; color: var(--oft-muted); font-size: 13px; }
 .oft-guide-name { flex: 1; }
 .oft-count { font-variant-numeric: tabular-nums; }
 .oft-dialog button { font: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
@@ -13,7 +13,7 @@ html.oft-guide-open { overflow: hidden; }
 .oft-close { display: grid; place-items: center; width: 44px; height: 44px; margin-right: -12px; padding: 12px; border: 0; border-radius: 50%; background: transparent; color: var(--oft-fg); }
 .oft-close svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
 .oft-close:hover { background: #ffffff0c; }
-.oft-visual { position: relative; display: grid; place-items: center; min-width: 0; min-height: 0; margin: 12px 0 20px; }
+.oft-visual { position: relative; display: grid; place-items: center; min-width: 0; min-height: 0; margin: 4px 0 12px; }
 .oft-visual svg { position: absolute; inset: 0; display: block; width: 100%; height: 100%; max-height: 240px; overflow: visible; stroke: none; }
 .oft-visual text { stroke: none; }
 .oft-visual path { stroke-linejoin: round; stroke-linecap: round; }
@@ -24,6 +24,7 @@ html.oft-guide-open { overflow: hidden; }
 .oft-grid { fill: none; stroke: #b2b8c2; stroke-width: .6; }
 .oft-diagram-label { font-family: inherit; font-size: 10px; fill: var(--oft-muted); font-weight: 500; letter-spacing: .02em; }
 .oft-ink { fill: #343b48; }
+.oft-scale-label { font-size: 21px; font-weight: 600; letter-spacing: -.02em; }
 .oft-ink-stroke { fill: none; stroke: #343b48; stroke-width: 1.5; }
 .oft-accent { fill: none; stroke: var(--oft-accent); stroke-width: 1.6; }
 .oft-white-stroke { fill: none; stroke: var(--oft-fg); stroke-width: 1.6; }
@@ -31,23 +32,18 @@ html.oft-guide-open { overflow: hidden; }
 .oft-reflection { fill: none; stroke: #fff; stroke-width: 7; opacity: .7; animation: oft-light 3s ease-in-out 2; }
 .oft-brackets { animation: oft-settle 900ms cubic-bezier(.16, 1, .3, 1); transform-origin: 180px 118px; }
 .oft-slice-lines { animation: oft-build 1.8s cubic-bezier(.16, 1, .3, 1); }
-.oft-copy { min-height: 155px; }
-.oft-title { margin: 0 0 10px; color: var(--oft-fg); font-size: 26px; line-height: 1.12; font-weight: 600; letter-spacing: -.025em; text-wrap: balance; outline: none; }
-.oft-description { max-width: 42ch; margin: 0; color: var(--oft-muted); font-size: 15px; line-height: 1.5; }
-.oft-sheet-link { display: inline-flex; align-items: center; min-height: 44px; gap: 6px; color: var(--oft-accent); text-decoration: underline; text-underline-offset: 4px; font-size: 13px; }
+.oft-copy { min-height: 0; }
+.oft-title { margin: 0 0 8px; color: var(--oft-fg); font-size: 24px; line-height: 1.16; font-weight: 600; letter-spacing: -.025em; text-wrap: balance; outline: none; }
+.oft-description { max-width: 42ch; margin: 0; color: var(--oft-muted); font-size: 14px; line-height: 1.5; }
+.oft-sheet-link { display: inline-flex; align-items: center; min-height: 44px; margin-top: 8px; padding: 0 16px; border-radius: 999px; background: #ffffff0e; box-shadow: inset 0 1px 0 #ffffff26; color: var(--oft-fg); text-decoration: none; font-size: 14px; font-weight: 500; }
+.oft-sheet-link:hover { background: #ffffff19; }
 .oft-sheet-link[hidden] { display: none; }
 .oft-sheet-link svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.4; }
-.oft-footer { display: block; gap: 0; margin-top: 14px; padding: 0; border: 0; color: var(--oft-fg); font-size: 15px; line-height: 1.5; }
-.oft-dots { display: flex; align-items: center; justify-content: center; margin-bottom: 10px; }
-.oft-dot { display: grid; place-items: center; width: 36px; height: 36px; min-height: 36px; padding: 0; border: 0; border-radius: 50%; background: transparent; }
-.oft-dialog .oft-dot:hover { background: transparent; }
-.oft-dot span { width: 5px; height: 5px; border-radius: 4px; background: #747e8c; transition: width 180ms ease, background 180ms ease; }
-.oft-dot[aria-current] span { width: 19px; background: var(--oft-accent); }
-.oft-dot:hover span { background: var(--oft-fg); }
+.oft-footer { display: block; margin-top: 24px; padding: 0; border: 0; color: var(--oft-fg); font-size: 15px; line-height: 1.5; }
 .oft-actions { display: flex; gap: 12px; }
-.oft-back, .oft-next { min-height: 48px; border-radius: 10px; padding: 0 18px; border: 0; transition: background 140ms ease, transform 140ms ease; }
+.oft-back, .oft-next { min-height: 48px; border-radius: 999px; padding: 0 20px; border: 0; transition: background 140ms ease, transform 140ms ease; }
 .oft-back { min-width: 82px; background: #ffffff09; color: var(--oft-fg); }
-.oft-back:disabled { opacity: .35; cursor: default; }
+.oft-back[hidden] { display: none; }
 .oft-next { flex: 1; background: var(--oft-fg); color: #17191d; font-weight: 600 !important; }
 .oft-next:hover { background: #e3eaf5; }
 .oft-back:hover:not(:disabled) { background: #ffffff12; }
@@ -56,8 +52,8 @@ html.oft-guide-open { overflow: hidden; }
 @keyframes oft-light { 0%, 100% { transform: translateX(0); opacity: .7; } 55%, 80% { transform: translateX(78px); opacity: 0; } }
 @keyframes oft-settle { from { transform: scale(1.05); } to { transform: scale(1); } }
 @keyframes oft-build { from { clip-path: inset(100% 0 0); } to { clip-path: inset(0); } }
-@media (max-width: 520px) { .oft-dialog { margin: auto auto max(12px, env(safe-area-inset-bottom)); width: calc(100vw - 24px); max-height: calc(100dvh - 24px); } .oft-shell { padding: 10px 22px 20px; } .oft-title { font-size: 25px; } }
-@media (max-height: 730px) { .oft-shell { grid-template-rows: auto minmax(80px, 180px) auto auto; } .oft-visual { margin: 6px 0 16px; } .oft-copy { min-height: 150px; } .oft-footer { margin-top: 4px; } .oft-dots { margin-bottom: 4px; } }
-@media (max-height: 570px) { .oft-dialog { width: min(660px, calc(100vw - 24px)); margin: auto; } .oft-shell { grid-template-columns: minmax(100px, 1fr) minmax(160px, 1.2fr); grid-template-rows: 44px auto auto; gap: 0 20px; padding: 8px 20px 14px; } .oft-header, .oft-footer { grid-column: 1 / -1; } .oft-visual { margin: 4px 0; } .oft-copy { align-self: center; min-height: 0; padding: 12px 0; } .oft-title { font-size: 22px; } .oft-description { font-size: 14px; line-height: 1.4; } .oft-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; } .oft-dots { margin: 0; } .oft-dot { width: 28px; } .oft-actions { flex: 1; max-width: 300px; } }
-@media (max-width: 380px) and (max-height: 570px) { .oft-shell { display: grid; grid-template-columns: 1fr; grid-template-rows: 40px 85px auto auto; } .oft-visual { margin: 0; } .oft-copy { padding: 6px 0; } .oft-footer { display: block; } .oft-dots { justify-content: center; } .oft-actions { max-width: none; } }
+@media (max-width: 520px) { .oft-dialog { margin: auto auto max(12px, env(safe-area-inset-bottom)); width: calc(100vw - 24px); max-height: calc(100dvh - 24px); } .oft-shell { padding: 10px 22px 20px; } }
+@media (max-height: 570px) { .oft-shell { grid-template-rows: auto 126px auto auto; } .oft-footer { margin-top: 16px; } .oft-visual { margin: 0 0 8px; } }
+@media (min-width: 521px) and (max-height: 570px) { .oft-dialog { width: min(660px, calc(100vw - 24px)); margin: auto; } .oft-shell { grid-template-columns: minmax(100px, 1fr) minmax(160px, 1.2fr); grid-template-rows: 44px minmax(128px, auto) auto; gap: 0 20px; padding: 8px 20px 14px; } .oft-header, .oft-footer { grid-column: 1 / -1; } .oft-visual { margin: 4px 0; } .oft-copy { align-self: center; padding: 12px 0; } .oft-title { font-size: 22px; } .oft-description { line-height: 1.4; } }
+@media (max-width: 520px) and (max-height: 440px) { .oft-shell { grid-template-rows: 44px auto auto; padding: 8px 18px 14px; } .oft-visual { display: none; } .oft-copy { padding-top: 8px; } .oft-title { font-size: 21px; } .oft-description { font-size: 13px; line-height: 1.4; } .oft-footer { margin-top: 12px; } }
 @media (prefers-reduced-motion: reduce) { .oft-dialog, .oft-dialog *, .oft-dialog *::before, .oft-dialog *::after { animation: none !important; transition: none !important; } }

@@ -10,6 +10,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 import numpy as np
 import trimesh
+from shapely.affinity import translate
 from shapely.geometry import LineString, Point, Polygon, box
 from shapely.ops import unary_union
 from shapely.strtree import STRtree
@@ -17,6 +18,7 @@ from shapely.strtree import STRtree
 
 OUTLINE_SIMPLIFICATION_MM = 0.05
 MIN_OUTLINE_CLEARANCE_MM = 0.2
+FRAME_STYLES = ("classic", "bold", "brow")
 
 
 def _check_nonlocal_clearance(polygon: Polygon) -> None:
@@ -54,6 +56,7 @@ class Settings:
     right_edge_thickness: float | None = None
     left_vertical_offset: float = 0
     right_vertical_offset: float = 0
+    frame_style: str = "classic"
 
     def edge_thicknesses(self) -> tuple[float, float]:
         return (self.edge_thickness if self.left_edge_thickness is None else self.left_edge_thickness,
@@ -113,6 +116,18 @@ def _fastener_centres(lens: Polygon) -> list[tuple[float, float]]:
     target = [((minx + maxx) / 2, miny - 2.7), ((minx + maxx) / 2, maxy + 2.7),
               (minx - 2.7, (miny + maxy) / 2), (maxx + 2.7, (miny + maxy) / 2)]
     return [(float(x), float(y)) for x, y in target]
+
+
+def _outer_profile(lens: Polygon, style: str) -> Polygon:
+    """Style only adds material outside the original rim; never reshape a lens seat."""
+    if style not in FRAME_STYLES:
+        raise ValueError("Frame style must be classic, bold or brow")
+    base = lens.buffer(6.5 if style == "bold" else 5.3, join_style=1)
+    if style == "brow":
+        # Assembly Y points upward. The overlapping translated rim gives a
+        # continuous upper accent without removing fastener or retention stock.
+        return base.union(translate(base, yoff=2.0))
+    return base
 
 
 def _block(extents: tuple[float, float, float], centre: tuple[float, float, float]) -> trimesh.Trimesh:
@@ -201,6 +216,8 @@ def _build_plate(parts: dict[str, trimesh.Trimesh], width: float,
 
 def build_parts(left: list[list[float]], right: list[list[float]], settings: Settings):
     """Build printable solids in their shared assembly coordinates."""
+    if settings.frame_style not in FRAME_STYLES:
+        raise ValueError("Frame style must be classic, bold or brow")
     if not (np.isfinite([settings.left_pd, settings.right_pd]).all() and
             20 <= settings.left_pd <= 40 and 20 <= settings.right_pd <= 40):
         raise ValueError("Monocular pupil distances must each be 20–40 mm")
@@ -222,7 +239,7 @@ def build_parts(left: list[list[float]], right: list[list[float]], settings: Set
     centres = [_fastener_centres(lens) for lens in lenses]
     front_z = 2.0
     seat_z = [thickness + 0.3 for thickness in edge_thicknesses]
-    outer = [lens.buffer(5.3, join_style=1) for lens in lenses]
+    outer = [_outer_profile(lens, settings.frame_style) for lens in lenses]
     if outer[0].distance(outer[1]) < 0.2:
         raise ValueError("The outer rims and rear retainers overlap or have less than 0.2 mm clearance at these pupil distances")
     inner = [lens.buffer(-0.7, join_style=1) for lens in lenses]
@@ -241,9 +258,13 @@ def build_parts(left: list[list[float]], right: list[list[float]], settings: Set
                          (right_inner - 3, bridge_y)]).buffer(2.6, cap_style=1)
     tabs = []
     hinge_centres = []
-    for side, outer_lens in [(-1, lens_l), (1, lens_r)]:
+    for side, outer_lens, profile in [(-1, lens_l, outer[0]), (1, lens_r, outer[1])]:
         minx, miny, maxx, maxy = outer_lens.bounds
+        # Preserve legacy classic coordinates exactly; bold moves the hinge
+        # outward by its added stock, retaining the same fork clearance.
         rim_edge = (minx - 5.3) if side < 0 else (maxx + 5.3)
+        if settings.frame_style != "classic":
+            rim_edge = profile.bounds[0] if side < 0 else profile.bounds[2]
         # Keep the fork's inner X face 4 mm beyond the outermost rim edge.
         x = rim_edge + side * 8
         y = (miny + maxy) / 2
@@ -286,6 +307,7 @@ def build_parts(left: list[list[float]], right: list[list[float]], settings: Set
     notes = {
         "status": "experimental; lens fit and hinge strength require physical validation",
         "units": "millimetres", "parts": list(parts),
+        "frame_style": settings.frame_style,
         "outline_cleanup_max_boundary_deviation_mm": OUTLINE_SIMPLIFICATION_MM,
         "hardware": "Eight M2 through fasteners for lens retainers; two M2 hinge screws and matching nuts. Check actual screw length and clearance.",
         "lens_edge_thickness_mm": {"left": edge_thicknesses[0], "right": edge_thicknesses[1]},
@@ -313,6 +335,7 @@ def preview(left: list[list[float]], right: list[list[float]], settings: Setting
     for side, lens, thickness in zip(("left", "right"), lenses, settings.edge_thicknesses()):
         meshes.append(mesh_data(side + "-lens", _extrude(lens, thickness, 2.15), "lens"))
     return {"schemaVersion": 1, "units": "millimetres", "meshes": meshes,
+            "frameStyle": settings.frame_style,
             "opticalCentres": [[-settings.left_pd, settings.left_vertical_offset, 2.15],
                                [settings.right_pd, settings.right_vertical_offset, 2.15]],
             "lensRepresentation": "Flat outlines with measured edge thickness; optical curvature is not measured",

@@ -9,7 +9,8 @@ import trimesh
 import numpy as np
 
 from shapely.geometry import Polygon
-from frame import Settings, generate, preview, _polygon, OUTLINE_SIMPLIFICATION_MM
+from frame import (Settings, generate, preview, build_parts, _polygon, _outer_profile,
+                   OUTLINE_SIMPLIFICATION_MM, FRAME_STYLES)
 
 
 def ellipse(rx, ry, count=96):
@@ -24,6 +25,67 @@ def bed_contact_area(mesh):
 
 
 class FrameTests(unittest.TestCase):
+    def test_style_profiles_add_material_without_changing_lens_openings(self):
+        lens = _polygon(ellipse(25, 19), -1, 33)
+        base = lens.buffer(5.3, join_style=1)
+        self.assertTrue(_outer_profile(lens, "classic").equals_exact(base, 0))
+        for style in FRAME_STYLES:
+            outer = _outer_profile(lens, style)
+            self.assertTrue(outer.is_valid)
+            self.assertLess(base.difference(outer).area, 1e-8)
+            # The styled ring's only opening remains the exact measured lip.
+            lip = lens.buffer(-.7, join_style=1)
+            ring = outer.difference(lip)
+            self.assertEqual(len(ring.interiors), 1)
+            self.assertLess(Polygon(ring.interiors[0]).symmetric_difference(lip).area, 1e-8)
+        brow = _outer_profile(lens, "brow")
+        np.testing.assert_allclose(brow.bounds[:3], base.bounds[:3])
+        self.assertAlmostEqual(brow.bounds[3] - base.bounds[3], 2)
+        self.assertGreater(_outer_profile(lens, "bold").area, base.area)
+
+    def test_all_styles_export_preview_geometry_with_clear_lens_seats_and_hinges(self):
+        left, right = ellipse(25, 19), ellipse(23, 17)
+        volumes = []
+        for style in FRAME_STYLES:
+            with self.subTest(style=style):
+                settings = Settings(33, 33, 2.5, 125, frame_style=style)
+                result = preview(left, right, settings)
+                self.assertEqual(result["frameStyle"], style)
+                self.assertEqual(result["opticalCentres"], [[-33, 0, 2.15], [33, 0, 2.15]])
+                meshes = {part["name"]: trimesh.Trimesh(vertices=part["vertices"], faces=part["faces"])
+                          for part in result["meshes"]}
+                np.testing.assert_allclose(meshes["left-lens"].bounds,
+                                           [[-58, -19, 2.15], [-8, 19, 4.65]])
+                data, notes = generate(left, right, settings)
+                self.assertEqual(notes["frame_style"], style)
+                with ZipFile(io.BytesIO(data)) as archive:
+                    for name in notes["parts"]:
+                        mesh = trimesh.load(io.BytesIO(archive.read(name + ".stl")), file_type="stl")
+                        self.assertTrue(mesh.is_watertight, name)
+                        self.assertGreater(mesh.volume, 0, name)
+                        np.testing.assert_allclose(mesh.bounds, meshes[name].bounds, atol=1e-4)
+                        self.assertAlmostEqual(mesh.volume, meshes[name].volume, delta=.02)
+                        # Use validated STL solids for assembly collision tests;
+                        # lightweight preview coordinates are rounded to 5 places.
+                        meshes[name] = mesh
+                volumes.append(meshes["front"].volume)
+                names = list(meshes)
+                for i, first in enumerate(names):
+                    for second in names[i + 1:]:
+                        overlap = trimesh.boolean.intersection([meshes[first], meshes[second]], engine="manifold")
+                        self.assertLess(abs(overlap.volume), 1e-5, f"{style}: {first}/{second}")
+        self.assertGreater(volumes[1], volumes[0])
+        self.assertGreater(volumes[2], volumes[0])
+
+    def test_unknown_style_and_too_close_bold_rims_are_rejected(self):
+        for style in ("unknown", "Classic", None):
+            with self.subTest(style=style), self.assertRaisesRegex(ValueError, "Frame style"):
+                build_parts(ellipse(25, 19), ellipse(23, 17), Settings(32, 31, 2.5, 125, frame_style=style))
+        # Enlarging the outer silhouette must not bypass the inter-rim clearance gate.
+        build_parts(ellipse(25, 19), ellipse(23, 17), Settings(30, 30, 2.5, 125))
+        with self.assertRaisesRegex(ValueError, "outer rims.*clearance"):
+            build_parts(ellipse(25, 19), ellipse(23, 17), Settings(30, 30, 2.5, 125, frame_style="bold"))
+
     def test_dense_adjacent_samples_are_not_a_narrow_lens(self):
         points = ellipse(25, 19, 2000)
         points.insert(35, points[35][:])
