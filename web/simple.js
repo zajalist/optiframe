@@ -2,6 +2,8 @@ import { createLiveSegmentSession } from './live-segment.js?v=37';
 import { sheetHomography, project, measure } from './calibration.js';
 import { detectSheetMarkers } from './marker-detect.js?v=9';
 import { photoReviewLayout } from './photo-review.js?v=23';
+import {apiFetch,requireAppAccess} from './api-fetch.js?v=43';
+await requireAppAccess();
 
 const $ = id => document.getElementById(id);
 const stage = $('stage');
@@ -16,10 +18,6 @@ const photoLabel = $('photo-label');
 const controllerButton = $('controller-capture');
 const captures = { left: null, right: null };
 const accessKey = new URLSearchParams(location.hash.slice(1)).get('access');
-const apiFetch = (url, options = {}) => fetch(url, {
-  ...options,
-  headers: { ...options.headers, ...(accessKey ? { 'X-OptiFrame-Key': accessKey } : {}) },
-});
 
 let side = 'left';
 let phase = 'idle';

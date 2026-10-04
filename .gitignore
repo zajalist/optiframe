@@ -7,3 +7,6 @@ ios/.build/
 DerivedData/
 __pycache__/
 *.pyc
+
+.vercel
+.env*

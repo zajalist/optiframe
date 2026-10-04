@@ -36,7 +36,7 @@ const THREE={FrontSide:0,SRGBColorSpace:'srgb',ACESFilmicToneMapping:4,
   MeshBasicMaterial:class {constructor(options){this.options=options;this.kind='basic';}},
   MeshStandardMaterial:class {constructor(options){this.options=options;this.kind='standard';}},
   BufferAttribute:class {constructor(array,size){this.array=array;this.itemSize=size;}},
-  BufferGeometry:class {constructor(){this.attributes={};}setAttribute(name,value){this.attributes[name]=value;}}};
+  BufferGeometry:class {constructor(){this.attributes={};this.groups=[];}setAttribute(name,value){this.attributes[name]=value;}addGroup(start,count,materialIndex){this.groups.push({start,count,materialIndex});}}};
 test('frames use satin dielectric material, lenses stay faint without depth writes or double faces',()=>{
   const frame=createFrameMaterial(THREE,{kind:'frame'});
   assert.equal(frame.kind,'standard');assert.equal(frame.options.metalness,0);assert.equal(frame.options.roughness,.52);
@@ -50,4 +50,24 @@ test('geometry factory supplies crease normals directly and renderer uses consis
   assert.equal(geometry.attributes.normal.array.length,9);assert.equal(geometry.attributes.position.itemSize,3);
   const renderer={};configureFrameRenderer(THREE,renderer);
   assert.equal(renderer.outputColorSpace,THREE.SRGBColorSpace);assert.equal(renderer.toneMapping,THREE.ACESFilmicToneMapping);
+});
+
+test('only the exact engraved floors get silver, with two draw calls and unchanged triangles',()=>{
+  const part={kind:'printed',vertices:[[0,0,0],[1,0,0],[0,1,0],[0,0,1]],faces:[[0,1,2],[0,3,1],[0,2,3]],
+    branding:{finish:'silver-infill-preview',faceIndices:[0,2,0]}};
+  const before=JSON.stringify(part),geometry=createFrameGeometry(THREE,part),materials=createFrameMaterial(THREE,part);
+  assert.equal(materials.length,2);assert.equal(materials[1].options.color,0xd4d7dc);
+  assert.deepEqual(geometry.groups,[{start:0,count:3,materialIndex:0},{start:3,count:6,materialIndex:1}]);
+  assert.deepEqual(Array.from(geometry.attributes.position.array),[1,0,2].flatMap(face=>part.faces[face].flatMap(index=>part.vertices[index])));
+  assert.equal(JSON.stringify(part),before);
+  assert.equal(createFrameMaterial(THREE,part,{tryOn:true})[1].options.color,materials[1].options.color);
+});
+
+test('bad or absent branding metadata never colors unrelated triangles',()=>{
+  for(const branding of [undefined,{finish:'unknown',faceIndices:[0]},{finish:'silver-infill-preview',faceIndices:[-1]},
+    {finish:'silver-infill-preview',faceIndices:[1]},{finish:'silver-infill-preview',faceIndices:[.5]}]) {
+    const part={kind:'printed',vertices:[[0,0,0],[1,0,0],[0,1,0]],faces:[[0,1,2]],branding};
+    assert.equal(Array.isArray(createFrameMaterial(THREE,part)),false);
+    assert.deepEqual(createFrameGeometry(THREE,part).groups,[]);
+  }
 });

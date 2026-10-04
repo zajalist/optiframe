@@ -12,7 +12,8 @@ function environment() {
   const elements=new Map();
   const find=selector=>{if(!elements.has(selector))elements.set(selector,new Element());return elements.get(selector)};
   const video=find('video');Object.assign(video,{play:async()=>{},pause(){},videoWidth:1280,videoHeight:720,currentTime:1,readyState:4});
-  Object.assign(find('canvas'),{clientWidth:390,clientHeight:844,getContext:()=>({beginPath(){},arc(){},stroke(){}})});
+  const trackingLines=[];
+  Object.assign(find('canvas'),{clientWidth:390,clientHeight:844,getContext:()=>({setTransform(){},clearRect(){},beginPath(){},moveTo(x,y){trackingLines.push(['move',x,y])},lineTo(x,y){trackingLines.push(['line',x,y])},stroke(){}})});
   const dialog=new Element();dialog.querySelector=find;
   const doc=new Element();doc.activeElement={isConnected:true,focus(){focus++}};doc.querySelector=()=>null;doc.createElement=tag=>tag==='dialog'?dialog:new Element();doc.body=new Element();doc.head=new Element();
   const win=new Element();win.innerHeight=844;
@@ -23,7 +24,7 @@ function environment() {
   const model={close(){modelClosed++},detectForVideo:()=>({faceLandmarks:[]})};
   const vision={FilesetResolver:{forVisionTasks:async()=>({})},FaceLandmarker:{createFromOptions:async()=>model}};
   const runtime={getUserMedia:async()=>stream,loadVision:async()=>vision,createEstimator:()=>({reset(){},update:()=>({state:'ready',progress:1,result:{left:31.2,right:32.4}})})};
-  return {dialog,doc,find,video,stream,model,vision,runtime,frames,get stopped(){return stopped},get modelClosed(){return modelClosed},get focus(){return focus},restore(){for(const key of Object.keys(globals)){if(original[key])Object.defineProperty(globalThis,key,original[key]);else delete globalThis[key]}}};
+  return {dialog,doc,find,video,stream,model,vision,runtime,frames,trackingLines,get stopped(){return stopped},get modelClosed(){return modelClosed},get focus(){return focus},restore(){for(const key of Object.keys(globals)){if(original[key])Object.defineProperty(globalThis,key,original[key]);else delete globalThis[key]}}};
 }
 test('closing before camera permission resolves releases late tracks and never emits measurements',async()=>{
   const env=environment(),permission=deferred();let confirmed=0;
@@ -59,4 +60,26 @@ test('a throwing late disposer does not create an unhandled rejection after canc
   const pending=deferred(),controller=new AbortController();let disposals=0;
   const result=faceScanDeadline(pending.promise,100,controller.signal,'timed out',()=>{disposals++;throw new Error('device already lost')});
   controller.abort();await assert.rejects(result,{name:'AbortError'});pending.resolve({});await flush();assert.equal(disposals,1);
+});
+test('live cues use two six-pixel ticks only during valid collection, without a face oval',async()=>{
+  const env=environment();let state='collecting',close;
+  env.model.detectForVideo=()=>({faceLandmarks:[Array.from({length:478},(_,i)=>({x:i===473?.6:.4,y:.4,z:0}))]});
+  try{
+    close=openFaceScan({}, {...env.runtime,createEstimator:()=>({reset(){},update:()=>({state,message:'Hold still',progress:.4})})});await flush();
+    env.frames.shift()(1000);assert.equal(env.dialog.dataset.phase,'live');assert.doesNotMatch(env.dialog.innerHTML,/face-scan-guide/);
+    assert.deepEqual(env.trackingLines.map(line=>line[0]),['move','line','move','line']);
+    assert.equal(env.trackingLines[1][1]-env.trackingLines[0][1],6);assert.equal(env.trackingLines[3][1]-env.trackingLines[2][1],6);
+    state='guidance';env.video.currentTime=2;env.frames.shift()(1100);assert.equal(env.trackingLines.length,4);
+  }finally{close?.();env.restore()}
+});
+
+test('review explicitly describes unknown physical accuracy instead of a false error bound',async()=>{
+ const env=environment();let close;
+ try{close=openFaceScan({},env.runtime);await flush();env.frames.shift()(1000);assert.match(env.dialog.innerHTML,/Physical accuracy is unknown/);assert.doesNotMatch(env.dialog.innerHTML,/±/);}finally{close?.();env.restore();}
+});
+test('one failed device disposer cannot strand the other tracks or dialog',async()=>{
+ const env=environment();let secondStopped=0;
+ env.stream.getTracks=()=>[{stop(){throw new Error('lost track');}},{stop(){secondStopped++;}}];
+ env.model.close=()=>{throw new Error('lost model');};
+ try{const close=openFaceScan({},env.runtime);await flush();close();assert.equal(secondStopped,1);assert.equal(env.dialog.removed,true);}finally{env.restore();}
 });

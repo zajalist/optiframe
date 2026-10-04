@@ -4,8 +4,11 @@ import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import { sheetHomography, project, measure } from './calibration.js';
 import { photoReviewLayout } from './photo-review.js';
+import { createApiFetch } from './api-fetch.js';
 
-const source = (await readFile(new URL('./simple.js', import.meta.url), 'utf8')).replace(/^import .*;\r?\n/gm, '');
+// Camera/review interaction fixtures start after approved access; entry ordering
+// and rejection are exercised in app-access-order.test.mjs with the real gate.
+const source = (await readFile(new URL('./simple.js', import.meta.url), 'utf8')).replace(/^import .*;\r?\n/gm, '').replace(/^await requireAppAccess\(\);\r?$/m,'');
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
 function harness({ cameraError = null, storageError = null, deferReads = false, search = '' } = {}) {
@@ -60,6 +63,8 @@ function harness({ cameraError = null, storageError = null, deferReads = false, 
     ResizeObserver: class { observe() {} }, MutationObserver: class { observe() {} },
     requestAnimationFrame: callback => callback(), fetch() {}, sessionStorage: { setItem(key,value) { if(storageError) throw new Error(storageError); storage.set(key,value); } },
   });
+  context.apiFetch=createApiFetch({fetcher:(...args)=>context.fetch(...args),
+    location:{...location,href:'https://optiframe.test/index.html',origin:'https://optiframe.test'}});
   vm.runInContext(source, context);
   return { $, body, payload, context, storage, location, pendingReads, startOptions, imageDraws, encodings, torchRequests, windowListeners, get stops() {return stops;}, get replacements() { return replacements; }, get controllerOptions() { return callbacks; }, get starts() { return starts; }, get sounds() { return sounds; },
     accept: value => callbacks.onCapture(value), click: id => $(id).handlers.click?.({ preventDefault() {} }) };
@@ -286,7 +291,7 @@ test('photo import uses the refined endpoint and preserves original-image edge e
   };
   await app.context.selectPhoto(new File(['input'], 'original.jpg', {type: 'image/jpeg'}));
   assert.equal(requests[0].url, '/api/live-segment');
-  assert.equal(requests[0].options.headers['X-OptiFrame-Key'], 'test-key');
+  assert.equal(requests[0].options.headers.get('X-OptiFrame-Key'), 'test-key');
   assert.equal(app.encodings[0].quality, .95);
   assert.equal(app.body.dataset.phase, 'result');
   assert.equal(app.$('result-photo').hidden, false);

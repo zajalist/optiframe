@@ -1,0 +1,26 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "buildCommand": "node deploy/build-web.mjs",
+  "outputDirectory": "dist",
+  "functions": {"api/application-notifications.mjs":{"maxDuration":60}},
+  "rewrites": [
+    {"source":"/","destination":"/welcome.html"},
+    {"source":"/index.html","destination":"/scanner.html"},
+    {"source":"/api/application-notifications","destination":"/api/application-notifications"},
+    {"source":"/api/:path*","destination":"https://nest-script-flux-assessments.trycloudflare.com/api/:path*"},
+    {"source":"/healthz","destination":"https://nest-script-flux-assessments.trycloudflare.com/healthz"},
+    {"source":"/readyz","destination":"https://nest-script-flux-assessments.trycloudflare.com/readyz"}
+  ],
+  "crons": [{"path":"/api/application-notifications","schedule":"0 9 * * *"}],
+  "headers": [
+    {"source":"/(.*)","headers":[
+      {"key":"X-Content-Type-Options","value":"nosniff"},
+      {"key":"Referrer-Policy","value":"strict-origin-when-cross-origin"},
+      {"key":"X-Frame-Options","value":"SAMEORIGIN"},
+      {"key":"Permissions-Policy","value":"camera=(self), microphone=(), geolocation=()"}
+    ]},
+    {"source":"/app-config.json","headers":[{"key":"Cache-Control","value":"no-store"}]},
+    {"source":"/api/:path*","headers":[{"key":"Cache-Control","value":"no-store"}]}
+  ]
+}

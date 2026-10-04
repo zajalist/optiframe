@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { createFrameGeometry, createFrameMaterial, configureFrameRenderer } from './frame-appearance.js?v=39';
+import { createFrameGeometry, createFrameMaterial, configureFrameRenderer } from './frame-appearance.js?v=42';
 
 let active = null;
-let selectedView = new URLSearchParams(location.search).get('view') === 'side' ? 'side' : '3d';
+let selectedView = ['side','logo'].includes(new URLSearchParams(location.search).get('view')) ? new URLSearchParams(location.search).get('view') : '3d';
 
 export function showSTL(buffer, element) {
   const assembly = JSON.parse(new TextDecoder().decode(buffer));
@@ -15,7 +15,7 @@ export function showSTL(buffer, element) {
     active.resize.disconnect();
     active.intersection?.disconnect();
     document.removeEventListener('visibilitychange', active.invalidate);
-    active.scene.traverse(object => { object.geometry?.dispose(); object.material?.dispose(); });
+    active.scene.traverse(object => { object.geometry?.dispose(); for(const material of Array.isArray(object.material)?object.material:[object.material])material?.dispose(); });
   }
   element.replaceChildren();
   element.classList.add('active');
@@ -35,6 +35,7 @@ export function showSTL(buffer, element) {
     const mesh = new THREE.Mesh(createFrameGeometry(THREE, part), createFrameMaterial(THREE, part));
     mesh.userData.partName = part.name;
     mesh.userData.kind = part.kind;
+    mesh.userData.branding = part.branding;
     group.add(mesh);
   }
 
@@ -57,20 +58,27 @@ export function showSTL(buffer, element) {
   controls.target.set(0, 0, 0);
   controls.update();
   const viewButtons = new Map();
+  const brandedTemple=group.children.find(mesh=>mesh.userData.branding?.bounds);
   const setView = view => {
+    if(view==='logo'&&!brandedTemple)view='side';
     selectedView = view;
     const vertical = THREE.MathUtils.degToRad(camera.fov / 2);
     const horizontal = Math.atan(Math.tan(vertical) * camera.aspect);
-    const direction = new THREE.Vector3(...(view==='front' ? [0,0,-1] : view==='side' ? [1,.12,-.12] : [.65,.4,-1])).normalize();
+    const logoDirection=brandedTemple?.userData.partName==='left-temple'?[-1,.12,.12]:[1,.12,-.12];
+    const direction = new THREE.Vector3(...(view==='front' ? [0,0,-1] : view==='logo' ? logoDirection : view==='side' ? [1,.12,-.12] : [.85,.32,-1])).normalize();
+    const focusBox=view==='logo' ? new THREE.Box3(new THREE.Vector3(...brandedTemple.userData.branding.bounds[0]),new THREE.Vector3(...brandedTemple.userData.branding.bounds[1])).expandByScalar(4) : box;
+    const focusCentre=focusBox.getCenter(new THREE.Vector3());
     const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0), direction).normalize();
     const up = new THREE.Vector3().crossVectors(direction,right).normalize();
     let distance = 0;
-    for(const x of [box.min.x,box.max.x])for(const y of [box.min.y,box.max.y])for(const z of [box.min.z,box.max.z]) {
-      const corner = new THREE.Vector3(x,y,z).sub(centre);
+    for(const x of [focusBox.min.x,focusBox.max.x])for(const y of [focusBox.min.y,focusBox.max.y])for(const z of [focusBox.min.z,focusBox.max.z]) {
+      const corner = new THREE.Vector3(x,y,z).sub(focusCentre);
       distance = Math.max(distance, Math.abs(corner.dot(right))/Math.tan(horizontal)+corner.dot(direction), Math.abs(corner.dot(up))/Math.tan(vertical)+corner.dot(direction));
     }
-    controls.target.set(0, 0, 0);
-    camera.position.copy(direction.multiplyScalar(distance*1.14));
+    controls.target.copy(focusCentre.sub(centre));
+    if(view==='logo')controls.target.add(brandedTemple.position);
+    controls.minDistance=view==='logo'?8:span*.15;
+    camera.position.copy(controls.target).add(direction.multiplyScalar(distance*1.14));
     for(const [name,button] of viewButtons)button.setAttribute('aria-pressed',String(name===view));
     controls.update();
     invalidate();
@@ -79,7 +87,7 @@ export function showSTL(buffer, element) {
   toolbar.className = 'frame-views';
   toolbar.setAttribute('role', 'group');
   toolbar.setAttribute('aria-label', 'Frame view');
-  for (const [label, view] of [['3D', '3d'], ['Front', 'front'], ['Side', 'side']]) {
+  for (const [label, view] of [['3D', '3d'], ['Front', 'front'], ['Side', 'side'], ...(brandedTemple?[['Logo','logo']]:[])]) {
     const button = document.createElement('button');
     button.type = 'button';
     button.textContent = label;
@@ -105,7 +113,7 @@ export function showSTL(buffer, element) {
       if (exploded && mesh.userData.kind === 'lens') mesh.position.z = 9;
       if (exploded && name.includes('temple')) mesh.position.x = name.startsWith('left') ? -15 : 15;
     });
-    invalidate();
+    setView(selectedView);
   });
   toolbar.appendChild(parts);
   element.appendChild(toolbar);

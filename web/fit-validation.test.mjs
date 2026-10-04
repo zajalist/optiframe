@@ -15,6 +15,11 @@ test('the actual 21-sample native export meets the web import gate',()=>{
 test('supported ARKit without TrueDepth retains an explicit non-depth capability',()=>{
   assert.deepEqual(validateFaceFit({...scan(),capability:{faceTrackingSupported:true,trueDepthAvailable:false}}),{left:31,right:32,trueDepthAvailable:false});
 });
+test('depth-labelled imports require confirmed real TrueDepth provenance',()=>{
+  const depth={...scan(),depthSource:'front-truedepth-absolute',userReviewed:true};
+  assert.equal(validateFaceFit(depth).left,31);
+  for(const change of [{depthSource:'rgb'},{userReviewed:false},{capability:{faceTrackingSupported:true,trueDepthAvailable:false}}])assert.throws(()=>validateFaceFit({...depth,...change}));
+});
 test('native import rejects fabricated or unsupported provenance',()=>{
   for(const change of [{source:'webxr'},{units:'cm'},{requiresProviderVerification:false},{capability:{faceTrackingSupported:false,trueDepthAvailable:true}},{capability:{faceTrackingSupported:true}}])
     assert.throws(()=>validateFaceFit({...scan(),...change}));

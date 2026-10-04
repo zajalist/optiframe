@@ -27,13 +27,14 @@ from preprocess import isolate_lens, restore_best_lens_mask
 from presence import lens_presence, absent
 from edge_refine import refine_lens_edge
 from runtime_guard import CaptureBodyLimit, RuntimeGuard, RuntimeState, production_mode
+from account_access import service_auth_configured
 
 runtime = RuntimeState(production=production_mode())
 
 
 @asynccontextmanager
 async def lifespan(app):
-    if runtime.production and os.environ.get("OPTIFRAME_ACCESS_TOKEN"):
+    if runtime.production and service_auth_configured():
         runtime.start_warmup(_warm_predictor)
     try:
         yield
@@ -82,7 +83,7 @@ async def healthz():
 @app.get("/readyz")
 async def readyz():
     ready = runtime.healthy and (not runtime.production or
-                                 (bool(os.environ.get("OPTIFRAME_ACCESS_TOKEN")) and runtime.ready))
+                                 (service_auth_configured() and runtime.ready))
     return JSONResponse({"status": "ready" if ready else "not_ready"},
                         status_code=200 if ready else 503,
                         headers={} if ready else {"Retry-After": "1"})

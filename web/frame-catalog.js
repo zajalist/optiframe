@@ -9,7 +9,7 @@ const styles = [
 export function mountFrameCatalog({body, viewer, status, panels, getStyle, setStyle, getRetention, setRetention, getAssembly, rebuild, onUpdate, leftPd, rightPd, visualTryOn}) {
   let alive = true, busy = false, building = false, closeTryOn = null;
   if (!document.querySelector('link[data-frame-catalog]')) {
-    const css=document.createElement('link');css.rel='stylesheet';css.href=new URL('./frame-catalog.css?v=31',import.meta.url).href;
+    const css=document.createElement('link');css.rel='stylesheet';css.href=new URL('./frame-catalog.css?v=43',import.meta.url).href;
     css.dataset.frameCatalog='';document.head.append(css);
   }
   const choices = document.createElement('div'); choices.className='frame-catalog';
@@ -69,7 +69,7 @@ export function mountFrameCatalog({body, viewer, status, panels, getStyle, setSt
     if(!assembly||viewer.dataset.stale!=='false'){visualTryOn?.();return;}
     busy=true;refresh();
     try {
-      const {openFaceTryOn}=await import('./face-tryon.js?v=41');
+      const {openFaceTryOn}=await import('./face-tryon.js?v=45');
       if(!alive)return;
       closeTryOn=await openFaceTryOn({assembly,leftPd:leftPd(),rightPd:rightPd()});
       if(!alive)closeTryOn?.();

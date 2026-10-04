@@ -419,7 +419,7 @@ def build_parts(left: list[list[float]], right: list[list[float]], settings: Set
 
     temples = [
         apply_temple_brand(_temple(-1, settings.temple_length, *hinge_centres[0], settings.frame_style), -1, *hinge_centres[0]),
-        apply_temple_brand(_temple(1, settings.temple_length, *hinge_centres[1], settings.frame_style), 1, *hinge_centres[1]),
+        _temple(1, settings.temple_length, *hinge_centres[1], settings.frame_style),
     ]
     parts = {"front": face, "left-retainer": retainers[0], "right-retainer": retainers[1],
              "left-temple": temples[0], "right-temple": temples[1]}
@@ -438,7 +438,7 @@ def build_parts(left: list[list[float]], right: list[list[float]], settings: Set
         "temple_style": settings.frame_style,
         "temple_profile": TEMPLE_PROFILES[settings.frame_style],
         "retention_style": settings.retention_style,
-        "temple_branding": "OptiFrame wordmark, engraved 0.4 mm into each outward temple face",
+        "temple_branding": "Original OptiFrame spectacles symbol and wordmark, 21.54 x 2.6 mm, engraved 0.4 mm into the wearer's left outer temple only; right temple plain. Silver preview is illustrative infill; STL is uncoloured. Fine logo features require slicer resolution and legibility checks.",
         "outline_cleanup_max_boundary_deviation_mm": OUTLINE_SIMPLIFICATION_MM,
         "hardware": "Eight M2 through fasteners for lens retainers; two M2 hinge screws and matching nuts. Check actual screw length and clearance.",
         "lens_edge_thickness_mm": {"left": edge_thicknesses[0], "right": edge_thicknesses[1]},
@@ -483,8 +483,11 @@ def preview(left: list[list[float]], right: list[list[float]], settings: Setting
     parts, lenses, _ = build_parts(left, right, settings)
 
     def mesh_data(name, mesh, kind):
-        return {"name": name, "kind": kind,
-                "vertices": np.round(mesh.vertices, 5).tolist(), "faces": mesh.faces.tolist()}
+        result = {"name": name, "kind": kind,
+                  "vertices": np.round(mesh.vertices, 5).tolist(), "faces": mesh.faces.tolist()}
+        if "branding" in mesh.metadata:
+            result["branding"] = mesh.metadata["branding"]
+        return result
 
     meshes = [mesh_data(name, mesh, "printed") for name, mesh in parts.items()]
     for side, lens, thickness in zip(("left", "right"), lenses, settings.edge_thicknesses()):

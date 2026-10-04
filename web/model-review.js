@@ -1,3 +1,4 @@
+import {apiFetch} from './api-fetch.js?v=43';
 const $ = id => document.getElementById(id);
 const access = new URLSearchParams(location.hash.slice(1)).get('access');
 $('home').hash = location.hash;
@@ -12,7 +13,7 @@ const cache = new Map();
 const payload = () => ({ ...fixture, settings: { ...fixture.settings, frame_style: style, retention_style: retention } });
 async function api(path, body, signal) {
   for (let attempt = 0; attempt < 3; attempt++) {
-    const response = await fetch(path, { method: 'POST', headers: {
+    const response = await apiFetch(path, { method: 'POST', headers: {
       'Content-Type': 'application/json', ...(access ? { 'X-OptiFrame-Key': access } : {}),
     }, body: JSON.stringify(body), signal });
     if (response.status !== 503 || attempt === 2) return response;
@@ -61,7 +62,7 @@ async function build() {
       if (request !== generation) return;
       cache.set(key, buffer);
     }
-    const { showSTL } = await import('./viewer.js?v=40');
+    const { showSTL } = await import('./viewer.js?v=42');
     if (request !== generation) return;
     showSTL(buffer, $('viewer'));
     ready = true;

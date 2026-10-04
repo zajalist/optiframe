@@ -13,6 +13,8 @@ from time import monotonic
 from starlette.formparsers import MultiPartException
 from starlette.responses import JSONResponse
 
+from account_access import AccountAccess
+
 
 def production_mode():
     return (os.getenv("OPTIFRAME_ENV", "").lower() == "production" or
@@ -107,10 +109,11 @@ def expensive_route(path):
 
 class RuntimeGuard:
     """Auth precedes body parsing; scarce work never forms an unbounded queue."""
-    def __init__(self, app, runtime, max_expensive=1):
+    def __init__(self, app, runtime, max_expensive=1, account_access=None):
         self.app = app
         self.runtime = runtime
         self._slots = threading.BoundedSemaphore(max_expensive)
+        self.account_access = account_access or AccountAccess()
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
@@ -144,12 +147,27 @@ class RuntimeGuard:
 
         required = os.getenv("OPTIFRAME_ACCESS_TOKEN", "")
         if api:
-            if self.runtime.production and not required:
-                return await reject("Service is not configured", 503, True)
-            if required:
-                supplied = dict(scope.get("headers", [])).get(b"x-optiframe-key", b"")
+            headers = scope.get("headers", [])
+            bearer = [v for k, v in headers if k.lower() == b"authorization"]
+            if bearer:
+                if len(bearer) != 1 or not bearer[0].lower().startswith(b"bearer "):
+                    return await reject("Sign in again", 401)
+                try:
+                    token = bearer[0][7:].decode("ascii")
+                except UnicodeDecodeError:
+                    return await reject("Sign in again", 401)
+                access = await self.account_access.verify(token)
+                if access.status != 200:
+                    return await reject(access.detail, access.status, access.status == 503)
+                scope["state"]["account_user_id"] = access.user_id
+            elif required:
+                supplied = dict(headers).get(b"x-optiframe-key", b"")
                 if not hmac.compare_digest(supplied, required.encode("utf-8")):
                     return await reject("Phone test key missing or incorrect", 401)
+            elif self.account_access.configured():
+                return await reject("Sign in to continue", 401)
+            elif self.runtime.production:
+                return await reject("Service is not configured", 503, True)
         admitted = False
         work_token = None
         if expensive_route(path):

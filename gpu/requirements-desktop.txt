@@ -4,6 +4,7 @@
 # Then: python -m pip install -r gpu/requirements-desktop.txt
 # This records direct versions; it is not a complete transitive lockfile.
 fastapi==0.135.2
+httpx==0.28.1
 uvicorn==0.42.0
 python-multipart==0.0.22
 numpy==2.4.1

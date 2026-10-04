@@ -11,9 +11,12 @@ function harness() {
     return fields.get(selector);
   };
   const context = {document:{querySelectorAll:selector=>selector==='.design-inputs input'?[designInput]:[]},location:{hash:''},URLSearchParams,FormData};
+  // These are post-approval interaction tests. The real async entry gate is
+  // exercised separately in app-access-order.test.mjs.
+  context.apiFetch=(...args)=>context.fetch(...args);
   vm.createContext(context);
   vm.runInContext(fs.readFileSync(new URL('./calibration.js',import.meta.url),'utf8').replace(/^export .*;$/m,''),context);
-  const app=fs.readFileSync(new URL('./app.js',import.meta.url),'utf8').replace(/^import .*;$/gm,'');
+  const app=fs.readFileSync(new URL('./app.js',import.meta.url),'utf8').replace(/^import .*;$/gm,'').replace(/^await requireAppAccess\(\);\r?$/m,'');
   vm.runInContext(app.split('const [leftPanel, rightPanel]')[0]+';globalThis.Panel=LensPanel',context);
   const panel=Object.create(context.Panel.prototype);
   Object.assign(panel,{el:{querySelector:field},photoVersion:1,points:[[0,0],[50,0],[50,30],[0,30]],homography:[1,0,0,0,1,0,0,0],mmPerPixel:null,opticalCentre:[25,15],topMark:[25,0],bitmap:null,size:{},topStatus:{textContent:''},photoLoading:false});

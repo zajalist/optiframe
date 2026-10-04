@@ -7,11 +7,11 @@
   <meta name="description" content="Capture two recovered lenses, review their outlines, and generate an experimental printable frame around their individual shapes.">
   <title>OptiFrame — A new frame for the lenses already here.</title>
   <link rel="stylesheet" href="/assets/fonts.css">
-  <link rel="stylesheet" href="/welcome.css?v=32">
+  <link rel="stylesheet" href="/welcome.css?v=44">
   <link rel="stylesheet" href="/tutorial.css?v=39">
   <link rel="stylesheet" href="/glass.css?v=31">
   <script src="/tutorial.js?v=39" defer></script>
-  <script src="/welcome.js?v=31" type="module"></script>
+  <script src="/welcome.js?v=44" type="module"></script>
 </head>
 <body class="home">
   <a class="skip-link" href="#main">Skip to content</a>
@@ -20,7 +20,7 @@
     <nav aria-label="Main navigation">
       <a class="nav-collection" href="#collection">Frames</a>
       <button class="nav-guide" type="button" data-tutorial="printing">Print guide</button>
-      <a class="nav-scan" href="/" data-preserve-access>Open scanner</a>
+      <a class="nav-scan" href="/account.html" data-preserve-access>Request access</a>
     </nav>
   </header>
 
@@ -29,13 +29,14 @@
       <div class="hero-copy">
         <h1 id="hero-title">A new frame.<br>For the lenses<br><span>already here.</span></h1>
         <div class="hero-actions">
-          <a class="button button-primary" href="/" data-preserve-access>Scan lenses</a>
-          <button class="text-action" type="button" data-tutorial="capture">Capture guide</button>
+          <a class="button button-primary" href="/index.html" data-preserve-access>Scan lenses</a>
+          <a class="text-action" href="/try-on.html?demo=1" data-preserve-access>Try on</a>
         </div>
       </div>
       <figure class="hero-object">
-        <img id="hero-image" alt="Generated concept illustration of an eyeglass frame made around two differently shaped lenses" fetchpriority="high" width="1536" height="1024" hidden>
+        <img id="hero-image" alt="Generated concept illustration of an eyeglass frame made around two differently shaped lenses" fetchpriority="high" width="1344" height="752" hidden>
       </figure>
+      <button id="hero-motion-toggle" class="hero-motion-toggle" type="button" aria-label="Pause animation" aria-pressed="false" hidden><svg viewBox="0 0 20 20" aria-hidden="true"><path class="motion-pause" d="M7 5v10M13 5v10"/><path class="motion-play" d="m7 5 8 5-8 5z"/></svg></button>
     </section>
     <section class="collection" id="collection" aria-labelledby="collection-title">
       <div class="collection-heading"><h2 id="collection-title">Find your frame.</h2></div>
@@ -44,7 +45,7 @@
         <button class="collection-style" type="button" data-style="bold" aria-pressed="false"><span class="collection-art"><img data-concept="1" alt="Bold asymmetric frame concept" width="360" height="197"></span><span class="collection-name">Bold</span><span class="collection-selected" aria-hidden="true"><svg viewBox="0 0 20 20"><path d="m5 10 3 3 7-7"/></svg></span></button>
         <button class="collection-style" type="button" data-style="brow" aria-pressed="false"><span class="collection-art"><img data-concept="2" alt="Brow asymmetric frame concept" width="360" height="197"></span><span class="collection-name">Brow</span><span class="collection-selected" aria-hidden="true"><svg viewBox="0 0 20 20"><path d="m5 10 3 3 7-7"/></svg></span></button>
       </div>
-      <div class="collection-bottom"><p id="collection-note">Style concepts. Your scans create the final frame.</p><a class="button collection-scan" id="collection-scan" href="/" data-preserve-access>Scan for Classic</a></div>
+      <div class="collection-bottom"><p id="collection-note">Style concepts. Your scans create the final frame.</p><a class="button collection-scan" id="collection-scan" href="/try-on.html?demo=1&amp;style=classic" data-preserve-access>Try on Classic</a></div>
     </section>
     <section class="process" aria-label="How it works">
       <div class="process-visuals">

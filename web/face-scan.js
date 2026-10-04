@@ -1,4 +1,4 @@
-import { createFaceEstimator } from './face-estimate.js?v=39';
+import { createFaceEstimator, assessFaceLighting } from './face-estimate.js?v=45';
 
 const VISION_ROOT = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.32';
 const MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
@@ -31,32 +31,35 @@ export function openFaceScan({ onConfirm, onManual }, runtime = {}) {
   const estimator = (runtime.createEstimator || createFaceEstimator)();
   if (!document.querySelector('link[data-face-scan]')) {
     const css = document.createElement('link'); css.rel = 'stylesheet';
-    css.href = '/face-scan.css?v=39'; css.dataset.faceScan = ''; document.head.appendChild(css);
+    css.href = '/face-scan.css?v=42'; css.dataset.faceScan = ''; document.head.appendChild(css);
   }
   const dialog = document.createElement('dialog');
   dialog.className = 'face-scan'; dialog.setAttribute('aria-labelledby', 'face-scan-title');
-  dialog.innerHTML = `<header class="face-scan-header"><h2 id="face-scan-title">Scan face</h2><button type="button" class="face-scan-close" aria-label="Close face scan">×</button></header>
-    <div class="face-scan-live"><video autoplay muted playsinline aria-label="Front camera"></video><canvas aria-hidden="true"></canvas><div class="face-scan-guide" aria-hidden="true"></div></div>
+  dialog.innerHTML = `<header class="face-scan-header"><h2 id="face-scan-title">Camera estimate</h2><button type="button" class="face-scan-close" aria-label="Close face scan">×</button></header>
+    <div class="face-scan-live"><video autoplay muted playsinline aria-label="Front camera"></video><canvas aria-hidden="true"></canvas></div>
     <section class="face-scan-review" hidden aria-label="Review pupil distances">
       <svg class="face-scan-diagram" viewBox="0 0 320 120" aria-hidden="true"><path d="M160 20v68m-92-28h184"/><circle data-eye="left" cx="85" cy="60" r="12"/><circle data-eye="right" cx="235" cy="60" r="12"/></svg>
       <h3>Review estimates</h3><div class="face-scan-fields"><label>Wearer left<div><input id="face-scan-left" type="number" min="20" max="40" step="0.1" inputmode="decimal" required><span>mm</span></div></label><label>Wearer right<div><input id="face-scan-right" type="number" min="20" max="40" step="0.1" inputmode="decimal" required><span>mm</span></div></label></div>
-      <p class="face-scan-total"></p><p class="face-scan-estimate-note">Camera estimate · assumes typical iris size; verify before printing.</p>
+      <p class="face-scan-total"></p><p class="face-scan-estimate-note">Uses typical iris size. Physical accuracy is unknown.</p>
     </section>
     <footer class="face-scan-footer"><p class="face-scan-status" role="status">Opening camera…</p><progress max="1" value="0" aria-label="Stable scan progress" hidden></progress><div class="face-scan-actions"><button type="button" class="face-scan-retry" hidden>Retry</button><button type="button" class="face-scan-confirm" hidden>Confirm estimates</button><button type="button" class="face-scan-manual">Enter manually</button></div><p class="face-scan-private">Camera stays on this device</p></footer>`;
   document.body.appendChild(dialog); dialog.showModal();
   const find = selector => dialog.querySelector(selector);
   const video = find('video'), canvas = find('canvas'), context = canvas.getContext('2d');
+  const lightCanvas=document.createElement('canvas');lightCanvas.width=64;lightCanvas.height=64;
+  const lightContext=lightCanvas.getContext?.('2d',{willReadFrequently:true});
   const status = find('.face-scan-status'), review = find('.face-scan-review');
   const retry = find('.face-scan-retry'), confirm = find('.face-scan-confirm'), manual = find('.face-scan-manual');
   const leftInput = find('#face-scan-left'), rightInput = find('#face-scan-right'), progress = find('progress');
   let closed = false, phase = 'loading', generation = 0, controller, stream, model, animation = 0;
   const say = text => { if (!closed) status.textContent = text; };
+  function stopStream(value){try{for(const track of value?.getTracks() || []){try{track.stop();}catch{}}}catch{}}
   function release() {
     generation++; controller?.abort(); controller = null;
     cancelAnimationFrame(animation); animation = 0;
-    stream?.getTracks().forEach(track => track.stop()); stream = null;
-    video.pause(); video.srcObject = null;
-    model?.close(); model = null;
+    stopStream(stream); stream = null;
+    try{video.pause();}catch{} video.srcObject = null;
+    try{model?.close();}catch{} model = null;
   }
   function close() {
     if (closed) return;
@@ -102,15 +105,33 @@ export function openFaceScan({ onConfirm, onManual }, runtime = {}) {
   }
   function draw(landmarks) {
     const width = canvas.clientWidth, height = canvas.clientHeight;
-    canvas.width = width; canvas.height = height;
+    const pixelRatio=Math.min(window.devicePixelRatio||1,2);
+    if(canvas.width!==Math.round(width*pixelRatio)||canvas.height!==Math.round(height*pixelRatio)){
+      canvas.width=Math.round(width*pixelRatio);canvas.height=Math.round(height*pixelRatio);
+    }
+    context?.setTransform(pixelRatio,0,0,pixelRatio,0,0);context?.clearRect(0,0,width,height);
     if (!context || !landmarks?.[473] || !landmarks?.[468] || !video.videoWidth || !video.videoHeight) return;
     const scale = Math.max(width / video.videoWidth, height / video.videoHeight);
     const offsetX = (width - video.videoWidth * scale) / 2, offsetY = (height - video.videoHeight * scale) / 2;
-    context.strokeStyle = '#fff'; context.lineWidth = 1.5;
+    // Two small sub-eye ticks show tracking without covering the iris boundary.
+    context.strokeStyle = '#ffffffa6'; context.lineWidth = 1;
     [468, 473].forEach(index => {
       const p = landmarks[index];
-      context.beginPath(); context.arc(p.x * video.videoWidth * scale + offsetX, p.y * video.videoHeight * scale + offsetY, 10, 0, Math.PI * 2); context.stroke();
+      const x=p.x * video.videoWidth * scale + offsetX,y=p.y * video.videoHeight * scale + offsetY+14;
+      context.beginPath(); context.moveTo(x-3,y);context.lineTo(x+3,y);context.stroke();
     });
+  }
+  function faceLighting(landmarks){
+    if(!lightContext || !landmarks?.[263] || !landmarks?.[152] || !video.videoWidth) return undefined;
+    const left=Math.min(landmarks[33].x,landmarks[263].x),right=Math.max(landmarks[33].x,landmarks[263].x),margin=(right-left)*.3;
+    const x=Math.max(0,left-margin)*video.videoWidth,y=Math.max(0,landmarks[10].y)*video.videoHeight;
+    const width=Math.min(video.videoWidth-x,(right-left+2*margin)*video.videoWidth);
+    const height=Math.min(video.videoHeight-y,(landmarks[152].y-landmarks[10].y)*video.videoHeight);
+    if(width<=0 || height<=0) return undefined;
+    try{
+      lightContext.drawImage(video,x,y,width,height,0,0,64,64);
+      return assessFaceLighting(lightContext.getImageData(0,0,64,64).data);
+    }catch{return undefined;}
   }
   async function start() {
     release(); estimator.reset();
@@ -121,8 +142,8 @@ export function openFaceScan({ onConfirm, onManual }, runtime = {}) {
     try {
       const camera = runtime.getUserMedia || (constraints => navigator.mediaDevices.getUserMedia(constraints));
       if (!runtime.getUserMedia && !navigator.mediaDevices?.getUserMedia) throw new Error('Camera unavailable. Enter measurements manually.');
-      const opened = await bounded(camera({ audio: false, video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 24, max: 30 } } }), 20000, 'Camera permission timed out. Try again.', value => value.getTracks().forEach(track => track.stop()));
-      if (!current()) { opened.getTracks().forEach(track => track.stop()); return; }
+      const opened = await bounded(camera({ audio: false, video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 24, max: 30 } } }), 20000, 'Camera permission timed out. Try again.', stopStream);
+      if (!current()) { stopStream(opened); return; }
       stream = opened; video.srcObject = stream;
       await bounded(video.play(), 8000, 'Camera preview unavailable. Try again.');
       if (!current()) return;
@@ -141,16 +162,17 @@ export function openFaceScan({ onConfirm, onManual }, runtime = {}) {
         loaded = await bounded(vision.FaceLandmarker.createFromOptions(files, { ...options, baseOptions: { ...options.baseOptions, delegate: 'CPU' } }), 20000, 'Face tracking unavailable. Try again.', value => value.close());
       }
       if (!current()) { loaded.close(); return; }
-      model = loaded; phase = 'live'; dialog.dataset.phase = phase; say('Look straight at the camera');
-      let lastFrame = -1, lastDetection = -Infinity;
+      model = loaded; phase = 'live'; dialog.dataset.phase = phase; say('Phone at eye level. Look at the camera');
+      let lastFrame = -1, lastDetection = -Infinity, lastLightAt=-Infinity, lighting;
       const loop = now => {
         if (!current() || !model) return;
         if (video.readyState >= 2 && video.currentTime !== lastFrame && now - lastDetection >= 90) {
           lastFrame = video.currentTime; lastDetection = now;
           try {
             const landmarks = model.detectForVideo(video, now).faceLandmarks?.[0];
-            draw(landmarks);
-            const result = estimator.update(landmarks, { width: video.videoWidth, height: video.videoHeight, now, frameId: video.currentTime });
+            if(now-lastLightAt>=400){lighting=faceLighting(landmarks);lastLightAt=now;}
+            const result = estimator.update(landmarks, { width: video.videoWidth, height: video.videoHeight, now, frameId: video.currentTime, lighting });
+            draw(result.state==='guidance'?null:landmarks);
             say(result.message); progress.hidden = result.state !== 'collecting'; progress.value = result.progress || 0;
             if (result.state === 'ready' && result.result) { captured(result.result); return; }
           } catch { fail('Tracking paused. Try again.'); return; }

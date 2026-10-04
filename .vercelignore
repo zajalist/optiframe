@@ -1,0 +1,12 @@
+*
+!web
+!web/**
+!deploy
+!deploy/build-web.mjs
+!vercel.json
+!api
+!api/**
+api/**/*.test.*
+web/*.test.*
+web/qa-*
+web/app-config.json

@@ -1,5 +1,6 @@
 import heroSource from './assets/hero-source.js';
 import {catalogConcepts} from './assets/catalog-concepts.js?v=29';
+import {mountHeroMotion} from './hero-motion.js?v=44';
 
 const collectionChoices=[...document.querySelectorAll('.collection-style')];
 let chosenStyle='classic';
@@ -7,7 +8,9 @@ try{const saved=sessionStorage.getItem('optiframe-frame-style');if(['classic','b
 function chooseStyle(style){
   chosenStyle=style;
   for(const button of collectionChoices)button.setAttribute('aria-pressed',String(button.dataset.style===style));
-  document.getElementById('collection-scan').textContent=`Scan for ${style[0].toUpperCase()+style.slice(1)}`;
+  const action=document.getElementById('collection-scan');
+  action.textContent=`Try on ${style[0].toUpperCase()+style.slice(1)}`;
+  action.href=`/try-on.html?demo=1&style=${style}${action.hash||''}`;
   try{sessionStorage.setItem('optiframe-frame-style',style);}catch{}
 }
 for(const button of collectionChoices){
@@ -17,13 +20,20 @@ for(const button of collectionChoices){
 chooseStyle(chosenStyle);
 
 const heroImage = document.getElementById('hero-image');
-// One short studio reveal; never keep a mobile GPU busy with a decorative loop.
+// The poster remains available while optional generated motion loads.
 if (navigator.connection?.saveData || document.hidden) document.body.classList.add('motion-still');
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) document.body.classList.add('motion-still');
 });
-heroImage.addEventListener('load', () => { heroImage.hidden = false; }, { once: true });
+heroImage.addEventListener('load', async () => {
+  // Reveal decoded pixels once; never animate a blank image box or replay when
+  // returning from the scanner. Reduced-motion/data-saving modes remain still.
+  try { await heroImage.decode(); } catch { /* Loaded image can still be shown. */ }
+  heroImage.hidden = false;
+  heroImage.closest('.hero-object').classList.add('is-ready');
+}, { once: true });
 heroImage.src = heroSource;
+mountHeroMotion({container:heroImage.closest('.hero-object'),button:document.getElementById('hero-motion-toggle')});
 
 /* Keep a shared session's access fragment when moving into the capture app. */
 (() => {

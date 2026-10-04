@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import json
 import logging
 from logging.handlers import RotatingFileHandler
 import os
@@ -15,6 +17,7 @@ import threading
 import time
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+from urllib.parse import urlsplit
 
 HOST, PORT = "127.0.0.1", 8766
 
@@ -187,9 +190,49 @@ def port_occupied() -> bool:
         return sock.connect_ex((HOST, PORT)) == 0
 
 
-def child_environment() -> dict[str, str]:
+def public_account_configuration(value) -> dict[str, str]:
+    """Strict allowlist: this file cannot replace private keys or process options."""
+    names = {"SUPABASE_URL", "SUPABASE_PUBLISHABLE_KEY"}
+    if not isinstance(value, dict) or set(value) != names:
+        raise ValueError("Invalid public service configuration")
+    url, key = value["SUPABASE_URL"], value["SUPABASE_PUBLISHABLE_KEY"]
+    if not isinstance(url, str) or not isinstance(key, str) or not 20 <= len(key) <= 8192:
+        raise ValueError("Invalid public service configuration")
+    parsed = urlsplit(url)
+    if (parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password
+            or parsed.path not in ("", "/") or parsed.query or parsed.fragment):
+        raise ValueError("Invalid public service configuration")
+    public = key.startswith("sb_publishable_") and key.isascii() and not any(c.isspace() for c in key)
+    if not public:
+        try:
+            payload = key.split(".")[1]
+            claims = json.loads(base64.urlsafe_b64decode(payload+"="*(-len(payload) % 4)))
+            public = claims.get("role") == "anon"
+        except (ValueError, IndexError, AttributeError):
+            public = False
+    if not public:
+        raise ValueError("A public Supabase key is required")
+    return {"SUPABASE_URL": url.rstrip("/"), "SUPABASE_PUBLISHABLE_KEY": key}
+
+
+def child_environment(runtime: Path | None = None, logger=None) -> dict[str, str]:
     env = os.environ.copy()
     env.update(OPTIFRAME_ENV="production", PYTHONUNBUFFERED="1")
+    if runtime is not None:
+        path = runtime / "public-services.json"
+        if path.exists():
+            # Re-read for every worker generation, not just supervisor startup.
+            # Invalid files disable account access; the existing private test key
+            # stays intact. Never log the file or provider configuration values.
+            env.pop("SUPABASE_URL", None)
+            env.pop("SUPABASE_PUBLISHABLE_KEY", None)
+            try:
+                if path.stat().st_size > 16384:
+                    raise ValueError("Public service configuration too large")
+                env.update(public_account_configuration(json.loads(path.read_text(encoding="utf-8"))))
+            except (OSError, ValueError, UnicodeError):
+                if logger:
+                    logger.warning("Public account configuration invalid; account access disabled")
     return env
 
 
@@ -260,7 +303,7 @@ def run(repo: Path, runtime: Path) -> int:
                 child_job = ChildJob()
                 flags = ((subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW)
                          if os.name == "nt" else 0)
-                process = subprocess.Popen(backend_command(repo), cwd=str(repo), env=child_environment(),
+                process = subprocess.Popen(backend_command(repo), cwd=str(repo), env=child_environment(runtime, logger),
                                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                            text=True, encoding="utf-8", errors="replace",
                                            creationflags=flags, start_new_session=os.name != "nt")

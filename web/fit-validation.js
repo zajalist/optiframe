@@ -19,6 +19,8 @@ export function validateFaceFit(data) {
   if (data.capability?.faceTrackingSupported !== true || typeof data.capability?.trueDepthAvailable !== 'boolean'
       || data.reference !== 'ARFaceAnchor local x=0; eye-transform origins, not clinical pupil centres')
     fail('This file does not contain a supported ARKit face estimate.');
+  if(data.depthSource!==undefined&&(data.depthSource!=='front-truedepth-absolute'||data.capability.trueDepthAvailable!==true||data.userReviewed!==true))
+    fail('Confirm a TrueDepth face scan in the iPhone app before importing it.');
   return { left, right, trueDepthAvailable: data.capability.trueDepthAvailable };
 }
 

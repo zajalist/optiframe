@@ -315,7 +315,7 @@ if (typeof document !== "undefined") {
   })();
 }
 if (typeof document !== 'undefined') {
-  for (const link of document.querySelectorAll('a[href="/"]')) {
+  for (const link of document.querySelectorAll('a[href="/index.html"]')) {
     if (location.hash) link.hash = location.hash;
   }
 }

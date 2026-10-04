@@ -1,10 +1,8 @@
+import {apiFetch,requireAppAccess} from './api-fetch.js?v=43';
+await requireAppAccess();
 const panels = [...document.querySelectorAll('.lens-panel')];
 const accessKey = new URLSearchParams(location.hash.slice(1)).get('access');
 if (accessKey) document.querySelectorAll('a[href="/android-ar.html"]').forEach(link => { link.hash = location.hash; });
-const apiFetch = (url, options = {}) => fetch(url, {
-  ...options,
-  headers: { ...options.headers, ...(accessKey ? { 'X-OptiFrame-Key': accessKey } : {}) },
-});
 const responseData = response => response.headers.get('content-type')?.includes('json')
   ? response.json() : response.text().then(detail => ({ detail }));
 
@@ -790,7 +788,7 @@ async function makeFrame(preview, experimental = false) {
     const blob = await response.blob();
     if (!isCurrentFrameRequest(request, snapshot)) return;
     if (preview) {
-      const { showSTL } = await import('./viewer.js?v=40');
+      const { showSTL } = await import('./viewer.js?v=42');
       if (!isCurrentFrameRequest(request, snapshot)) return;
       const buffer = await blob.arrayBuffer();
       if (!isCurrentFrameRequest(request, snapshot)) return;

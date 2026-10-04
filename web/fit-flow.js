@@ -1,9 +1,9 @@
-import { leftPanel, rightPanel, capturesReady, makeFrame, project, getFrameStyle, setFrameStyle, getRetentionStyle, setRetentionStyle, getFrameAssembly, applyFaceMeasurements, useManualMeasurements, getMeasurementSource } from './app.js?v=40';
-import { openFaceScan } from './face-scan.js?v=41';
+import { leftPanel, rightPanel, capturesReady, makeFrame, project, getFrameStyle, setFrameStyle, getRetentionStyle, setRetentionStyle, getFrameAssembly, applyFaceMeasurements, useManualMeasurements, getMeasurementSource } from './app.js?v=43';
+import { openFaceScan } from './face-scan.js?v=45';
 import { loadConfirmedFace, saveConfirmedFace } from './face-confirmation.js?v=39';
 import { validateFaceFit, lensReady, marksReady } from './fit-validation.js';
 import { mountPupilMeasurements } from './pupil-measurements.js?v=27';
-import { mountFrameCatalog } from './frame-catalog.js?v=41';
+import { mountFrameCatalog } from './frame-catalog.js?v=45';
 import { mountThicknessMeasurements } from './thickness-measurements.js?v=35';
 
 if (new URLSearchParams(location.search).get('advanced') !== '1') void startFitFlow();
@@ -22,7 +22,7 @@ async function startFitFlow() {
   const fields = id => document.getElementById(id);
   const panels = [left, right];
   const viewer = fields('viewer'), designStatus = fields('design-status');
-  let step = 0, method = 'camera', face = loadConfirmedFace(), faceReviewed = Boolean(face), loading = true, exporting = false;
+  let step = 0, face = loadConfirmedFace(), method = face?.source==='browser-iris-estimate'?'camera':'native', faceReviewed = Boolean(face), loading = true, exporting = false;
   if(new URLSearchParams(location.search).get('measure')==='manual'){method='manual';face=null;faceReviewed=false;useManualMeasurements();}
   let markMode = 'optical';
   let cleanupStep = () => {};
@@ -44,7 +44,7 @@ async function startFitFlow() {
       sessionStorage.setItem('optiframe-visual-outlines',JSON.stringify(outlines));
       // Keep the fitting flow recoverable when returning from visual try-on.
       if(captureBackup)sessionStorage.setItem('optiframe-captures',JSON.stringify(captureBackup));
-      location.href='/try-on.html?v=41'+location.hash;
+      location.href='/try-on.html?v=42'+location.hash;
     } catch(error){message.textContent=error.message;}
   }
   function inputs(ids) {
@@ -119,9 +119,9 @@ async function startFitFlow() {
     body.append(pair);
     if (!panels.every(lensReady)) {
       note(loading ? 'Opening your captures…' : 'Scan both lenses to begin.');
-      const a = document.createElement('a'); a.className = 'fit-link'; a.href = '/'+location.hash; a.textContent = 'Scan lenses'; body.append(a);
+      const a = document.createElement('a'); a.className = 'fit-link'; a.href = '/index.html'+location.hash; a.textContent = 'Scan lenses'; body.append(a);
     } else {
-      const a = document.createElement('a'); a.className = 'fit-link'; a.href = '/'+location.hash; a.textContent = 'Rescan'; body.append(a);
+      const a = document.createElement('a'); a.className = 'fit-link'; a.href = '/index.html'+location.hash; a.textContent = 'Rescan'; body.append(a);
       body.append(button('Just try on',visualTryOn,'fit-link'));
     }
   }
@@ -129,19 +129,19 @@ async function startFitFlow() {
     body.append(button('Just try on',visualTryOn,'catalog-tryon'));
     const group = document.createElement('fieldset'); group.className='fit-methods';
     const legend = document.createElement('legend'); legend.textContent='Measurement source'; group.append(legend);
-    for(const [value,label] of [['camera','Camera scan'],['manual','Enter manually'],['native','iPhone app scan']]) {
+    for(const [value,label] of [['native','iPhone depth scan'],['manual','Enter manually'],['camera','Camera estimate']]) {
       const l = document.createElement('label'), radio=document.createElement('input'); radio.type='radio'; radio.name='fit-method';radio.value=value;radio.checked=method===value;
       radio.addEventListener('change',()=>{method=value;face=null;faceReviewed=false;if(value==='manual')useManualMeasurements();render();}); l.append(radio,document.createTextNode(label)); group.append(l);
     }
     body.append(group);
     if(method==='camera') {
-      note('Scan, review, then confirm your pupil estimates.');
+      note('Approximate iris-based estimate. No depth or calibrated scale.');
       body.append(button(faceReviewed?'Scan again':'Scan face',()=>{
         cleanupStep=openFaceScan({onConfirm:value=>{try{saveConfirmedFace(value);face=value;faceReviewed=true;applyFaceMeasurements(value);render();}catch(error){message.textContent=error.message;}},onManual:()=>{method='manual';face=null;faceReviewed=false;useManualMeasurements();render();}});
       },'catalog-tryon'));
       if(face&&faceReviewed)note(`Left ${face.left.toFixed(1)} · Right ${face.right.toFixed(1)} mm · Confirmed estimate`);
     } else if(method==='native') {
-      note('Import a reviewed ARKit estimate from the OptiFrame iPhone app.');
+      note('Scan in the OptiFrame iPhone app, then import your confirmed result.');
       const label=document.createElement('label');label.className='fit-file';label.textContent='Face scan JSON';
       const file=document.createElement('input'); file.type='file';file.accept='.json,application/json'; label.append(file);body.append(label);
       file.addEventListener('change',async()=>{
@@ -150,7 +150,7 @@ async function startFitFlow() {
         catch(error){message.textContent=error.message;update();}
       });
       if(face) {
-        note(face.trueDepthAvailable ? 'ARKit estimate · TrueDepth available' : 'ARKit estimate · No TrueDepth');
+        note(face.trueDepthAvailable === true ? 'ARKit estimate · TrueDepth available' : face.trueDepthAvailable === false ? 'ARKit estimate · No TrueDepth' : 'Confirmed ARKit estimate');
         note(`Left ${face.left.toFixed(1)} mm · Right ${face.right.toFixed(1)} mm`);
         const label=document.createElement('label'); label.className='fit-check'; const checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.checked=faceReviewed;
         checkbox.addEventListener('change',()=>{faceReviewed=checkbox.checked;update();}); label.append(checkbox,document.createTextNode('I will verify these estimates with the lens provider.'));body.append(label);
@@ -205,12 +205,15 @@ async function startFitFlow() {
     });body.append(a);}
     update();if(focus)title.focus({preventScroll:true});
   }
-  back.addEventListener('click',()=>{if(step===0){location.href='/'+location.hash;return;}if((step===4||step===5)&&markMode==='top'){markMode='optical';render(true);return;}step--;markMode='optical';render(true);});
+  back.addEventListener('click',()=>{if(step===0){location.href='/index.html'+location.hash;return;}if((step===4||step===5)&&markMode==='top'){markMode='optical';render(true);return;}step--;markMode='optical';render(true);});
   next.addEventListener('click',async()=>{
     update();if(next.disabled)return;
     if(step===4||step===5){const p=step===4?left:right;p.markReview||={};if(markMode==='optical'){p.markReview.optical=true;markMode='top';if(p.illustrativeAlignment)p.illustrativeAlignment='marking';render(true);return;}p.markReview.top=true;if(p.markReview.optical&&p.markReview.top)p.illustrativeAlignment=false;}
     if(step===8){exporting=true;update();await makeFrame(false,true);exporting=false;update();return;}
-    if(step===1&&method==='native'&&faceReviewed){const value={...face,source:'arkit-eye-transform-estimate'};saveConfirmedFace(value);applyFaceMeasurements(value);}
+    if(step===1&&method==='native'&&faceReviewed){
+      try{const value={...face,source:'arkit-eye-transform-estimate',confirmed:true};saveConfirmedFace(value);applyFaceMeasurements(value);}
+      catch(error){message.textContent=error.message||'Could not save these measurements.';return;}
+    }
     step++;markMode='optical';render(true);
   });
   shell.addEventListener('input',update);shell.addEventListener('change',update);

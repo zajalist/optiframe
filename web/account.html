@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#191a1c"><meta name="referrer" content="strict-origin-when-cross-origin">
+  <title>OptiFrame — Request access</title>
+  <link rel="stylesheet" href="/assets/fonts.css"><link rel="stylesheet" href="/account.css?v=42">
+</head>
+<body>
+  <header><a class="brand" href="/welcome.html" aria-label="OptiFrame home"><img src="/assets/optiframe-logo.svg" width="112" height="56" alt="OptiFrame"></a><a class="quiet" href="/try-on.html?demo=1">Try on frames</a></header>
+  <main>
+    <section class="intro"><h1 id="title">Your next frame.<br><span>Your early access.</span></h1><p id="intro">Request access to OptiFrame for iPhone and Android.</p></section>
+    <section class="account" aria-label="Your OptiFrame account">
+      <p id="notice" role="status" aria-live="polite">Connecting…</p>
+      <div id="auth" hidden>
+        <div class="tabs" role="group" aria-label="Account action"><button id="create-tab" type="button" aria-pressed="true">Create account</button><button id="signin-tab" type="button" aria-pressed="false">Sign in</button></div>
+        <button id="google" class="glass wide" type="button" hidden>Continue with Google</button>
+        <form id="login-form">
+          <label for="email">Email</label><input id="email" type="email" autocomplete="email" maxlength="254" required>
+          <div class="label-row"><label for="password">Password</label><button id="show-password" class="inline" type="button" aria-pressed="false">Show</button></div>
+          <input id="password" type="password" autocomplete="new-password" minlength="8" maxlength="128" aria-describedby="password-hint" required>
+          <p class="hint" id="password-hint">At least 8 characters.</p>
+          <button class="primary wide" id="submit-auth" type="submit">Create account</button>
+          <button class="inline wide" id="forgot" type="button" hidden>Forgot password?</button>
+        </form>
+        <p class="fine">Verify your email, then request access. Applications are reviewed individually.</p>
+      </div>
+      <form id="recovery" hidden><h2>New password</h2><label for="new-password">Password</label><input id="new-password" type="password" autocomplete="new-password" minlength="8" maxlength="128" required><button class="primary wide" type="submit">Save password</button></form>
+      <div id="member" hidden>
+        <div class="member-line"><p id="member-email"></p><button id="signout" class="inline" type="button">Sign out</button></div>
+        <div id="confirmation" hidden><h2 id="access-title">Request received.</h2><p id="saved-platform"></p><p class="hint" id="access-description">Your application is awaiting approval.</p><div class="actions"><a class="primary" id="open-app" href="/index.html" hidden>Open scanner</a><a class="glass" href="/try-on.html?demo=1">Try on demo frames</a><button class="glass" id="edit-application" type="button">Edit application</button></div></div>
+        <form id="application">
+          <h2>Which phone?</h2><fieldset class="platforms"><legend class="sr-only">App platform</legend><label><input type="radio" name="platform" value="iphone" checked><span>iPhone</span></label><label><input type="radio" name="platform" value="android"><span>Android</span></label><label><input type="radio" name="platform" value="both"><span>Both</span></label></fieldset>
+          <details><summary>A little about you <span>Optional</span></summary><label for="role">I’m joining as</label><select id="role"><option value="">Choose a role</option><option value="tester">Tester</option><option value="provider">Eye-care provider</option><option value="designer">Designer</option></select><label for="note">Anything you’d like to try?</label><textarea id="note" rows="3" maxlength="500"></textarea></details>
+          <label class="consent"><input id="consent" type="checkbox" required><span>Email me about OptiFrame app access and testing.</span></label>
+          <button class="primary wide" id="save-application" type="submit">Request access</button>
+          <p class="fine">Your email and application are stored securely with Supabase. Joining does not upload face scans or lens photos.</p>
+        </form>
+      </div>
+      <section id="admin" hidden aria-label="Access requests"><div class="admin-heading"><h2>Access requests</h2><button id="refresh-requests" class="inline" type="button">Refresh</button></div><div id="requests"></div><button id="more-requests" class="glass wide" type="button" hidden>More requests</button></section>
+      <button id="retry" class="glass wide" type="button" hidden>Retry connection</button>
+      <noscript><p>Enable JavaScript to sign in. You can still <a href="/welcome.html">browse OptiFrame</a>.</p></noscript>
+    </section>
+  </main>
+  <script type="module" src="/account.js?v=42"></script>
+</body></html>

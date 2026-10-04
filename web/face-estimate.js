@@ -13,17 +13,34 @@ const subtract = (a,b) => ({x:a.x-b.x,y:a.y-b.y});
 const midpoint = (a,b) => ({x:(a.x+b.x)/2,y:(a.y+b.y)/2});
 const reject = message => ({valid:false,message});
 
+// Only reject near-black or almost fully clipped face crops. A dark complexion
+// or ordinary contrast must not be mistaken for an unusable exposure.
+export function assessFaceLighting(rgba) {
+  if(!rgba || rgba.length<64 || rgba.length%4) return {usable:true};
+  let sum=0,dark=0,clipped=0,count=0;
+  for(let index=0;index<rgba.length;index+=4){
+    const luminance=.2126*rgba[index]+.7152*rgba[index+1]+.0722*rgba[index+2];
+    sum+=luminance;dark+=luminance<16;clipped+=luminance>248;count++;
+  }
+  if(sum/count<20 && dark/count>.9) return {usable:false,message:'Add light in front of your face'};
+  if(sum/count>245 && clipped/count>.92) return {usable:false,message:'Move out of the glare'};
+  return {usable:true};
+}
+
 /** Original unmirrored MediaPipe normalized coordinates; x/y use actual frame
  * dimensions, while MediaPipe z shares the x scale. No camera intrinsics assumed.
  * Gates are conservative geometry heuristics, not a clinical gaze/pose model. */
-export function estimateFaceFrame(landmarks,{width,height}={}) {
+export function estimateFaceFrame(landmarks,{width,height,lighting}={}) {
   if(!Number.isFinite(width)||!Number.isFinite(height)||width<=0||height<=0||!Array.isArray(landmarks)||landmarks.length<478)
     return reject('Centre your face');
   const required=[1,10,33,133,145,152,159,168,263,362,374,386,468,469,470,471,472,473,474,475,476,477];
   if(required.some(i=>!landmarks[i]||!['x','y','z'].every(k=>Number.isFinite(landmarks[i][k]))))
     return reject('Keep both eyes visible');
-  if(required.some(i=>landmarks[i].x<.025||landmarks[i].x>.975||landmarks[i].y<.025||landmarks[i].y>.975))
-    return reject('Centre your face');
+  if(lighting?.usable===false) return reject(lighting.message);
+  if(required.some(i=>landmarks[i].x<.025||landmarks[i].x>.975||landmarks[i].y<.025||landmarks[i].y>.975)) {
+    const xs=required.map(i=>landmarks[i].x),ys=required.map(i=>landmarks[i].y);
+    return reject(Math.max(...xs)-Math.min(...xs)>.88 || Math.max(...ys)-Math.min(...ys)>.88 ? 'Move back until your face fits' : 'Centre your face');
+  }
   const p=i=>({x:landmarks[i].x*width,y:landmarks[i].y*height,z:landmarks[i].z*width});
   const right=p(468),left=p(473),baseline=subtract(left,right),ipd=distance(left,right);
   if(ipd<40) return reject('Move closer');
@@ -35,11 +52,11 @@ export function estimateFaceFrame(landmarks,{width,height}={}) {
   const vertical={x:-horizontal.y,y:horizontal.x};
   const eyeMid=midpoint(left,right),bridge=p(168),tip=p(1);
   if(Math.abs(left.z-right.z)/ipd>.10||Math.abs(dot(subtract(tip,bridge),horizontal))/ipd>.10)
-    return reject('Face the camera');
+    return reject('Face the camera straight on');
   const faceHeight=dot(subtract(p(152),p(10)),vertical);
   const noseDrop=dot(subtract(tip,eyeMid),vertical)/ipd;
   if(faceHeight<ipd||Math.abs(p(152).z-p(10).z)/faceHeight>.45||noseDrop<.10||noseDrop>.65)
-    return reject('Face the camera');
+    return reject('Hold the phone at eye level');
   const eyes=[{centre:right,ring:[469,470,471,472],corners:[33,133],lids:[159,145]},
     {centre:left,ring:[474,475,476,477],corners:[362,263],lids:[386,374]}];
   const diameters=[];
@@ -48,7 +65,9 @@ export function estimateFaceFrame(landmarks,{width,height}={}) {
     // Opposite iris points follow eye orientation, so mild head roll is harmless.
     const diameter=distance(ring[0],ring[2]),verticalDiameter=distance(ring[1],ring[3]);
     const eyeWidth=distance(...corners),lidGap=Math.abs(dot(subtract(lids[1],lids[0]),vertical));
-    if(diameter<12) return reject('Move closer');
+    // A one-pixel diameter error at the old 12px floor implies ~8% scale error.
+    // More source pixels help sampling, but cannot remove the nominal-iris bias.
+    if(diameter<20) return reject('Move closer');
     if(lidGap/eyeWidth<.17) return reject('Open both eyes');
     if(eyeWidth<diameter*1.5||diameter/eyeWidth<.22||diameter/eyeWidth>.60||verticalDiameter/diameter<.70||verticalDiameter/diameter>1.35)
       return reject('Look at the camera');
@@ -61,7 +80,7 @@ export function estimateFaceFrame(landmarks,{width,height}={}) {
       return reject('Look at the camera');
     diameters.push(diameter);
   }
-  if(Math.max(...diameters)/Math.min(...diameters)>1.12) return reject('Face the camera');
+  if(Math.max(...diameters)/Math.min(...diameters)>1.12) return reject('Face the camera straight on');
   const scale=IRIS_MM/median(diameters);
   const rightMm=dot(subtract(bridge,right),horizontal)*scale;
   const leftMm=dot(subtract(left,bridge),horizontal)*scale;
@@ -69,7 +88,8 @@ export function estimateFaceFrame(landmarks,{width,height}={}) {
   // reference. Large apparent asymmetry is rejected rather than equalized.
   if(leftMm<22||leftMm>42||rightMm<22||rightMm>42||Math.abs(leftMm-rightMm)>7||leftMm+rightMm<45||leftMm+rightMm>80)
     return reject('Face the camera');
-  return {valid:true,left:leftMm,right:rightMm,irisDiameterPx:median(diameters)};
+  return {valid:true,left:leftMm,right:rightMm,irisDiameterPx:median(diameters),
+    rollRadians:roll,eyeMidPx:eyeMid,eyeSpanPx:ipd};
 }
 
 /** Collect a continuous stable window. Results are editable estimates only.
@@ -80,20 +100,27 @@ export function createFaceEstimator({minDurationMs=2000,minSamples=20,maxGapMs=4
   let samples=[],lastNow=null,lastFrameId=null,complete=null;
   const reset=()=>{samples=[];lastNow=null;lastFrameId=null;complete=null;};
   const guidance=message=>({state:'guidance',message,progress:0});
-  return {reset,update(landmarks,{width,height,now,frameId}={}) {
+  return {reset,update(landmarks,{width,height,now,frameId,lighting}={}) {
     if(!Number.isFinite(now)){reset();return guidance('Hold still');}
     if(lastNow!==null&&(now<=lastNow||now-lastNow>maxGapMs)){reset();}
-    const estimate=estimateFaceFrame(landmarks,{width,height});
+    const estimate=estimateFaceFrame(landmarks,{width,height,lighting});
     if(!estimate.valid){reset();return guidance(estimate.message);}
-    if(complete) return {state:'ready',message:'Estimate ready',progress:1,result:complete};
+    if(complete) {
+      if(Math.max(Math.abs(estimate.left-complete.left),Math.abs(estimate.right-complete.right))<=.5)
+        return {state:'ready',message:'Estimate ready',progress:1,result:complete};
+      reset();return guidance('Hold still');
+    }
     // Ignore duplicate/too-fast observations; they cannot advance the window.
     if((frameId!==undefined&&frameId===lastFrameId)||(lastNow!==null&&now-lastNow<40))
       return {state:'collecting',message:'Hold still',progress:samples.length?Math.min(.99,(samples.at(-1).now-samples[0].now)/minDurationMs):0};
     lastNow=now;lastFrameId=frameId;
     if(samples.length>=3) {
+      const baseline=samples[0];
+      if(Math.abs(estimate.irisDiameterPx/baseline.irisDiameterPx-1)>.08){samples=[];return guidance('Keep the phone at one distance');}
+      if(distance(estimate.eyeMidPx,baseline.eyeMidPx)/baseline.eyeSpanPx>.12 || Math.abs(estimate.rollRadians-baseline.rollRadians)>.06){samples=[];return guidance('Keep your head and phone still');}
       const leftMedian=median(samples.map(s=>s.left)),rightMedian=median(samples.map(s=>s.right));
-      if(Math.max(Math.abs(estimate.left-leftMedian),Math.abs(estimate.right-rightMedian))>1.25) {
-        samples=[];return guidance('Hold still');
+      if(Math.max(Math.abs(estimate.left-leftMedian),Math.abs(estimate.right-rightMedian))>.8) {
+        samples=[];return guidance('Eyes shifted. Look at the camera');
       }
     }
     samples.push({...estimate,now});
@@ -105,10 +132,19 @@ export function createFaceEstimator({minDurationMs=2000,minSamples=20,maxGapMs=4
     const left=median(samples.map(s=>s.left)),right=median(samples.map(s=>s.right));
     const residuals=samples.map(s=>Math.max(Math.abs(s.left-left),Math.abs(s.right-right))).sort((a,b)=>a-b);
     const dispersionMm=residuals[Math.floor((residuals.length-1)*.9)];
-    if(dispersionMm>.6){samples=[];return guidance('Hold still');}
+    // A median alone can conceal gradual drift. Compare independent early/late
+    // thirds as well as the spread, including the shared iris-derived scale.
+    const third=Math.max(3,Math.floor(samples.length/3));
+    const first=samples.slice(0,third),last=samples.slice(-third);
+    const delta=fn=>Math.abs(median(first.map(fn))-median(last.map(fn)));
+    const driftMm=Math.max(delta(s=>s.left),delta(s=>s.right),delta(s=>s.left+s.right));
+    const totals=samples.map(s=>s.left+s.right),totalMedian=median(totals);
+    const totalResiduals=totals.map(v=>Math.abs(v-totalMedian)).sort((a,b)=>a-b);
+    const totalDispersionMm=totalResiduals[Math.floor((totalResiduals.length-1)*.9)];
+    if(dispersionMm>.5||totalDispersionMm>.5||driftMm>.35){samples=[];return guidance('Tracking varied. Keep your eyes on the camera');}
     complete={left:Math.round(left*10)/10,right:Math.round(right*10)/10,source:'browser-iris-estimate',
       sampleCount:samples.length,assumedIrisDiameterMm:IRIS_MM,durationMs,dispersionMm,
-      scaleCalibrated:false};
+      scaleCalibrated:false,accuracyMm:null,totalRepeatabilityMm:totalDispersionMm};
     return {state:'ready',message:'Estimate ready',progress:1,result:complete};
   }};
 }

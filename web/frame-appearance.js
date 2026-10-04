@@ -40,9 +40,31 @@ export function frameSurfaceAttributes(part,creaseAngle=Math.PI/4) {
   return {positions,normals};
 }
 
+function brandedFaces(part) {
+  const indices=part.branding?.faceIndices;
+  if(part.kind==='lens'||part.branding?.finish!=='silver-infill-preview'||!Array.isArray(indices)||!indices.length||
+     indices.some(index=>!Number.isInteger(index)||index<0||index>=part.faces?.length))return new Set();
+  return new Set(indices);
+}
+
 export function createFrameGeometry(THREE,part) {
-  const {positions,normals}=frameSurfaceAttributes(part);
+  let {positions,normals}=frameSurfaceAttributes(part);
+  const engraving=brandedFaces(part);
   const geometry=new THREE.BufferGeometry();
+  if(engraving.size) {
+    // Keep the exact CAD triangles and normals. Ordering gives the engraved
+    // floors their own finish in two draw calls, without a floating logo decal.
+    const order=part.faces.map((_,index)=>index).filter(index=>!engraving.has(index)).concat([...engraving]);
+    const reorderedPositions=new Float32Array(positions.length),reorderedNormals=new Float32Array(normals.length);
+    order.forEach((face,index)=>{
+      reorderedPositions.set(positions.subarray(face*9,face*9+9),index*9);
+      reorderedNormals.set(normals.subarray(face*9,face*9+9),index*9);
+    });
+    positions=reorderedPositions;normals=reorderedNormals;
+    const bodyVertices=(part.faces.length-engraving.size)*3;
+    if(bodyVertices)geometry.addGroup(0,bodyVertices,0);
+    geometry.addGroup(bodyVertices,engraving.size*3,1);
+  }
   geometry.setAttribute('position',new THREE.BufferAttribute(positions,3));
   geometry.setAttribute('normal',new THREE.BufferAttribute(normals,3));
   return geometry;
@@ -53,10 +75,18 @@ export function createFrameMaterial(THREE,part,{tryOn=false}={}) {
     color:0xc3d5df,transparent:true,opacity:tryOn?.045:.10,
     depthWrite:false,side:THREE.FrontSide,toneMapped:false,
   });
-  return new THREE.MeshStandardMaterial({
+  const body=new THREE.MeshStandardMaterial({
     color:0x242629,metalness:0,roughness:.52,side:THREE.FrontSide,
     flatShading:false,
   });
+  if(!brandedFaces(part).size)return body;
+  // A silver paint infill visualization. STL retains the debossed geometry;
+  // color is a finishing choice, never implied to be encoded in STL.
+  const signature=new THREE.MeshStandardMaterial({
+    color:0xd4d7dc,metalness:.28,roughness:.34,side:THREE.FrontSide,
+    flatShading:false,
+  });
+  return [body,signature];
 }
 
 export function configureFrameRenderer(THREE,renderer) {
