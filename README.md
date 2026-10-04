@@ -31,7 +31,7 @@ The browser says **Left lens**, then **Remove left lens**. If automatic empty-sh
 | iPhone companion | Mac, Xcode, XcodeGen and a physical device for ARKit; [instructions](ios/README.md) |
 | Public sign-in | Supabase, Vercel and configured email; optional for local development |
 
-From the repository root on Windows PowerShell:
+From the repository root on Windows PowerShell, install the CUDA PyTorch wheel first if you want SAM inference (see below), then:
 
 ```powershell
 py -3.12 -m venv .venv
@@ -41,7 +41,7 @@ python -m pip install -r gpu/requirements.txt
 python -m uvicorn segment:app --app-dir gpu --host 127.0.0.1 --port 8765
 ```
 
-On macOS/Linux, use `python3 -m venv .venv`, `source .venv/bin/activate`, then the same `pip` and `uvicorn` commands. Open **http://127.0.0.1:8765/**. FastAPI serves `web/` in development, so this route needs no npm install or frontend build. Local developer mode permits requests without sign-in: **keep it bound to loopback and never expose port 8765 publicly**.
+On macOS/Linux, use `python3 -m venv .venv`, `source .venv/bin/activate`, then the same `pip` and `uvicorn` commands. For a local scanner test without Supabase, open **http://127.0.0.1:8765/index.html#access=local**. The `local` value is a disposable development label; the production GPU worker rejects it. FastAPI serves `web/` in development, so this route needs no npm install or frontend build. Local developer mode permits requests without sign-in: **keep it bound to loopback and never expose port 8765 publicly**.
 
 ### Reproduce the GPU path
 
