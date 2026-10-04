@@ -23,13 +23,15 @@ struct TryOnView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 28))
                     .frame(maxHeight: .infinity)
                     .accessibilityLabel("Live face-anchored frame preview")
-                    Text(capture.status).font(.callout).frame(minHeight: 22)
+                    Text(capture.status).font(.callout).multilineTextAlignment(.center)
+                        .padding(.horizontal, 18).padding(.vertical, 10).optiGlass(radius: 22)
+                        .accessibilityAddTraits(.updatesFrequently)
                     Text("Visual try-on · not a fit or prescription check")
                         .font(.caption).foregroundStyle(.secondary)
                     HStack {
-                        if capture.hasFrame { Button("Retry") { capture.start() }.buttonStyle(.bordered) }
+                        if capture.hasFrame { Button("Retry") { capture.start() }.buttonStyle(OptiGlassButtonStyle()) }
                         Button(capture.hasFrame ? "Change frame" : "Import frame") { importing = true }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(OptiGlassButtonStyle(primary: true))
                     }.controlSize(.large)
                 } else {
                     ContentUnavailableView("Face tracking unavailable", systemImage: "faceid",
@@ -37,12 +39,13 @@ struct TryOnView: View {
                 }
             }
             .padding(16)
-            .background(Color(white: 0.065))
+            .background(OptiPalette.background)
             .navigationTitle("Try on")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }
+            .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
         }
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(.dark).tint(.white)
         .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { result in
             do { try capture.importFrame(result.get()); capture.start() }
             catch { importError = error.localizedDescription }

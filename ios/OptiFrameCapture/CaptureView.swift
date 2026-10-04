@@ -17,31 +17,23 @@ struct CaptureView: View {
 
     var body: some View {
         ScrollView {
-        VStack(spacing: 12) {
+        VStack(spacing: 16) {
             HStack {
-                Text("OptiFrame Capture").font(.headline)
+                Text("OptiFrame").font(.title2.weight(.semibold))
                 Spacer()
                 Text(capture.depthAvailable ? "LiDAR" : "RGB + pose")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Button("TrueDepth face scan") {
-                capture.stop()
-                faceFitting = true
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 10) { faceScanButton; tryOnButton }
+                VStack(spacing: 10) { faceScanButton; tryOnButton }
             }
-            .buttonStyle(.bordered)
-            .disabled(capture.isBusy || capture.isRecording || capture.frameCount > 0)
-            .accessibilityHint("Available before a lens session. Export existing lens frames and start a new lens first.")
-            Button("Try on a frame") {
-                capture.stop()
-                tryingOn = true
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(capture.isBusy || capture.isRecording || capture.frameCount > 0)
-            .accessibilityHint("Import a website frame preview. Available before a lens capture session.")
             CameraPreview(session: capture.session, contour: [],
                           showBox: mode == .liveSegmentation)
-                .frame(height: 260)
-                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .frame(height: 320)
+                .clipShape(RoundedRectangle(cornerRadius: 28))
+                .overlay { RoundedRectangle(cornerRadius: 28).strokeBorder(.white.opacity(0.12), lineWidth: 0.75) }
+                .accessibilityLabel("Lens camera preview")
 
             Picker("Lens", selection: $side) {
                 ForEach(LensSide.allCases) { value in Text(value.rawValue).tag(value) }
@@ -50,27 +42,29 @@ struct CaptureView: View {
             .disabled(capture.isBusy || capture.isRecording)
 
             if mode == .liveSegmentation {
-                TextField("HTTPS GPU server, e.g. https://your-server", text: $gpuServer)
+                DisclosureGroup("Live segmentation server") {
+                TextField("HTTPS GPU server", text: $gpuServer)
                     .textInputAutocapitalization(.never).autocorrectionDisabled()
                     .keyboardType(.URL).textFieldStyle(.roundedBorder)
-                SecureField("Access key (if required)", text: $gpuToken)
+                SecureField("Access key", text: $gpuToken)
                     .textInputAutocapitalization(.never).textFieldStyle(.roundedBorder)
                 HStack {
                     Button("Start live") { capture.startSegmentation(server: gpuServer, token: gpuToken) }
                     Button("Stop live") { capture.stopSegmentation() }
-                }.buttonStyle(.bordered)
+                }.buttonStyle(OptiGlassButtonStyle())
+                Text("Camera samples are sent to this server. The access key stays in memory.")
+                    .font(.caption).foregroundStyle(.secondary)
+                }.padding(16).optiGlass(radius: 20)
                 Text(capture.segmentationStatus).font(.caption)
                 if let data = capture.liveProposalJPEG,
                    let image = UIImage(data: data) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Latest SAM source frame · sensor axes").font(.caption.bold())
+                        Text("Latest proposal").font(.caption.bold())
                         ProposalSnapshot(image: image, contour: capture.liveContour)
-                        Text("Proposal belongs to this captured image. Review before measuring.")
+                        Text("Review the captured outline before measuring.")
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }
-                Text("Camera samples are sent to this server for SAM proposals. The access key stays in memory. Keep the full lens inside the box; approve contour and printed scale after export.")
-                    .font(.caption).foregroundStyle(.secondary)
             }
 
             Picker("Capture mode", selection: $mode) {
@@ -79,48 +73,47 @@ struct CaptureView: View {
             .pickerStyle(.menu)
             .disabled(capture.isBusy || capture.isRecording)
 
-            Text(mode == .depthArc
-                 ? "Hold the lens upright with the board behind it. Move through a slow arc. Clear lens depth may be missing or belong to the background."
-                 : mode == .outlineVideo
-                 ? "Keep lens and sheet still. Record up to 12 original frames over 9 seconds; move the phone slightly to reveal the rim. This burst exports JPEGs, not a movie."
-                 : "Keep the phone fixed when capturing the empty sheet and lens photo.")
-                .font(.caption).foregroundStyle(.secondary)
-
-            Text("Keep all four scale markers visible. Verify the printed ruler. If glare hides the rim, use oblique side lighting and retake; enhanced images cannot restore clipped detail.")
-                .font(.caption)
+            DisclosureGroup("Capture guide") {
+                Text(mode == .depthArc
+                     ? "Hold the lens upright with the board behind it. Move through a slow arc. Clear lens depth may be missing or belong to the background."
+                     : mode == .outlineVideo
+                     ? "Keep lens and sheet still. Record up to 12 original frames over 9 seconds; move the phone slightly to reveal the rim. This burst exports JPEGs, not a movie."
+                     : "Keep the phone fixed when capturing the empty sheet and lens photo.")
+                    .font(.callout).foregroundStyle(.secondary)
+                Text("Keep all four scale markers visible. Verify the printed ruler. If glare hides the rim, use oblique side lighting and retake; enhanced images cannot restore clipped detail.")
+                    .font(.callout).foregroundStyle(.secondary)
+            }.padding(16).optiGlass(radius: 20)
 
             Text(capture.status)
-                .font(.footnote)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Text("\(capture.frameCount) frames · \(capture.depthAvailable ? "LiDAR depth on" : "images + poses")")
-                .font(.footnote)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .font(.callout).multilineTextAlignment(.center)
+                .accessibilityAddTraits(.updatesFrequently)
+            Text("\(capture.frameCount) frames · \(capture.depthAvailable ? "LiDAR depth" : "images + poses")")
+                .font(.caption).foregroundStyle(.secondary).monospacedDigit()
 
             if capture.isRecording {
                 ProgressView(value: Double(capture.sequenceAttempt),
-                             total: Double(CaptureMode.sequenceAttempts))
-                Text("Recording · \(capture.sequenceAttempt)/\(CaptureMode.sequenceAttempts) sampling attempts")
+                             total: Double(CaptureMode.sequenceAttempts)).tint(.white)
+                Text("Recording · \(capture.sequenceAttempt)/\(CaptureMode.sequenceAttempts)")
                     .font(.caption).monospacedDigit()
             }
 
-            HStack {
-                Button(capture.isRecording ? "Stop recording" : mode.isSequence ? "Start recording" : "Capture frame") {
-                    if capture.isRecording { capture.endSequence() }
-                    else if mode.isSequence { capture.beginSequence(side: side, mode: mode) }
-                    else { capture.capture(side: side, kind: mode.frameKind) }
-                }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(capture.isBusy && !capture.isRecording)
+            Button(capture.isRecording ? "Stop recording" : mode.isSequence ? "Start recording" : "Capture frame") {
+                if capture.isRecording { capture.endSequence() }
+                else if mode.isSequence { capture.beginSequence(side: side, mode: mode) }
+                else { capture.capture(side: side, kind: mode.frameKind) }
+            }.buttonStyle(OptiGlassButtonStyle(primary: true))
+                .disabled(capture.isBusy && !capture.isRecording)
+            HStack(spacing: 12) {
                 Button("Review & export") { reviewing = true }
-                .buttonStyle(.bordered)
-                .disabled(capture.frameCount == 0 || capture.isBusy || capture.isRecording)
+                    .disabled(capture.frameCount == 0 || capture.isBusy || capture.isRecording)
                 Button("New lens") { capture.newLens() }
-                    .buttonStyle(.bordered)
                     .disabled(capture.isBusy || capture.isRecording)
-            }
+            }.buttonStyle(OptiGlassButtonStyle())
         }
-        .padding()
+        .padding(20)
         }
+        .scrollBounceBehavior(.basedOnSize)
+        .background(OptiPalette.background).preferredColorScheme(.dark).tint(.white)
         .onAppear { capture.start() }
         .onDisappear { capture.stop() }
         .onChange(of: scenePhase) { _, phase in
@@ -134,7 +127,31 @@ struct CaptureView: View {
         .fullScreenCover(isPresented: $tryingOn, onDismiss: {
             if scenePhase == .active { capture.start() }
         }) { TryOnView() }
-        .sheet(isPresented: $reviewing) {
+        .sheet(isPresented: $reviewing) { reviewSheet }
+    }
+
+    private var faceScanButton: some View {
+            Button {
+                capture.stop()
+                faceFitting = true
+            } label: { Label("Face scan", systemImage: "faceid") }
+            .buttonStyle(OptiGlassButtonStyle())
+            .disabled(capture.isBusy || capture.isRecording || capture.frameCount > 0)
+            .accessibilityLabel("TrueDepth face scan")
+            .accessibilityHint("Available before a lens session. Export existing lens frames and start a new lens first.")
+    }
+
+    private var tryOnButton: some View {
+            Button {
+                capture.stop()
+                tryingOn = true
+            } label: { Label("Try on", systemImage: "eyeglasses") }
+            .buttonStyle(OptiGlassButtonStyle())
+            .disabled(capture.isBusy || capture.isRecording || capture.frameCount > 0)
+            .accessibilityHint("Import a website frame preview. Available before a lens capture session.")
+    }
+
+    private var reviewSheet: some View {
             NavigationStack {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 16) {
@@ -168,13 +185,12 @@ struct CaptureView: View {
                                 }
                             }
                         }
-                        .buttonStyle(.borderedProminent).disabled(capture.isBusy)
+                        .buttonStyle(OptiGlassButtonStyle(primary: true)).disabled(capture.isBusy)
                     }.padding()
                 }
-                .navigationTitle("Review capture")
+                .background(OptiPalette.background).navigationTitle("Review capture")
                 .toolbar { Button("Done") { reviewing = false }.disabled(capture.isBusy) }
             }
-        }
     }
 
     private func reviewThumbnail(_ url: URL) -> UIImage? {
@@ -205,7 +221,7 @@ private struct ProposalSnapshot: View {
                         path.move(to: point(first))
                         for value in contour.dropFirst() { path.addLine(to: point(value)) }
                         path.closeSubpath()
-                    }.stroke(.mint, lineWidth: 2)
+                    }.stroke(OptiPalette.contour, lineWidth: 2)
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: 10))
@@ -223,7 +239,7 @@ private struct CameraPreview: UIViewRepresentable {
         view.automaticallyUpdatesLighting = false
         let overlay = CAShapeLayer()
         overlay.name = "proposal"
-        overlay.strokeColor = UIColor.systemMint.cgColor
+        overlay.strokeColor = UIColor(OptiPalette.contour).cgColor
         overlay.fillColor = UIColor.clear.cgColor
         overlay.lineWidth = 2
         view.layer.addSublayer(overlay)

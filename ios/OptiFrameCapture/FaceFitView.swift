@@ -9,38 +9,41 @@ struct FaceFitView: View {
 
     var body: some View {
         NavigationStack {
+            GeometryReader { geometry in
+            ScrollView {
             VStack(spacing: 20) {
                 if let result = capture.result {
                     Spacer()
                     Text("Review measurements").font(.title2.weight(.semibold))
-                    HStack(spacing: 32) {
+                    HStack(spacing: 28) {
                         measurement("Left", result.leftMonocularEstimateMm)
                         measurement("Right", result.rightMonocularEstimateMm)
-                    }
+                    }.padding(24).frame(maxWidth: .infinity).optiGlass()
                     Text("TrueDepth-assisted eye-position estimate. Review does not verify optical accuracy.")
                         .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
                     Spacer()
                     if let url = capture.exportURL {
                         ShareLink("Export measurements", item: url)
-                            .buttonStyle(.borderedProminent).controlSize(.large)
+                            .buttonStyle(OptiGlassButtonStyle(primary: true))
                     } else {
                         Button("Confirm measurements") { capture.confirmMeasurements() }
-                            .buttonStyle(.borderedProminent).controlSize(.large)
+                            .buttonStyle(OptiGlassButtonStyle(primary: true))
                     }
                     Text(capture.status).font(.footnote).foregroundStyle(.secondary)
-                    Button("Retry") { capture.retry() }.buttonStyle(.bordered)
+                    Button("Retry") { capture.retry() }.buttonStyle(OptiGlassButtonStyle())
                 } else if capture.depthMeasurementSupported {
                     FaceFitPreview(session: capture.session)
-                        .clipShape(RoundedRectangle(cornerRadius: 20))
-                        .frame(maxHeight: .infinity)
+                        .frame(height: max(220, geometry.size.height * 0.57))
+                        .clipShape(RoundedRectangle(cornerRadius: 28))
+                        .overlay { RoundedRectangle(cornerRadius: 28).strokeBorder(.white.opacity(0.12), lineWidth: 0.75) }
                         .accessibilityLabel("Front camera face preview")
                     Text(capture.status).font(.headline).multilineTextAlignment(.center)
                         .accessibilityAddTraits(.updatesFrequently)
-                    ProgressView(value: capture.progress).tint(.primary)
+                    ProgressView(value: capture.progress).tint(.white)
                         .accessibilityLabel("Stable face capture")
                     Text("Face the camera. Review the estimate when capture completes.")
                         .font(.footnote).foregroundStyle(.secondary)
-                    Button("Retry") { capture.retry() }.buttonStyle(.bordered)
+                    Button("Retry") { capture.retry() }.buttonStyle(OptiGlassButtonStyle())
                 } else {
                     Spacer()
                     Text("TrueDepth required").font(.title2.weight(.semibold))
@@ -49,13 +52,18 @@ struct FaceFitView: View {
                     Spacer()
                 }
                 Button("Use manual measurements") { dismiss() }
-                    .frame(minHeight: 44)
+                    .font(.callout).foregroundStyle(.secondary).frame(minHeight: 44)
             }
-            .padding(20)
+            .padding(20).frame(minHeight: geometry.size.height)
+            }.scrollBounceBehavior(.basedOnSize)
+            }
+            .background(OptiPalette.background)
             .navigationTitle("TrueDepth scan")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }
+            .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
         }
+        .preferredColorScheme(.dark).tint(.white)
         .onAppear { capture.start() }
         .onDisappear { capture.stop() }
         .onChange(of: phase) { _, value in
@@ -67,7 +75,7 @@ struct FaceFitView: View {
         VStack(spacing: 4) {
             Text(name).font(.subheadline).foregroundStyle(.secondary)
             Text("\(value, specifier: "%.1f") mm").font(.title2.monospacedDigit())
-        }
+        }.accessibilityElement(children: .combine)
     }
 }
 
