@@ -37,7 +37,7 @@ function fakeCamera(t, advancing = false) {
   };
 }
 
-test('burst selects the sharp original frame with dimensions and capture metadata', async t => {
+test('burst retains five distinct originals sorted by focus with metadata and best-frame compatibility', async t => {
   const camera = fakeCamera(t, true);
   const result = await captureSharpFrame(camera.video);
   assert.equal(result.canvas.frame, 1);
@@ -46,6 +46,21 @@ test('burst selects the sharp original frame with dimensions and capture metadat
   assert.ok(Number.isFinite(result.sampledAt));
   assert.ok(Number.isFinite(Date.parse(result.capturedAt)));
   assert.equal(result.sharpness, focusScore(image()));
+  assert.equal(result.frames.length, 5);
+  assert.equal(new Set(result.frames.map(frame => frame.id)).size, 5);
+  assert.equal(new Set(result.frames.map(frame => frame.canvas)).size, 5);
+  assert.deepEqual(result.frames.map(frame => frame.canvas.frame).sort(), [0, 1, 2, 3, 4]);
+  assert.equal(result.canvas, result.frames[0].canvas);
+  for (let i = 1; i < result.frames.length; i++)
+    assert.ok(result.frames[i - 1].sharpness >= result.frames[i].sharpness);
+  assert.ok(result.frames.every(frame => frame !== result && !('frames' in frame)));
+  assert.doesNotThrow(() => JSON.stringify(result));
+});
+
+test('a caller can request a smaller three-frame burst', async t => {
+  const camera = fakeCamera(t, true);
+  const result = await captureSharpFrame(camera.video, { frameCount: 3 });
+  assert.equal(result.frames.length, 3);
 });
 
 test('aborting a burst does not return a partial capture', async t => {
@@ -55,7 +70,7 @@ test('aborting a burst does not return a partial capture', async t => {
   await assert.rejects(result, { name: 'AbortError' });
 });
 
-test('a frozen camera is rejected instead of counting the same frame three times', async t => {
+test('a frozen camera is rejected instead of duplicating a frame in the burst', async t => {
   const camera = fakeCamera(t);
   await assert.rejects(captureSharpFrame(camera.video), /stopped updating/);
 });
@@ -63,4 +78,6 @@ test('a frozen camera is rejected instead of counting the same frame three times
 test('invalid crop and unavailable camera fail before capture', async () => {
   await assert.rejects(captureSharpFrame({videoWidth: 0, videoHeight: 0}), /not ready/);
   await assert.rejects(captureSharpFrame({}, {box: [1, 0, 0, 1]}), /Invalid focus area/);
+  for (const frameCount of [0, 2, 6, 3.5, NaN])
+    await assert.rejects(captureSharpFrame({}, {frameCount}), /three to five/);
 });

@@ -104,6 +104,47 @@ test('final still is independently segmented and its exact JPEG and coordinates 
   finally {fixture.session.stop();}
 });
 
+test('burst frames are independently measured and fused in sheet millimetres', {timeout:4000}, async () => {
+  let captured, still=false, measured=0;
+  const fixture=setup(async(path,options)=>{
+    const data={...result,presence:{detected:true},quality:{score:.7,sharpness:180}};
+    if(path==='/api/segment-burst') {
+      measured+=options.body.getAll('images').length;
+      return {ok:true,json:async()=>({frames:Array.from({length:5},()=>data)})};
+    }
+    return {ok:true,json:async()=>data};
+  },value=>{captured=value;},{...autoOptions,stillCapture:true,captureFrame:async()=>{
+    still=true;
+    const frames=Array.from({length:5},(_,id)=>{
+      const canvas=document.createElement('canvas');canvas.width=640;canvas.height=480;
+      return {canvas,id,sampledAt:performance.now()+id,capturedAt:new Date().toISOString()};
+    });
+    return {...frames[0],frames};
+  }});
+  try {await fixture.session.start();await pause(850);
+    assert.equal(measured,5);assert.equal(captured.source,'multi-frame');
+    assert.equal(captured.refinement.acceptedFrames,5);assert.equal(captured.refinement.rawContours.length,5);
+    assert.ok(captured.contour.length>=128);
+  } finally {fixture.session.stop();}
+});
+
+test('disagreeing burst contours cannot export a plausible averaged result', {timeout:4000}, async () => {
+  let captured=null, still=false, measured=0, calibrationIndex=0;
+  const fixture=setup(async(path)=>{
+    const data={...result,presence:{detected:true},quality:{score:.7,sharpness:180}};
+    if(path==='/api/segment-burst') {measured+=5;return {ok:true,json:async()=>({frames:Array.from({length:5},()=>data)})};}
+    return {ok:true,json:async()=>data};
+  },value=>{captured=value;},{...autoOptions,stillCapture:true,
+    calibrateFrame:()=>{const dx=still?++calibrationIndex*2:0;return {...autoOptions.calibrateFrame(),contour:autoOutline.map(([x,y])=>[x+dx,y])};},
+    captureFrame:async()=>{
+      still=true; const frames=Array.from({length:5},(_,id)=>{const canvas=document.createElement('canvas');canvas.width=640;canvas.height=480;
+        return {canvas,id,sampledAt:performance.now()+id,capturedAt:new Date().toISOString()};});
+      return {...frames[0],frames};
+    }});
+  try {await fixture.session.start();await pause(700);assert.ok(measured>=5);assert.equal(captured,null);assert.equal(fixture.session.active,true);}
+  finally {fixture.session.stop();}
+});
+
 test('automatic mode stays live without an outline for absent or legacy presence', async () => {
   for (const presence of [undefined, {detected:false}]) {
     let captured = 0;

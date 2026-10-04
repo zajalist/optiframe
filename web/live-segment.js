@@ -1,6 +1,8 @@
 import { createAutoCaptureGate } from './auto-capture.js?v=20';
 import { createCaptureGuidance, frameBrightness, optimizeCameraTrack } from './capture-guidance.js?v=21';
-import { captureSharpFrame } from './sharp-frame.js?v=21';
+import { captureSharpFrame } from './sharp-frame.js?v=22';
+import { fuseContours } from './contour-fusion.js?v=22';
+import { sheetHomography, project, unproject } from './calibration.js?v=22';
 // Live camera proposals are only inputs to the existing photo review flow.
 const MAX_SIDE = 1280;
 const INTERVAL_MS = 50;
@@ -65,6 +67,7 @@ export function createLiveSegmentSession({
   let manualTarget = false;
   let lastLocateAt = -Infinity;
   let frameId = 0;
+  let refinementRetryAt = 0, refinementHint = '';
   const sharpStill = autoCapture && stillCapture;
   // Preview agreement only triggers a new still; it is never exported as measurement evidence.
   const autoGate = createAutoCaptureGate({ maxAgeMs: maxResultAgeMs,
@@ -376,6 +379,7 @@ export function createLiveSegmentSession({
       }, Math.max(0, maxResultAgeMs - (updatedAt - startedAt)));
       draw();
       if (autoCapture) {
+        if (sharpStill && updatedAt < refinementRetryAt) { message(refinementHint); return; }
         const advice = guidance.update({ calibration, width, height, minMarkerSpan: sharpStill ? 225 : 300, quality: data.quality, presence: data.presence,
           brightness, latencyMs, now: updatedAt, state: autoState });
         const decision = autoGate.update({ ...data, quality: advice.ready ? data.quality : null, calibration, sampledAt: startedAt,
@@ -393,7 +397,7 @@ export function createLiveSegmentSession({
     } catch (error) {
       if (token === generation && error.name !== 'AbortError') {
         clearResult();
-        message(`No lens edge yet. ${error.message}`);
+        message(performance.now()<refinementRetryAt ? refinementHint : `No lens edge yet. ${error.message}`);
       }
     } finally {
       job.abort.abort();
@@ -417,38 +421,84 @@ export function createLiveSegmentSession({
     try {
       const selected = await captureFrame(video, {maxSide:1600, box:[...box], signal});
       if (token !== generation || signal.aborted) return;
-      const frame = selected.canvas, width = frame.width, height = frame.height;
-      const pixels = frame.getContext('2d').getImageData(0, 0, width, height);
-      const found = !manualTarget && locateTarget ? locateTarget(pixels) : null;
-      const targetBox = Array.isArray(found) && found.length === 4 && found.every(Number.isFinite) ? found : box;
-      const prompt = [Math.floor(targetBox[0]*width), Math.floor(targetBox[1]*height),
-        Math.ceil(targetBox[2]*width), Math.ceil(targetBox[3]*height)];
-      const blob = await canvasBlob(frame, .95);
-      if (token !== generation || signal.aborted) return;
-      // Freeze the selected real frame while its own high-resolution contour is computed.
-      overlay.width=width; overlay.height=height;
-      context.drawImage(frame,0,0,width,height);
-      message('Measuring…');
-      const body = new FormData(); body.append('image',blob,`${side}-still.jpg`);
-      body.append('box',JSON.stringify(prompt));
+      const frames=Array.isArray(selected.frames)?selected.frames.slice(0,5):[selected];
+      const observations=[], prepared=[], ids=new Set();
+      overlay.width=selected.canvas.width; overlay.height=selected.canvas.height;
+      context.drawImage(selected.canvas,0,0,overlay.width,overlay.height);
+      message('Refining…');
       const started = performance.now();
-      const data = await boundedStartup(segmentFrame(body,signal,frame,prompt),requestTimeoutMs,signal,'Measurement timed out. Retrying…');
-      if (token !== generation || signal.aborted) return;
-      if (data.width !== width || data.height !== height || !Array.isArray(data.contour) ||
-          data.contour.some(p => !Array.isArray(p) || p.length!==2 || p.some((v,i)=>!Number.isFinite(v)||v<0||v>(i?height:width))))
-        throw new Error('Still frame could not be measured');
-      const calibration = calibrateFrame?.(pixels,data.contour);
-      const now = performance.now();
-      const advice = createCaptureGuidance().update({...data,calibration,brightness:frameBrightness(pixels),now});
-      // Frozen photos may take longer than live replies. Validate their own lens/scale/quality,
-      // never substitute the earlier preview contour or claim burst agreement as accuracy.
-      const checked = createAutoCaptureGate({durationMs:0,minFrames:1}).update({...data,
-        quality:advice.ready?data.quality:null,calibration,sampledAt:now,now,id:0});
-      if (!checked.capture) throw new Error(!advice.ready ? advice.message || 'Check light and all four dots' : 'Still edge unclear. Adjust the light');
+      const deadline=started+Math.min(requestTimeoutMs,8000);
+      for (let index=0;index<frames.length;index++) {
+        if(token!==generation || signal.aborted)return;
+        const candidate=frames[index], id=candidate.id??candidate.sampledAt??index;
+        if(ids.has(id))continue;
+        ids.add(id);
+        const frame=candidate.canvas, width=frame.width, height=frame.height;
+        const pixels=frame.getContext('2d').getImageData(0,0,width,height);
+        const found=!manualTarget&&locateTarget?locateTarget(pixels):null;
+        const targetBox=Array.isArray(found)&&found.length===4&&found.every(Number.isFinite)?found:box;
+        const prompt=[Math.floor(targetBox[0]*width),Math.floor(targetBox[1]*height),Math.ceil(targetBox[2]*width),Math.ceil(targetBox[3]*height)];
+        const blob=await canvasBlob(frame,.95);
+        if(token!==generation || signal.aborted)return;
+        prepared.push({id,candidate,frame,width,height,blob,prompt});
+      }
+      const remaining=deadline-performance.now();
+      if(remaining<=0)throw new Error('Refinement timed out. Retrying…');
+      let results;
+      if(frames.length>1) {
+        const body=new FormData();
+        prepared.forEach(item=>body.append('images',item.blob,`${side}-${item.id}.jpg`));
+        body.append('boxes',JSON.stringify(prepared.map(item=>item.prompt)));
+        const response=await boundedStartup(apiFetch('/api/segment-burst',{method:'POST',body,signal}),remaining,signal,'Refinement timed out. Retrying…');
+        const payload=await response.json();
+        if(!response.ok)throw new Error(payload.detail||'Could not refine the burst');
+        if(!Array.isArray(payload.frames)||payload.frames.length!==prepared.length)throw new Error('Incomplete burst response');
+        results=payload.frames;
+      } else {
+        const item=prepared[0],body=new FormData();body.append('image',item.blob,`${side}-still.jpg`);body.append('box',JSON.stringify(item.prompt));
+        results=[await boundedStartup(segmentFrame(body,signal,item.frame,item.prompt),remaining,signal,'Refinement timed out. Retrying…')];
+      }
+      if(token!==generation || signal.aborted)return;
+      for(let index=0;index<prepared.length;index++) {
+        const {id,candidate,frame,width,height,blob}=prepared[index], data=results[index];
+        if(!data||data.error)continue;
+        if(data.width!==width||data.height!==height||!Array.isArray(data.contour)||
+            data.contour.some(p=>!Array.isArray(p)||p.length!==2||p.some((v,i)=>!Number.isFinite(v)||v<0||v>(i?height:width))))continue;
+        const pixels=frame.getContext('2d').getImageData(0,0,width,height);
+        let calibration;
+        try {calibration=calibrateFrame?.(pixels,data.contour);} catch {continue;}
+        const now=performance.now();
+        const advice=createCaptureGuidance().update({...data,calibration,brightness:frameBrightness(pixels),now});
+        const checked=createAutoCaptureGate({durationMs:0,minFrames:1}).update({...data,
+          quality:advice.ready?data.quality:null,calibration,sampledAt:now,now,id});
+        if(!checked.capture)continue;
+        observations.push({id,contour:calibration.contour,calibration,data,blob,candidate,width,height});
+      }
+      let reference=observations[0], refined, refinement;
+      if(frames.length>1) {
+        const combined=fuseContours(observations);
+        reference=observations.find(item=>combined.diagnostics.acceptedIds.includes(item.id));
+        const h=sheetHomography(reference.calibration.markers);
+        refined=combined.contour.map(p=>unproject(p,h));
+        refinement={...combined.diagnostics,inputFrames:frames.length,
+          rejectedFrames:frames.length-combined.diagnostics.acceptedFrames,
+          rejectedIds:frames.map((frame,index)=>frame.id??frame.sampledAt??index).filter(id=>!combined.diagnostics.acceptedIds.includes(id)),
+          rawContours:observations.map(item=>({id:item.id,capturedAt:item.candidate.capturedAt,
+            contour:item.data.rawContour ? item.data.rawContour.map(p=>project(p,sheetHomography(item.calibration.markers))) : item.contour})),
+          imageRefinedContours:observations.map(item=>({id:item.id,contour:item.contour,diagnostics:item.data.edgeRefinement})),
+          rawReferenceContour:(reference.data.rawContour||reference.data.contour).map(p=>[...p])};
+      } else if(!reference)throw new Error('Still edge unclear. Adjust the light');
+      const {blob,width,height,calibration,data,candidate}=reference;
       await onCapture({file:new File([blob],`${side}-still.jpg`,{type:'image/jpeg'}),
-        contour:data.contour.map(p=>[...p]),width,height,markers:calibration.markers.map(p=>[...p]),
-        quality:data.quality,capturedAt:selected.capturedAt,latencyMs:now-started,source:'sharp-still'});
+        contour:refined||data.contour.map(p=>[...p]),width,height,markers:calibration.markers.map(p=>[...p]),refinement,
+        quality:data.quality,capturedAt:candidate.capturedAt,latencyMs:performance.now()-started,source:refinement?'multi-frame':'sharp-still'});
       if (token===generation) stop();
+    } catch(error) {
+      if(token===generation && error.name!=='AbortError') {
+        refinementRetryAt=performance.now()+2200;
+        refinementHint=error.code==='CONTOUR_FUSION_UNSTABLE' ? 'Edge unclear. Use softer light.' : error.message;
+      }
+      throw error;
     } finally {
       if (capturePending===pending) capturePending=null;
       if (token===generation && stream) {
@@ -499,6 +549,7 @@ export function createLiveSegmentSession({
   }
   function stop() {
     capturePending = null;
+    refinementRetryAt=0; refinementHint='';
     autoGate.reset();
     guidance.reset();
     autoState = 'searching';

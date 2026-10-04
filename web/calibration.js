@@ -56,6 +56,17 @@ function project(point, h) {
           (h[3] * x + h[4] * y + h[5]) / denominator];
 }
 
+function unproject([u, v], h) {
+  const a=h[0]-u*h[6], b=h[1]-u*h[7], c=h[3]-v*h[6], d=h[4]-v*h[7];
+  const determinant=a*d-b*c;
+  if (!Number.isFinite(determinant) || Math.abs(determinant)<1e-12)
+    throw new Error('Perspective calibration cannot be inverted');
+  const x=((u-h[2])*d-b*(v-h[5]))/determinant;
+  const y=(a*(v-h[5])-(u-h[2])*c)/determinant;
+  if (![x,y].every(Number.isFinite)) throw new Error('Invalid perspective coordinates');
+  return [x,y];
+}
+
 function validateMarkers(p) {
  const turns=p.map((a,i)=>{const b=p[(i+1)%4],c=p[(i+2)%4];return (b[0]-a[0])*(c[1]-b[1])-(b[1]-a[1])*(c[0]-b[0]);});
  const spans=p.map((a,i)=>distance(a,p[(i+1)%4]));
@@ -149,4 +160,4 @@ function outlineProofSVG(contour, side) {
 </svg>`;
 }
 
-export {distance,polygonArea,measure,sheetHomography,project,benchmark,pixelResolution,contourRepeatability,normalizeLensOrientation,outlineProofSVG};
+export {distance,polygonArea,measure,sheetHomography,project,unproject,benchmark,pixelResolution,contourRepeatability,normalizeLensOrientation,outlineProofSVG};

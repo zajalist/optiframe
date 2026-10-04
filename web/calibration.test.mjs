@@ -1,6 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {sheetHomography,project,measure,benchmark,pixelResolution,contourRepeatability,normalizeLensOrientation,outlineProofSVG} from './calibration.js';
+import {sheetHomography,project,unproject,measure,benchmark,pixelResolution,contourRepeatability,normalizeLensOrientation,outlineProofSVG} from './calibration.js';
+
+test('fused millimetre edges map back to their reference image without a scale change',()=>{
+ const h=sheetHomography([[50,30],[1050,80],[900,780],[100,680]]);
+ for(const mm of [[20,15],[52.25,31.75],[80,60]])
+  project(unproject(mm,h),h).forEach((v,i)=>assert.ok(Math.abs(v-mm[i])<1e-8));
+ assert.throws(()=>unproject([0,0],[0,0,0,0,0,0,0,0]),/inverted/);
+});
 test('perspective quadrilateral maps to physical marker centres',()=>{
  const corners=[[50,30],[1050,80],[900,780],[100,680]], h=sheetHomography(corners);
  const targets=[[0,0],[100,0],[100,70],[0,70]];

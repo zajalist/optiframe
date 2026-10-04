@@ -6,6 +6,7 @@ import json
 import logging
 import threading
 import time
+from time import monotonic
 from contextlib import contextmanager
 import base64
 import hmac
@@ -25,6 +26,7 @@ from PIL import Image
 from starlette.formparsers import MultiPartException
 from preprocess import isolate_lens, restore_best_lens_mask
 from presence import lens_presence, absent
+from edge_refine import refine_lens_edge
 
 app = FastAPI(title="OptiFrame contour proposals")
 _model = None
@@ -63,7 +65,8 @@ class CaptureBodyLimit:
         limits = {"/api/video-frames": VIDEO_MAX_BYTES,
                   "/api/import": 100_000_000,
                   "/api/segment": 48_000_000,
-                  "/api/live-segment": 8_000_000}
+                  "/api/live-segment": 8_000_000,
+                  "/api/segment-burst": 20_000_000}
         if scope["type"] != "http" or scope["path"] not in limits:
             return await self.app(scope, receive, send)
         limit = limits[scope["path"]] + 64_000  # Multipart headers and boundaries.
@@ -440,6 +443,44 @@ def segment(image: UploadFile = File(...), empty: UploadFile | None = File(None)
         raise HTTPException(status_code=422, detail=str(error)) from error
 
 
+def decode_live_frame(raw: bytes) -> np.ndarray:
+    photo = decode(raw)
+    h, w = photo.shape[:2]
+    if max(w, h) > 1600 or w * h > 2_600_000:
+        raise ValueError("Live frame exceeds 1600 pixels per side or 2.6 megapixels")
+    return photo
+
+
+def segment_live_photo(photo: np.ndarray, parsed: tuple[int, int, int, int], *, refine: bool = False) -> dict:
+    """One predictor path for preview and burst frames, including presence checks."""
+    h, w = photo.shape[:2]
+    try:
+        contour = contour_from_mask(sam_mask(photo, parsed))
+        presence = lens_presence(photo, contour)
+    except ValueError:
+        # A valid frame without a supported target is a normal live state.
+        contour, presence = [], absent()
+    if not presence["detected"]:
+        contour = []
+    refinement = {}
+    if refine and contour:
+        raw_contour = contour
+        refined, diagnostics = refine_lens_edge(cv2.cvtColor(photo, cv2.COLOR_BGR2RGB), raw_contour)
+        refinement = {"rawContour": raw_contour, "edgeRefinement": diagnostics}
+        if not diagnostics.get("accepted"):
+            return {"error": "Lens edge refinement unsupported. Adjust the light and capture again.", **refinement}
+        presence = lens_presence(photo, refined)
+        if not presence["detected"]:
+            return {"error": "Refined lens edge lacks support in the original photo.", **refinement}
+        contour = refined
+    return {"width": w, "height": h, "contour": contour, **refinement,
+            "presence": presence,
+            "quality": live_quality(photo, contour, parsed),
+            "method": "sam2.1-hiera-small-cuda",
+            "preprocessing": "edge-supported-lens-v3",
+            "measurementStatus": "proposal-only; review contour and calibrate sheet scale"}
+
+
 @app.post("/api/live-segment")
 def live_segment(image: UploadFile = File(...), box: str = Form(...)) -> dict:
     """Segment one bounded camera frame with the shared SAM2 image predictor."""
@@ -447,31 +488,70 @@ def live_segment(image: UploadFile = File(...), box: str = Form(...)) -> dict:
     if len(raw) > 6_000_000:
         raise HTTPException(status_code=413, detail="Live frame exceeds 6 MB")
     try:
-        photo = decode(raw)
+        photo = decode_live_frame(raw)
         h, w = photo.shape[:2]
-        if max(w, h) > 1600 or w * h > 2_600_000:
-            raise ValueError("Live frame exceeds 1600 pixels per side or 2.6 megapixels")
-        parsed = parse_lens_box(box, w, h)
-        try:
-            contour = contour_from_mask(sam_mask(photo, tuple(parsed)))
-            presence = lens_presence(photo, contour)
-        except ValueError:
-            # A valid frame without a supported target is a normal live state.
-            contour, presence = [], absent()
-        if not presence["detected"]:
-            contour = []
-        return {"width": w, "height": h, "contour": contour,
-                "presence": presence,
-                "quality": live_quality(photo, contour, tuple(parsed)),
-                "method": "sam2.1-hiera-small-cuda",
-                "preprocessing": "edge-supported-lens-v3",
-                "measurementStatus": "proposal-only; review contour and calibrate sheet scale"}
+        return segment_live_photo(photo, parse_lens_box(box, w, h))
     except ModelBusyError as error:
         raise HTTPException(status_code=503, detail=str(error), headers={"Retry-After": "1"}) from error
     except (ValueError, TypeError, json.JSONDecodeError) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     except Exception as error:
         logging.exception("Live SAM2 proposal failed")
+        raise HTTPException(status_code=503, detail="GPU segmentation unavailable") from error
+
+
+@app.post("/api/segment-burst")
+def segment_burst(images: list[UploadFile] = File(...), boxes: str = Form(...)) -> dict:
+    """Segment 3–5 originals serially on the existing predictor in one upload.
+
+    Results preserve upload order. Invalid image bytes/dimensions produce a per-frame
+    error. Invalid counts/boxes reject the entire request with 422 before GPU work;
+    upload limits use 413, and GPU busy/unavailable uses 503 for the whole request.
+    """
+    try:
+        if not 3 <= len(images) <= 5:
+            raise ValueError("A burst requires three to five images")
+        prompts = json.loads(boxes)
+        if not isinstance(prompts, list) or len(prompts) != len(images):
+            raise ValueError("Provide one box per burst image")
+        # Validate every box's type and range before any GPU work, even if its
+        # corresponding JPEG is corrupt. Exact image bounds are checked below.
+        parsed = [parse_lens_box(json.dumps(box), 1600, 1600) for box in prompts]
+        prepared = []
+        total = 0
+        for image, box in zip(images, parsed):
+            raw = image.file.read(6_000_001)
+            total += len(raw)
+            if len(raw) > 6_000_000 or total > 20_000_000:
+                raise HTTPException(status_code=413, detail="Burst exceeds 6 MB per frame or 20 MB total")
+            try:
+                photo = decode_live_frame(raw)
+            except (ValueError, cv2.error) as error:
+                prepared.append({"error": str(error)})
+                continue
+            h, w = photo.shape[:2]
+            parse_lens_box(json.dumps(box), w, h)
+            prepared.append((photo, box))
+        frames = []
+        deadline = monotonic() + 8
+        for item in prepared:
+            if monotonic() > deadline:
+                raise HTTPException(status_code=503, detail="Burst processing timed out. Retrying…",
+                                    headers={"Retry-After": "1"})
+            result = item if isinstance(item, dict) else segment_live_photo(*item, refine=True)
+            if monotonic() > deadline:
+                raise HTTPException(status_code=503, detail="Burst processing timed out. Retrying…",
+                                    headers={"Retry-After": "1"})
+            frames.append(result)
+        return {"frames": frames}
+    except ModelBusyError as error:
+        raise HTTPException(status_code=503, detail=str(error), headers={"Retry-After": "1"}) from error
+    except HTTPException:
+        raise
+    except (ValueError, TypeError, json.JSONDecodeError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except Exception as error:
+        logging.exception("Burst SAM2 proposal failed")
         raise HTTPException(status_code=503, detail="GPU segmentation unavailable") from error
 
 

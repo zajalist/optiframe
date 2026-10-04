@@ -1,4 +1,4 @@
-import { createLiveSegmentSession } from './live-segment.js?v=21';
+import { createLiveSegmentSession } from './live-segment.js?v=22';
 import { sheetHomography, project, measure } from './calibration.js';
 import { detectSheetMarkers } from './marker-detect.js?v=9';
 
@@ -294,14 +294,14 @@ function completeMarkers(capture, automatic = false) {
   }
 }
 
-async function acceptCapture({ file, contour, width, height, markers }) {
+async function acceptCapture({ file, contour, width, height, markers, refinement }) {
   const generation = captureGeneration;
   const capturedSide = side;
   const bitmap = await createImageBitmap(file);
   if (generation !== captureGeneration || capturedSide !== side) { bitmap.close(); return; }
   const scaleX = bitmap.width / width, scaleY = bitmap.height / height;
   const capture = {
-    file, bitmap, width: bitmap.width, height: bitmap.height,
+    file, bitmap, width: bitmap.width, height: bitmap.height, refinement,
     contour: contour.map(([x, y]) => [x * scaleX, y * scaleY]),
     markers: markers?.map(([x, y]) => [x * scaleX, y * scaleY]) || [], homography: null, measurement: null, rectifiedContour: null,
   };
@@ -514,7 +514,7 @@ async function openStudio() {
       if (!capture?.measurement || !capture.confirmed) throw new Error(`Confirm the ${lens} lens first`);
       return { side: lens, image: await asDataURL(capture.file),
         width: capture.width, height: capture.height,
-        contour: capture.contour, markers: capture.markers };
+        contour: capture.contour, markers: capture.markers, refinement: capture.refinement };
     }));
     if (generation !== captureGeneration || phase !== 'pair') return;
     sessionStorage.setItem('optiframe-captures', JSON.stringify(saved));

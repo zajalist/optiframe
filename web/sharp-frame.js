@@ -45,13 +45,15 @@ function wait(ms, signal) {
   });
 }
 
-/** Select a sharp original still from three fresh frames, without sharpening it.
+/** Retain a burst of fresh originals ranked by focus, without sharpening pixels.
  * box is normalized [left, top, right, bottom]. A frozen stream is never accepted.
  */
-export async function captureSharpFrame(video, { maxSide = 1920, box, signal } = {}) {
+export async function captureSharpFrame(video, { maxSide = 1920, box, signal, frameCount = 5 } = {}) {
   checkAbort(signal);
   const [left, top, right, bottom] = cropBox(box);
   if (!(maxSide > 0) || !Number.isFinite(maxSide)) throw new TypeError('Invalid capture size');
+  if (!Number.isInteger(frameCount) || frameCount < 3 || frameCount > 5)
+    throw new TypeError('Capture requires three to five frames');
   const sourceWidth = video.videoWidth, sourceHeight = video.videoHeight;
   if (!sourceWidth || !sourceHeight || (Number.isFinite(video.readyState) && video.readyState < 2))
     throw new Error('Camera is not ready');
@@ -62,13 +64,14 @@ export async function captureSharpFrame(video, { maxSide = 1920, box, signal } =
   scoreCanvas.width = Math.max(1, Math.round(cropWidth * focusScale));
   scoreCanvas.height = Math.max(1, Math.round(cropHeight * focusScale));
   const scoreContext = scoreCanvas.getContext('2d', { willReadFrequently: true });
-  let best = null, lastTime = null, count = 0;
+  const frames = [];
+  let lastTime = null;
   const started = performance.now();
-  while (count < 3 && performance.now() - started < 600) {
+  while (frames.length < frameCount && performance.now() - started < 900) {
     checkAbort(signal);
     const frameTime = video.currentTime;
     // currentTime is present on real video elements; simple test adapters may omit it.
-    if (count === 0 || !Number.isFinite(frameTime) || frameTime > lastTime) {
+    if (frames.length === 0 || !Number.isFinite(frameTime) || frameTime > lastTime) {
       const canvas = document.createElement('canvas');
       canvas.width = Math.max(1, Math.round(sourceWidth * scale));
       canvas.height = Math.max(1, Math.round(sourceHeight * scale));
@@ -78,12 +81,13 @@ export async function captureSharpFrame(video, { maxSide = 1920, box, signal } =
         (right - left) * canvas.width, (bottom - top) * canvas.height,
         0, 0, scoreCanvas.width, scoreCanvas.height);
       const sharpness = focusScore(scoreContext.getImageData(0, 0, scoreCanvas.width, scoreCanvas.height));
-      if (!best || sharpness > best.sharpness) best = { canvas, sharpness, sampledAt, capturedAt };
-      lastTime = frameTime; count++;
+      frames.push({ canvas, sharpness, sampledAt, capturedAt, id: Number.isFinite(frameTime) ? frameTime : sampledAt });
+      lastTime = frameTime;
     }
-    if (count < 3) await wait(75, signal);
+    if (frames.length < frameCount) await wait(75, signal);
   }
   checkAbort(signal);
-  if (count < 3) throw new Error('Camera stopped updating. Try again.');
-  return best;
+  if (frames.length < frameCount) throw new Error('Camera stopped updating. Try again.');
+  frames.sort((a, b) => b.sharpness - a.sharpness);
+  return { ...frames[0], frames };
 }

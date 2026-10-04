@@ -610,6 +610,7 @@ async function importSimpleCaptures() {
       if (!await panel.loadPhoto(photo)) throw new Error('Transferred photo could not be opened');
       const sx = panel.canvas.width / item.width, sy = panel.canvas.height / item.height;
       panel.points = item.contour.map(([x,y]) => [x * sx, y * sy]);
+      panel.captureRefinement = item.refinement || null;
       panel.markerPoints = item.markers.map(([x,y]) => [x * sx, y * sy]);
       panel.homography = sheetHomography(panel.markerPoints);
       if (Array.isArray(item.opticalCentre) && item.opticalCentre.length === 2 && item.opticalCentre.every(Number.isFinite)) panel.opticalCentre = [item.opticalCentre[0] * sx, item.opticalCentre[1] * sy];

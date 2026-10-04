@@ -89,6 +89,17 @@ test('confirmed pair transfers actual photos, pixel contours and calibration to 
   assert.equal(saved[0].topMark, undefined);
 });
 
+test('rectified burst evidence survives confirmation and transfer alongside the refined contour', async()=>{
+ const app=harness();
+ const evidence={method:'rectified-radial-median',acceptedFrames:4,maxSmoothingMm:.1,
+  rawContours:[{id:1,contour:[[20,20],[40,20],[40,40]]}]};
+ app.payload.refinement=evidence;
+ await confirmPair(app);app.click('primary');await tick();
+ const saved=JSON.parse(app.storage.get('optiframe-captures'));
+ assert.deepEqual(saved[0].refinement,evidence);
+ assert.deepEqual(saved[0].contour,app.payload.contour);
+});
+
 test('retry during transfer cancels stale navigation, and storage errors leave the pair retryable', async () => {
   const app = harness({deferReads:true});
   await confirmPair(app);
