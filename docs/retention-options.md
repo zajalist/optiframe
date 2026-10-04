@@ -1,8 +1,18 @@
 # Lens retention prototypes
 
-`settings.retention_style` selects actual printed geometry: `screw` (default) or
-`snap`. `preview.retentionStyle` and the ZIP's `README.json.retention_style` identify
-the selected mechanism. Neither design has been physically validated for wear.
+`settings.retention_style` selects actual printed geometry: `screw` (default),
+`snap` (shown as **Push pins**) or `clip` (shown as **Clip-in**).
+`preview.retentionStyle` and the ZIP's `README.json.retention_style` identify
+the selected mechanism. These prototypes have not been physically validated for wear.
+
+## Direct lens clip-in
+
+`clip` means the lens itself clicks into the rim. It is distinct from the separate
+push pins described below. The interface submits `clip` without substituting
+screw or pin geometry, and rejects an assembly whose reported retention differs.
+Print the kit's fit coupon before inserting a real lens. Follow the generated
+kit instructions for material, lens thickness and assembly limits; a smooth
+preview is not evidence of retention strength or a fit for every bevel.
 
 ## Screw rings
 
@@ -10,7 +20,7 @@ The existing five-part kit uses a front seat and separate rear ring per lens.
 Eight M2 through fasteners secure the rings. Two additional M2 screws form the
 temple hinges. Check the screw lengths, nuts and head clearances before assembly.
 
-## Split-pin snap rings
+## Push-pin rings (legacy `snap`)
 
 The experimental thirteen-part kit contains the same five main pieces plus eight
 printed split push pins. Each ring has four 3.4 mm bores matched by front bores.

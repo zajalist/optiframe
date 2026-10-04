@@ -10,19 +10,21 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 import numpy as np
 import trimesh
+import manifold3d
 from shapely.affinity import translate
 from shapely.geometry import LineString, Point, Polygon, box
 from shapely.ops import nearest_points, unary_union
 from shapely.strtree import STRtree
 from temple_brand import apply_temple_brand
+from outline_finish import finish_outline, MAX_BOUNDARY_SHIFT_MM, MAX_DIMENSION_SHIFT_MM
+from clip_retention import add_lens_clips, clip_fit_coupon, clip_notes
 
 
-OUTLINE_SIMPLIFICATION_MM = 0.05
 MIN_OUTLINE_CLEARANCE_MM = 0.2
 FRAME_STYLES = ("classic", "bold", "brow")
 TEMPLE_PROFILES = {"classic": "slim taper, softened end", "bold": "wide sculpted arm, deep bevel",
                    "brow": "stepped architectural arm, tapered tip"}
-RETENTION_STYLES = ("screw", "snap")
+RETENTION_STYLES = ("screw", "snap", "clip")
 
 
 def _check_nonlocal_clearance(polygon: Polygon) -> None:
@@ -84,17 +86,12 @@ def _polygon(points: list[list[float]], sign: int, pd: float, vertical_offset: f
     polygon = Polygon(array)
     if not polygon.is_valid or polygon.area < 300 or polygon.area > 4000:
         raise ValueError("Lens outline must be a simple, plausible closed shape")
-    # Test the measured boundary before simplification so cleanup cannot hide a pinch.
+    # Test the measured boundary before finishing so cleanup cannot hide a pinch.
     if polygon.minimum_clearance < MIN_OUTLINE_CLEARANCE_MM:
         _check_nonlocal_clearance(polygon)
-    # Sparse reviewed contours stay exact. Only oversampled/duplicate chains need cleanup.
-    duplicate_sample = np.any(np.linalg.norm(np.diff(np.asarray(polygon.exterior.coords), axis=0), axis=1) < 1e-10)
-    simplified = (polygon.simplify(OUTLINE_SIMPLIFICATION_MM, preserve_topology=True)
-                  if len(array) > 512 or duplicate_sample else polygon)
-    if (not simplified.is_valid or simplified.geom_type != "Polygon" or
-            polygon.boundary.hausdorff_distance(simplified.boundary) > OUTLINE_SIMPLIFICATION_MM + 1e-9):
-        raise ValueError("Outline cleanup exceeded the 0.05 mm boundary tolerance")
-    polygon = simplified
+    # Finish the original boundary once; independent simplification tolerances
+    # must not accumulate. Unsafe smoothing leaves the measured contour intact.
+    polygon = finish_outline(polygon)
     if polygon.minimum_clearance < MIN_OUTLINE_CLEARANCE_MM:
         _check_nonlocal_clearance(polygon)
     return polygon
@@ -106,8 +103,52 @@ def _extrude(shape, height: float, z: float = 0) -> trimesh.Trimesh:
     return mesh
 
 
+def _bridge_back(bridge: Polygon, outer: list[Polygon], lenses: list[Polygon],
+                 front_z: float, seat_z: list[float]) -> trimesh.Trimesh:
+    """Continuous rear bridge surface, meeting each rim at its own seat depth.
+
+    Split at the two rim envelopes so a depth ramp cannot rise into a thinner
+    lens's retainer. Keep the same 0.2 mm lens-edge clearance as the rails.
+    """
+    shape = bridge.difference(unary_union([lens.buffer(.2) for lens in lenses]))
+    x0, x1 = outer[0].bounds[2], outer[1].bounds[0]
+    minx, miny, maxx, maxy = shape.bounds
+    pieces = []
+    for lo, hi in ((minx-1, x0), (x0, x1), (x1, maxx+1)):
+        section = shape.intersection(box(lo, miny-1, hi, maxy+1))
+        if section.is_empty or section.area < 1e-9:
+            continue
+        for polygon in ([section] if section.geom_type == 'Polygon' else section.geoms):
+            if polygon.geom_type != 'Polygon' or polygon.area < 1e-9:
+                continue
+            mesh = _extrude(polygon, 1)
+            depth = np.interp(mesh.vertices[:, 0], [x0, x1], seat_z)
+            mesh.vertices[:, 2] *= front_z + depth
+            pieces.append(mesh)
+    return _union(pieces)
+
+
 def _union(meshes: list[trimesh.Trimesh]) -> trimesh.Trimesh:
     return trimesh.boolean.union(meshes, engine="manifold")
+
+
+def _regularize_front(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
+    """Collapse boolean slivers before float32 STL without changing fit scale.
+
+    Manifold64 keeps topology closed while simplifying at 0.00001 mm. Deleting
+    a collinear triangle by itself would instead leave an open export edge.
+    """
+    solid = manifold3d.Manifold(manifold3d.Mesh64(
+        np.asarray(mesh.vertices, dtype=np.float64),
+        np.asarray(mesh.faces, dtype=np.uint64)))
+    simplified = solid.simplify(.00001).to_mesh64()
+    result = trimesh.Trimesh(simplified.vert_properties[:, :3], simplified.tri_verts, process=False)
+    if not result.is_watertight or len(result.split()) != 1:
+        raise RuntimeError("Front triangulation regularization failed")
+    if np.max(np.abs(result.bounds-mesh.bounds)) > .00002:
+        raise RuntimeError("Front triangulation exceeded its geometry tolerance")
+    result.metadata.update(mesh.metadata)
+    return result
 
 
 def _holes(mesh: trimesh.Trimesh, centres: list[tuple[float, float]], radius: float,
@@ -170,10 +211,20 @@ def _snap_pin(x: float, y: float, rear_z: float) -> trimesh.Trimesh:
     return pin
 
 
-def _hinge_bore(x: float, y: float, z: float, length: float) -> trimesh.Trimesh:
+def _hinge_snap_pin(x: float, y: float) -> trimesh.Trimesh:
+    """Printed hinge pin, sharing the lens pin's split shaft and retaining ends."""
+    pin = _snap_pin(0, 0, 13.9)
+    pin.apply_transform(trimesh.transformations.rotation_matrix(math.pi / 2, (1, 0, 0)))
+    # Local Z=0 is the upper fork face; the head sits below the lower fork.
+    pin.apply_translation((x, y + 6.95, 3))
+    return pin
+
+
+def _hinge_bore(x: float, y: float, z: float, length: float,
+                radius: float = 1.1) -> trimesh.Trimesh:
     transform = trimesh.transformations.rotation_matrix(math.pi / 2, (1, 0, 0))
     transform[:3, 3] = (x, y, z)
-    return trimesh.creation.cylinder(radius=1.1, height=length, sections=32,
+    return trimesh.creation.cylinder(radius=radius, height=length, sections=32,
                                      transform=transform)
 
 
@@ -217,12 +268,15 @@ def _temple_arm(stations, centre_x, centre_y, side) -> trimesh.Trimesh:
 
 
 def _temple(side: int, length: float, pivot_x: float, pivot_y: float,
-            style: str = "classic") -> trimesh.Trimesh:
+            style: str = "classic", retention: str = "screw") -> trimesh.Trimesh:
     """Shared hinge and logo stock with three genuinely different beveled arms."""
     if style not in FRAME_STYLES:
         raise ValueError("Frame style must be classic, bold or brow")
     offset = side * 7
     fork_y = 5.7
+    # A larger plastic pin needs more material ahead of the hinge axis. Keep
+    # rear stock fixed and add 2 mm only to snap forks; screw geometry is exact.
+    fork_depth, fork_z = (16, -3) if retention in ("snap", "clip") else (14, -4)
     # The common -12..-44 stock keeps the entire 18.44 x 3.5 mm engraving flat.
     stations = [(-12, 5, 5.5, 0, .4), (-44, 5, 5.5, 0, .4)]
     if style == "classic":
@@ -244,15 +298,16 @@ def _temple(side: int, length: float, pivot_x: float, pivot_y: float,
                      (-length+1, 4.2, 5.5, -3.0, .8),
                      (-length, 3.2, 4.5, -3.0, .75)]
     parts = [
-        _beveled_block((8, 2.5, 14), (pivot_x, pivot_y - fork_y, -4)),
-        _beveled_block((8, 2.5, 14), (pivot_x, pivot_y + fork_y, -4)),
+        _beveled_block((8, 2.5, fork_depth), (pivot_x, pivot_y - fork_y, fork_z)),
+        _beveled_block((8, 2.5, fork_depth), (pivot_x, pivot_y + fork_y, fork_z)),
         _beveled_block((10, 14, 5), (pivot_x + offset / 2, pivot_y, -10)),
         _temple_arm(stations, pivot_x + offset, pivot_y, side),
     ]
     mesh = _union(parts)
     # Match the front's raised hinge axis while retaining the fork's relative shape.
     mesh.apply_translation((0, 0, 2))
-    return trimesh.boolean.difference([mesh, _hinge_bore(pivot_x, pivot_y, 3, 18)],
+    return trimesh.boolean.difference([mesh, _hinge_bore(pivot_x, pivot_y, 3, 18,
+                                                       1.7 if retention in ("snap", "clip") else 1.1)],
                                       engine="manifold")
 
 
@@ -269,6 +324,9 @@ def _build_plate(parts: dict[str, trimesh.Trimesh], width: float,
             # The outward stem face extends furthest in X and gives broad contact.
             angle = math.pi / 2 if name.startswith("right") else -math.pi / 2
             mesh.apply_transform(trimesh.transformations.rotation_matrix(angle, (0, 1, 0)))
+        elif "hinge-snap-pin" in name:
+            # Assembly hinge pins run along Y, with their heads at negative Y.
+            mesh.apply_transform(trimesh.transformations.rotation_matrix(math.pi / 2, (1, 0, 0)))
         elif "snap-pin" in name:
             # The full flat head sits on the bed; tips face upward.
             mesh.apply_transform(trimesh.transformations.rotation_matrix(math.pi, (1, 0, 0)))
@@ -323,7 +381,7 @@ def build_parts(left: list[list[float]], right: list[list[float]], settings: Set
     if settings.frame_style not in FRAME_STYLES:
         raise ValueError("Frame style must be classic, bold or brow")
     if settings.retention_style not in RETENTION_STYLES:
-        raise ValueError("Retention style must be screw or snap")
+        raise ValueError("Retention style must be screw, snap or clip")
     if not (np.isfinite([settings.left_pd, settings.right_pd]).all() and
             20 <= settings.left_pd <= 40 and 20 <= settings.right_pd <= 40):
         raise ValueError("Monocular pupil distances must each be 20–40 mm")
@@ -367,7 +425,7 @@ def build_parts(left: list[list[float]], right: list[list[float]], settings: Set
                 raise ValueError("Snap-pin heads cannot maintain their required clearance")
             snap_centres.append(group)
         centres = snap_centres
-    for group, rim in zip(centres, rim_shapes):
+    for group, rim in ([] if settings.retention_style == "clip" else zip(centres, rim_shapes)):
         clearance_radius = 2.55 if settings.retention_style == "snap" else 1.15
         if any(not rim.contains(Point(x, y).buffer(clearance_radius)) for x, y in group):
             fitting = "a snap-pin head" if settings.retention_style == "snap" else "an M2 fastener"
@@ -405,24 +463,35 @@ def build_parts(left: list[list[float]], right: list[list[float]], settings: Set
     hinge_lugs = []
     for x, y in hinge_centres:
         hinge_lugs.append(_block((8, 8, 6), (x, y, 3)))
-    face = _union([face] + rails + hinge_lugs)
+    face = _union([face, _bridge_back(bridge, outer, lenses, front_z, seat_z)] + rails + hinge_lugs)
     all_centres = centres[0] + centres[1]
-    face = _holes(face, all_centres, bore_radius, -0.5, front_z + max(seat_z) + 1)
+    if settings.retention_style != "clip":
+        face = _holes(face, all_centres, bore_radius, -0.5, front_z + max(seat_z) + 1)
     for x, y in hinge_centres:
-        face = trimesh.boolean.difference([face, _hinge_bore(x, y, 3, 9)],
+        face = trimesh.boolean.difference([face, _hinge_bore(x, y, 3, 9,
+                                                          1.7 if settings.retention_style in ("snap", "clip") else 1.1)],
                                           engine="manifold")
 
     retainers = []
-    for rim, group, seat in zip(rim_shapes, centres, seat_z):
+    for rim, group, seat in ([] if settings.retention_style == "clip" else zip(rim_shapes, centres, seat_z)):
         retainer = _extrude(rim, 1.8, front_z + seat)
         retainers.append(_holes(retainer, group, bore_radius, front_z + seat - 0.5, 2.8))
+    if settings.retention_style == "clip":
+        for lens, profile, seat in zip(lenses, outer, seat_z):
+            face = add_lens_clips(face, lens, profile, front_z+seat)
+    face = _regularize_front(face)
 
     temples = [
-        apply_temple_brand(_temple(-1, settings.temple_length, *hinge_centres[0], settings.frame_style), -1, *hinge_centres[0]),
-        _temple(1, settings.temple_length, *hinge_centres[1], settings.frame_style),
+        apply_temple_brand(_temple(-1, settings.temple_length, *hinge_centres[0], settings.frame_style, settings.retention_style), -1, *hinge_centres[0]),
+        _temple(1, settings.temple_length, *hinge_centres[1], settings.frame_style, settings.retention_style),
     ]
-    parts = {"front": face, "left-retainer": retainers[0], "right-retainer": retainers[1],
-             "left-temple": temples[0], "right-temple": temples[1]}
+    parts = {"front": face, "left-temple": temples[0], "right-temple": temples[1]}
+    if retainers:
+        parts = {"front": face, "left-retainer": retainers[0], "right-retainer": retainers[1],
+                 "left-temple": temples[0], "right-temple": temples[1]}
+    if settings.retention_style in ("snap", "clip"):
+        for side, (x, y) in zip(("left", "right"), hinge_centres):
+            parts[f"{side}-hinge-snap-pin"] = _hinge_snap_pin(x, y)
     if settings.retention_style == "snap":
         for side, group, seat in zip(("left", "right"), centres, seat_z):
             for index, (x, y) in enumerate(group, 1):
@@ -439,7 +508,9 @@ def build_parts(left: list[list[float]], right: list[list[float]], settings: Set
         "temple_profile": TEMPLE_PROFILES[settings.frame_style],
         "retention_style": settings.retention_style,
         "temple_branding": "Original OptiFrame spectacles symbol and wordmark, 21.54 x 2.6 mm, engraved 0.4 mm into the wearer's left outer temple only; right temple plain. Silver preview is illustrative infill; STL is uncoloured. Fine logo features require slicer resolution and legibility checks.",
-        "outline_cleanup_max_boundary_deviation_mm": OUTLINE_SIMPLIFICATION_MM,
+        "outline_cleanup_max_boundary_deviation_mm": MAX_BOUNDARY_SHIFT_MM,
+        "outline_cleanup_max_dimension_change_mm": MAX_DIMENSION_SHIFT_MM,
+        "outline_cleanup": "Periodic boundary smoothing, at most 0.08 mm from the reviewed contour and 0.1 mm width/height change; unsafe smoothing keeps the original. This improves surface finish, not measurement accuracy.",
         "hardware": "Eight M2 through fasteners for lens retainers; two M2 hinge screws and matching nuts. Check actual screw length and clearance.",
         "lens_edge_thickness_mm": {"left": edge_thicknesses[0], "right": edge_thicknesses[1]},
         "optical_centre_vertical_offset_mm": {"left": offsets[0], "right": offsets[1]},
@@ -454,15 +525,30 @@ def build_parts(left: list[list[float]], right: list[list[float]], settings: Set
     if settings.retention_style == "snap":
         notes.update({
             "status": "experimental snap-pin print test; insertion force, retention, fatigue and lens fit are not physically validated",
-            "hardware": "Eight printed split snap pins included; two M2 hinge screws and matching nuts still required.",
+            "hardware": "Ten printed split pins included: eight lens-retainer pins and two hinge pins. No metal screws or nuts required by this prototype design.",
+            "hinge_pin": {"shaft_diameter_mm": 3.0, "bore_diameter_mm": 3.4,
+                          "barb_diameter_mm": 3.8, "head_diameter_mm": 5.0,
+                          "grip_length_mm": 13.9, "axial_clearance_per_end_mm": .15,
+                          "fork_to_lug_gap_mm": .45, "minimum_lug_wall_mm": 1.3},
             "snap_pin": {"shaft_diameter_mm": 3.0, "bore_diameter_mm": 3.4,
                          "barb_diameter_mm": 3.8, "head_diameter_mm": 5.0,
                          "split_width_mm": .7, "axial_clearance_per_end_mm": .15,
                          "grip_length_mm": {"left": front_z+seat_z[0]+1.8,
                                             "right": front_z+seat_z[1]+1.8}},
-            "assembly": "Seat each lens, place its matching rear ring, then insert its four thickness-matched split pins from the rear until the barbs clear the front face. Never force a lens. Pin removal requires compressing both barbs from the front; accessibility and repeated removal are not validated.",
+            "assembly": "Seat each lens, place its matching rear ring, then insert its four thickness-matched split pins from the rear until the barbs clear the front face. Align each temple fork around its front lug and insert one long hinge pin from below, head underneath and barbs above. Never force a lens. Removal requires compressing both exposed barbs; accessibility, hinge friction and repeated removal are not validated.",
             "supports": "Plate places pins head-down. PETG is a starting material for coupons only: thin split legs, barb overhangs and layer adhesion require slicer review and destructive retention tests. Review temple and hinge supports too.",
             "warning": "Experimental snap mechanism, not a validated wearable product. First print one pin plus a same-thickness bore coupon and test insertion, pullout and fatigue without a lens. Do not rely on these dimensions for brittle resin or PLA. Lens power and optical centres still require an eye care professional.",
+        })
+    if settings.retention_style == "clip":
+        notes.update({
+            "status": "experimental direct lens clips; insertion, retention and hinge fatigue are not physically validated",
+            "hardware": "Two printed hinge pins included. Lenses are retained directly by four integral spring clips each; no rear rings, loose lens pins, metal screws or nuts.",
+            "direct_clip": clip_notes(),
+            "coupons": ["left-clip-fit-coupon.stl", "right-clip-fit-coupon.stl"],
+            "coupon_scope": "Each coupon uses that lens's edge thickness with a 22 mm radius reference rim and the same spring cross-section; it tests printing and material response, not the full measured lens contour.",
+            "assembly": "Test both edge-thickness coupons first with expendable material. Seat a lens against the front lip and gently deflect the four rear clip noses outward to admit its edge. Do not force glass or rely on an audible click. Confirm all noses overlap the edge. Hinge pins insert from below with barbs above.",
+            "supports": "Review 0.6 mm under-arm air slots and nose overhangs in the slicer; fused slots prevent spring motion. Support removal, print direction and PETG flexibility need coupon tests. Hinge pins are placed head-down.",
+            "warning": "Experimental direct clips, not validated wearable eyewear. Print the supplied coupons before the frame and measure insertion force, pullout, creep and fatigue. Thickness alone does not describe a lens bevel or curved edge; reject poor fit. No brittle resin or PLA retention claim.",
         })
     notes["alignment_source"] = settings.alignment_source
     notes["measurement_source"] = settings.measurement_source
@@ -508,6 +594,9 @@ def preview(left: list[list[float]], right: list[list[float]], settings: Setting
 
 def generate(left: list[list[float]], right: list[list[float]], settings: Settings) -> tuple[bytes, dict]:
     parts, _, notes = build_parts(left, right, settings)
+    if settings.retention_style == "clip":
+        for side, thickness in zip(("left", "right"), settings.edge_thicknesses()):
+            parts[f"{side}-clip-fit-coupon"] = clip_fit_coupon(thickness)
     plate = _build_plate(parts, settings.bed_width, settings.bed_depth)
     stream = io.BytesIO()
     with ZipFile(stream, "w", ZIP_DEFLATED) as archive:

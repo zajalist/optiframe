@@ -47,7 +47,7 @@
         ['Inspect the frame', 'Rotate the preview. Check seats, retainers and hinges; confirm lens orientation and wearer fit with the provider.', 'preview'],
         ['Download the parts', 'One front, two retainers and two temples. Download separate STLs or the arranged plate.', 'kit'],
         ['Print at actual size', 'Import in millimetres at 100%. Choose your printer and material profile; check orientation and supports.', 'slice'],
-        ['Assemble and check', 'Follow the hardware list in your selected Screw or Snap kit. Check clearances and lens fit. Have the provider verify alignment before wear.', 'assembly'],
+        ['Assemble and check', 'Follow your kit’s Screw, Push pins or Clip-in instructions. Print its retention test first. Have the provider verify alignment before wear.', 'assembly'],
       ],
     },
   };

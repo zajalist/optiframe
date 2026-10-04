@@ -1,8 +1,8 @@
-import * as service from './account-service.js?v=43';
+import * as service from './account-service.js?v=49';
 const $=id=>document.getElementById(id);
 let mode='create',busy=false,account=null,requestOffset=0;
 function notice(text='',error=false){$('notice').textContent=text;$('notice').classList.toggle('error',error);}
-function setMode(next){mode=next;for(const key of ['create','signin'])$(`${key}-tab`).setAttribute('aria-pressed',String(key===mode));$('submit-auth').textContent=mode==='create'?'Create account':'Sign in';$('password').autocomplete=mode==='create'?'new-password':'current-password';$('password-hint').hidden=mode!=='create';$('forgot').hidden=mode!=='signin';notice();}
+function setMode(next){mode=next;for(const key of ['create','signin'])$(`${key}-tab`).setAttribute('aria-pressed',String(key===mode));$('submit-auth').textContent=mode==='create'?'Create account':'Sign in';$('password').autocomplete=mode==='create'?'new-password':'current-password';$('password').minLength=mode==='create'?12:1;$('password-hint').hidden=mode!=='create';$('forgot').hidden=mode!=='signin';notice();}
 function application(){return {platform:document.querySelector('[name=platform]:checked').value,role:$('role').value,note:$('note').value,consent:$('consent').checked};}
 function render(value){
   account=value;$('auth').hidden=!!value.user;$('member').hidden=!value.user;$('recovery').hidden=!value.passwordRecovery;$('retry').hidden=true;

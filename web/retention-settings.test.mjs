@@ -22,4 +22,8 @@ test('retention defaults safely, persists valid choices, and submits selection t
  assert.throws(()=>h.context.setRetentionStyle('glue'),/Unknown lens retention/);
  assert.equal(h.context.getRetentionStyle(),'snap');
  assert.equal(harness('snap').context.getRetentionStyle(),'snap');
+ h.context.setRetentionStyle('clip');assert.equal(h.storage.get('optiframe-retention-style'),'clip');
+ assert.equal(h.context.framePayload().settings.retention_style,'clip');assert.equal(h.invalidations,2);
+ assert.equal(harness('clip').context.getRetentionStyle(),'clip');
+ assert.equal(harness(null).context.getRetentionStyle(),'screw');
 });

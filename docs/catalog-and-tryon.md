@@ -25,7 +25,7 @@ concepts are labels for style selection; the large interactive viewer is the
 actual geometry made around the captured contours. Art is about 10.6 KB WebP,
 embedded locally with provenance in `web/assets/catalog-provenance.json`.
 
-The fitting catalog also offers Screw and experimental Snap retention. Both
+The fitting catalog offers Screw, experimental Push pins (`snap`) and Clip-in (`clip`) retention. All
 selections persist, invalidate stale previews, rebuild the actual assembly, and
 flow through to STL export. In Parts view, snap pins separate from the retaining
 rings. See [retention options](retention-options.md) and

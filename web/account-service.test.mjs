@@ -74,3 +74,21 @@ test('auth failure text never repeats provider credential details',async()=>{
   const f=fixture({signupError:{message:'a@example.com already exists'}});
   await assert.rejects(f.service.signUp({email:'a@example.com',password:'long-password'}),error=>!error.message.includes('a@example.com') && !error.message.includes('exists'));
 });
+
+test('new signup and recovery passwords require twelve characters before calling auth',async()=>{
+  const f=fixture({user:{id:'user-a',email:'a@example.com'}});
+  for(const password of ['old-pass','eleven-char']){
+    await assert.rejects(f.service.signUp({email:'a@example.com',password}),/12 and 128/);
+    await assert.rejects(f.service.updatePassword(password),/12 and 128/);
+  }
+  assert.equal(f.calls.some(call=>['signup','update-user'].includes(call[0])),false);
+  await f.service.signUp({email:'a@example.com',password:'twelve-chars'});
+  await f.service.updatePassword('twelve-chars');
+  assert.equal(f.calls.filter(call=>['signup','update-user'].includes(call[0])).length,2);
+});
+
+test('existing shorter passwords still reach sign-in unchanged',async()=>{
+  const f=fixture();await f.service.signIn({email:'a@example.com',password:'old-pass'});
+  assert.equal(f.calls.find(call=>call[0]==='login')[1].password,'old-pass');
+  await assert.rejects(f.service.signIn({email:'a@example.com',password:''}),/Enter your password/);
+});

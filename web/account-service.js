@@ -28,9 +28,9 @@ export function validateConfig(config) {
   return {supabaseUrl: url.origin, supabasePublishableKey: key, googleEnabled: config.googleEnabled === true};
 }
 
-function credentials({email, password}) {
+function credentials({email, password}, minimumLength=1) {
   email=validateEmail(email);
-  if (typeof password !== 'string' || password.length < 8 || password.length > 128) throw new Error('Use a password between 8 and 128 characters.');
+  if (typeof password !== 'string' || password.length < minimumLength || password.length > 128) throw new Error(minimumLength===12?'Use a password between 12 and 128 characters.':'Enter your password (up to 128 characters).');
   return {email: email.trim(), password};
 }
 
@@ -125,7 +125,7 @@ export function createAccountService({fetcher=globalThis.fetch, importSdk=()=>im
     return {user,application,...await readAccess(api,user),googleEnabled:configValue.googleEnabled,passwordRecovery:!!user && new URLSearchParams(location.search || '').get('recovery') === '1'};
   }
   async function signUp({email,password,application}) {
-    const login=credentials({email,password}), value=application ? validateApplication(application) : null;
+    const login=credentials({email,password},12), value=application ? validateApplication(application) : null;
     const api=await client();
     const {data,error}=await api.auth.signUp({...login,options:{emailRedirectTo:redirectTo()}});
     if (error) throw new Error('Could not create an account. Try signing in or try again later.');
@@ -162,7 +162,7 @@ export function createAccountService({fetcher=globalThis.fetch, importSdk=()=>im
     return {message:'If an account exists, a password reset link will be sent.'};
   }
   async function updatePassword(password) {
-    credentials({email:'validation@example.com',password});
+    credentials({email:'validation@example.com',password},12);
     const api=await client();
     if (!await currentUser(api)) throw new Error('Open a valid password reset link first.');
     const {error}=await api.auth.updateUser({password});

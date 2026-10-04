@@ -9,7 +9,7 @@ const styles = [
 export function mountFrameCatalog({body, viewer, status, panels, getStyle, setStyle, getRetention, setRetention, getAssembly, rebuild, onUpdate, leftPd, rightPd, visualTryOn}) {
   let alive = true, busy = false, building = false, closeTryOn = null;
   if (!document.querySelector('link[data-frame-catalog]')) {
-    const css=document.createElement('link');css.rel='stylesheet';css.href=new URL('./frame-catalog.css?v=43',import.meta.url).href;
+    const css=document.createElement('link');css.rel='stylesheet';css.href=new URL('./frame-catalog.css?v=49',import.meta.url).href;
     css.dataset.frameCatalog='';document.head.append(css);
   }
   const choices = document.createElement('div'); choices.className='frame-catalog';
@@ -52,9 +52,9 @@ export function mountFrameCatalog({body, viewer, status, panels, getStyle, setSt
   }
   const actions=document.createElement('div');actions.className='catalog-actions';
   const retention=document.createElement('div');retention.className='catalog-retention';retention.setAttribute('role','group');retention.setAttribute('aria-label','Lens retention');
-  for(const [id,name] of [['screw','Screw'],['snap','Snap']]){
+  for(const [id,name] of [['screw','Screw'],['snap','Push pins'],['clip','Clip-in']]){
     const choice=document.createElement('button');choice.type='button';choice.dataset.retention=id;choice.textContent=name;
-    choice.setAttribute('aria-label',id==='snap'?'Snap retention, experimental':'Screw retention');
+    choice.setAttribute('aria-label',id==='screw'?'Screw retention':`${name} retention, experimental`);
     choice.addEventListener('click',async()=>{
       if(building||getRetention()===id)return;
       setRetention(id);refresh();onUpdate();await build();

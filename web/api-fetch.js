@@ -1,4 +1,4 @@
-import { getAccessToken, loadAccount } from './account-service.js?v=43';
+import { getAccessToken, loadAccount } from './account-service.js?v=49';
 
 export function createApiFetch({fetcher=globalThis.fetch,location=globalThis.location,token=getAccessToken}={}) {
   return async (url, options={}) => {

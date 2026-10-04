@@ -1,4 +1,4 @@
-import {apiFetch} from './api-fetch.js?v=43';
+import {apiFetch} from './api-fetch.js?v=49';
 const $ = id => document.getElementById(id);
 const access = new URLSearchParams(location.hash.slice(1)).get('access');
 $('home').hash = location.hash;
@@ -35,7 +35,7 @@ function renderSelection() {
   document.querySelectorAll('[data-style]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.style === style)));
   document.querySelectorAll('[data-retention]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.retention === retention)));
   $('model-name').textContent = style[0].toUpperCase() + style.slice(1);
-  $('fit-note').textContent = retention === 'snap' ? 'Experimental snap fit · Test retention first' : 'Experimental fit · Verify before wear';
+  $('fit-note').textContent = retention === 'clip' ? 'Experimental clip-in · Print a fit coupon first' : retention === 'snap' ? 'Experimental push pins · Test retention first' : 'Experimental fit · Verify before wear';
   $('download').disabled = !ready || exporting;
 }
 async function build() {

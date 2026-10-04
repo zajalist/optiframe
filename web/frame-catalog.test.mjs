@@ -59,8 +59,13 @@ test('invalid print measurements do not block independent visual try-on',async()
 });
 test('switching retention rebuilds the actual assembly and invalidates try-on until ready',async()=>{
  const h=harness();h.pending.shift().resolve();await tick();
+ assert.deepEqual(h.retention.children.map(button=>[button.dataset.retention,button.textContent]),[['screw','Screw'],['snap','Push pins'],['clip','Clip-in']]);
  const pending=h.retention.children[1].handlers.click();assert.equal(h.tryOn.disabled,true);
  assert.equal(h.retention.children[1].attrs['aria-pressed'],'true');
  assert.deepEqual(h.calls,['classic/screw','classic/snap']);
  h.pending.shift().resolve();await pending;assert.equal(h.tryOn.disabled,false);
+ const clip=h.retention.children[2].handlers.click();assert.equal(h.tryOn.disabled,true);
+ assert.equal(h.retention.children[2].attrs['aria-pressed'],'true');
+ assert.deepEqual(h.calls,['classic/screw','classic/snap','classic/clip']);
+ h.pending.shift().resolve();await clip;assert.equal(h.tryOn.disabled,false);
 });

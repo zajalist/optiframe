@@ -10,7 +10,9 @@ import numpy as np
 
 from shapely.geometry import Point, Polygon
 from frame import (Settings, generate, preview, build_parts, _polygon, _outer_profile,
-                   OUTLINE_SIMPLIFICATION_MM, FRAME_STYLES)
+                   FRAME_STYLES)
+from outline_finish import (MAX_BOUNDARY_SHIFT_MM, MAX_DIMENSION_SHIFT_MM,
+                            boundary_distance_upper_bound)
 
 
 def ellipse(rx, ry, count=96):
@@ -25,11 +27,19 @@ def bed_contact_area(mesh):
 
 
 class FrameTests(unittest.TestCase):
+    def assert_lens_envelope(self, bounds, measured_bounds):
+        # CAD finishing may adjust XY within its explicit displacement budget.
+        # Optical placement and measured extrusion thickness must remain exact.
+        bounds, measured_bounds = np.asarray(bounds), np.asarray(measured_bounds)
+        np.testing.assert_allclose(bounds[:, :2], measured_bounds[:, :2],
+                                   atol=MAX_BOUNDARY_SHIFT_MM, rtol=0)
+        np.testing.assert_allclose(bounds[:, 2], measured_bounds[:, 2], atol=1e-5, rtol=0)
+
     def test_snap_kit_has_real_split_pins_and_independent_thickness_grips(self):
         settings = Settings(33, 33, 2.5, 125, left_edge_thickness=1,
                             right_edge_thickness=6, retention_style="snap")
         parts, _, notes = build_parts(ellipse(25, 19), ellipse(23, 17), settings)
-        self.assertEqual(len(parts), 13)
+        self.assertEqual(len(parts), 15)
         self.assertEqual(notes["retention_style"], "snap")
         self.assertAlmostEqual(notes["snap_pin"]["grip_length_mm"]["left"], 5.1)
         self.assertAlmostEqual(notes["snap_pin"]["grip_length_mm"]["right"], 10.1)
@@ -65,14 +75,14 @@ class FrameTests(unittest.TestCase):
                       for p in result["meshes"] if p["kind"] == "printed"}
             archive, notes = generate(ellipse(25, 19), ellipse(23, 17), settings)
             with ZipFile(io.BytesIO(archive)) as files:
-                self.assertEqual(len([n for n in files.namelist() if n.endswith(".stl")]), 14)
+                self.assertEqual(len([n for n in files.namelist() if n.endswith(".stl")]), 16)
                 for name, expected in meshes.items():
                     actual = trimesh.load(io.BytesIO(files.read(name+".stl")), file_type="stl")
                     self.assertTrue(actual.is_watertight, name)
                     np.testing.assert_allclose(actual.bounds, expected.bounds, atol=1e-4)
                 plate = trimesh.load(io.BytesIO(files.read("plate.stl")), file_type="stl")
             pieces = list(plate.split())
-            self.assertEqual(len(pieces), 13)
+            self.assertEqual(len(pieces), 15)
             for piece in pieces:
                 self.assertAlmostEqual(piece.bounds[0, 2], 0, places=5)
                 self.assertGreater(bed_contact_area(piece), 15)
@@ -87,7 +97,7 @@ class FrameTests(unittest.TestCase):
     def test_snap_rejects_bad_retention_and_undersized_bed_without_bypassing_geometry(self):
         with self.assertRaisesRegex(ValueError, "Retention style"):
             build_parts(ellipse(25, 19), ellipse(23, 17), Settings(33, 33, 2.5, 125, retention_style="glue"))
-        with self.assertRaisesRegex(ValueError, "full 13-part kit"):
+        with self.assertRaisesRegex(ValueError, "full 15-part kit"):
             generate(ellipse(25, 19), ellipse(23, 17), Settings(33, 33, 2.5, 125, 150, 70, retention_style="snap"))
         with self.assertRaisesRegex(ValueError, "outer rims.*clearance"):
             build_parts(ellipse(25, 19), ellipse(23, 17), Settings(27, 27, 2.5, 125, retention_style="snap"))
@@ -136,7 +146,7 @@ class FrameTests(unittest.TestCase):
                 self.assertEqual(result["opticalCentres"], [[-33, 0, 2.15], [33, 0, 2.15]])
                 meshes = {part["name"]: trimesh.Trimesh(vertices=part["vertices"], faces=part["faces"])
                           for part in result["meshes"]}
-                np.testing.assert_allclose(meshes["left-lens"].bounds,
+                self.assert_lens_envelope(meshes["left-lens"].bounds,
                                            [[-58, -19, 2.15], [-8, 19, 4.65]])
                 data, notes = generate(left, right, settings)
                 self.assertEqual(notes["frame_style"], style)
@@ -175,8 +185,31 @@ class FrameTests(unittest.TestCase):
         polygon = _polygon(points, 1, 0)
         original = Polygon([[x, -y] for x, y in points])
         self.assertTrue(polygon.is_valid)
-        self.assertLessEqual(original.boundary.hausdorff_distance(polygon.boundary),
-                             OUTLINE_SIMPLIFICATION_MM + 1e-9)
+        self.assertLessEqual(boundary_distance_upper_bound(original, polygon),
+                             MAX_BOUNDARY_SHIFT_MM)
+
+    def test_scanned_contours_have_less_tangent_jitter_with_bounded_finishing(self):
+        payload = json.loads((Path(__file__).parent / 'fixtures' / 'scanned-lens-outlines.json').read_text())
+
+        def roughness(polygon):
+            line = polygon.exterior
+            points = np.array([line.interpolate(at).coords[0]
+                               for at in np.linspace(0, line.length, 720, endpoint=False)])
+            vectors = np.roll(points, -1, axis=0) - points
+            following = np.roll(vectors, -1, axis=0)
+            turns = np.arctan2(vectors[:, 0]*following[:, 1] - vectors[:, 1]*following[:, 0],
+                              np.sum(vectors*following, axis=1))
+            return np.mean(turns**2)
+
+        for side in ('left', 'right'):
+            with self.subTest(side=side):
+                original = Polygon([[x, -y] for x, y in payload[side]])
+                result = _polygon(payload[side], 1, 0)
+                self.assertLessEqual(boundary_distance_upper_bound(original, result), MAX_BOUNDARY_SHIFT_MM)
+                size_delta = (np.subtract(result.bounds[2:], result.bounds[:2]) -
+                              np.subtract(original.bounds[2:], original.bounds[:2]))
+                self.assertLessEqual(np.max(np.abs(size_delta)), MAX_DIMENSION_SHIFT_MM)
+                self.assertLess(roughness(result), roughness(original)*.85)
 
     def test_true_narrow_neck_and_crossed_edges_remain_rejected(self):
         neck = [[-25,-15],[-5,-15],[-5,-.05],[5,-.05],[5,-15],[25,-15],
@@ -194,7 +227,9 @@ class FrameTests(unittest.TestCase):
         result = preview(payload['left'], payload['right'], settings)
         self.assertEqual(len(result['meshes']), 7)
         archive, notes = generate(payload['left'], payload['right'], settings)
-        self.assertEqual(notes['outline_cleanup_max_boundary_deviation_mm'], .05)
+        self.assertEqual(notes['outline_cleanup_max_boundary_deviation_mm'], .08)
+        self.assertEqual(notes['outline_cleanup_max_dimension_change_mm'], .1)
+        self.assertIn('not measurement accuracy', notes['outline_cleanup'])
         with ZipFile(io.BytesIO(archive)) as files:
             self.assertEqual(len([name for name in files.namelist() if name.endswith('.stl')]), 6)
             for name in files.namelist():
@@ -211,10 +246,10 @@ class FrameTests(unittest.TestCase):
         assembly = preview(left, right, settings)
         meshes = {part["name"]: trimesh.Trimesh(vertices=part["vertices"], faces=part["faces"])
                   for part in assembly["meshes"]}
-        np.testing.assert_allclose(meshes["left-lens"].bounds,
-                                   [[-57, -16, 2.15], [-7, 22, 3.55]], atol=1e-4)
-        np.testing.assert_allclose(meshes["right-lens"].bounds,
-                                   [[8, -19, 2.15], [54, 15, 6.35]], atol=1e-4)
+        self.assert_lens_envelope(meshes["left-lens"].bounds,
+                                   [[-57, -16, 2.15], [-7, 22, 3.55]])
+        self.assert_lens_envelope(meshes["right-lens"].bounds,
+                                   [[8, -19, 2.15], [54, 15, 6.35]])
         self.assertEqual(assembly["opticalCentres"], [[-32, 3, 2.15], [31, -2, 2.15]])
         data, notes = generate(left, right, settings)
         self.assertEqual(notes["lens_edge_thickness_mm"], {"left": 1.4, "right": 4.2})
@@ -257,8 +292,8 @@ class FrameTests(unittest.TestCase):
                 exported = trimesh.load(io.BytesIO(archive.read(name + ".stl")), file_type="stl")
                 np.testing.assert_allclose(meshes[name].bounds, exported.bounds, atol=1e-4)
                 self.assertAlmostEqual(meshes[name].volume, exported.volume, delta=0.02)
-        np.testing.assert_allclose(meshes["left-lens"].bounds, [[-57, -19, 2.15], [-7, 19, 4.65]])
-        np.testing.assert_allclose(meshes["right-lens"].bounds, [[8, -17, 2.15], [54, 17, 4.65]])
+        self.assert_lens_envelope(meshes["left-lens"].bounds, [[-57, -19, 2.15], [-7, 19, 4.65]])
+        self.assert_lens_envelope(meshes["right-lens"].bounds, [[8, -17, 2.15], [54, 17, 4.65]])
         self.assertEqual(result["opticalCentres"], [[-32, 0, 2.15], [31, 0, 2.15]])
         # Preview remains available to inspect an assembly before choosing a larger bed.
         self.assertEqual(len(preview(left, right, Settings(32, 31, 2.5, 125, 150, 70))["meshes"]), 7)
@@ -318,12 +353,16 @@ class FrameTests(unittest.TestCase):
             self.assertAlmostEqual(mesh.bounds[0, 2], 0, places=5)
 
     def test_assembly_hinge_bores_share_raised_axis(self):
-        data, _ = generate(ellipse(25, 19), ellipse(23, 17), Settings(32, 31, 2.5, 125))
+        left, right = ellipse(25, 19), ellipse(23, 17)
+        data, _ = generate(left, right, Settings(32, 31, 2.5, 125))
+        # Hinge tabs follow the finished lens envelope. The classic rim adds
+        # 5.3 mm of stock and the hinge axis remains 8 mm beyond that stock.
+        pivots = (("left-temple", _polygon(left, -1, 32).bounds[0] - 5.3 - 8),
+                  ("right-temple", _polygon(right, 1, 31).bounds[2] + 5.3 + 8))
         with ZipFile(io.BytesIO(data)) as archive:
             front = trimesh.load(io.BytesIO(archive.read("front.stl")), file_type="stl")
             self.assertAlmostEqual(front.bounds[0, 2], 0, places=5)
-            for name, pivot_x in (("left-temple", -32 - 25 - 5.3 - 8),
-                                  ("right-temple", 31 + 23 + 5.3 + 8)):
+            for name, pivot_x in pivots:
                 temple = trimesh.load(io.BytesIO(archive.read(f"{name}.stl")), file_type="stl")
                 for mesh in (front, temple):
                     radial = np.hypot(mesh.vertices[:, 0] - pivot_x, mesh.vertices[:, 2] - 3)

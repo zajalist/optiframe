@@ -232,9 +232,12 @@ depth-gated scan.
   after centring on the optical midpoint; reverse triangle winding. Preserve
   physical scale; the current 18 mm forward placement is illustrative.
 - Styles: Classic/Bold/Brow have distinct manufactured temple profiles. Retention
-  values are `screw` (M2 hardware) and `snap` (eight printed push pins, not simply
-  forcing an arbitrary-thickness lens into a rigid rim). Both require physical
-  retention/fit tests; preserve seats, hinge bores and clearances.
+  values are `screw` (M2 hardware), `snap` (eight printed lens pins, two printed
+  hinge pins and separate rear rings), and `clip` (four integral spring noses
+  per lens, no rear rings or loose lens pins, two printed hinge pins). Clip kits
+  include separate edge-thickness test coupons excluded from assembled previews.
+  These are experimental geometries requiring physical retention/fit tests;
+  preserve seats, hinge bores and clearances. See `docs/direct-lens-clips.md`.
 - The real OptiFrame symbol/wordmark is engraved **only on the wearer's left
   temple**, 21.54 × 2.6 mm, 0.4 mm recess. Right temple is plain. Preview metadata
   `branding.faceIndices` selects recessed floor triangles; silver is illustrative
@@ -366,7 +369,7 @@ as verified physical alignment.
    silently become accepted edges. Inspect source and rectified views together.
 7. Actual imported frame scale/orientation/occlusion and left-only logo are
    correct while turning the head. Try-on remains a visual estimate.
-8. Both screw and snap outputs retain provenance and closed geometry. Physical
+8. Screw, printed-pin and direct-clip outputs retain provenance and closed geometry. Physical
    assembly, retention, comfort and fine engraving are independently checked.
 9. Approved account succeeds; pending/rejected/expired/offline states fail
    gracefully. No private key or service credential appears in a release build.

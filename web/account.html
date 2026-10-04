@@ -18,14 +18,14 @@
         <form id="login-form">
           <label for="email">Email</label><input id="email" type="email" autocomplete="email" maxlength="254" required>
           <div class="label-row"><label for="password">Password</label><button id="show-password" class="inline" type="button" aria-pressed="false">Show</button></div>
-          <input id="password" type="password" autocomplete="new-password" minlength="8" maxlength="128" aria-describedby="password-hint" required>
-          <p class="hint" id="password-hint">At least 8 characters.</p>
+          <input id="password" type="password" autocomplete="new-password" minlength="12" maxlength="128" aria-describedby="password-hint" required>
+          <p class="hint" id="password-hint">At least 12 characters.</p>
           <button class="primary wide" id="submit-auth" type="submit">Create account</button>
           <button class="inline wide" id="forgot" type="button" hidden>Forgot password?</button>
         </form>
         <p class="fine">Verify your email, then request access. Applications are reviewed individually.</p>
       </div>
-      <form id="recovery" hidden><h2>New password</h2><label for="new-password">Password</label><input id="new-password" type="password" autocomplete="new-password" minlength="8" maxlength="128" required><button class="primary wide" type="submit">Save password</button></form>
+      <form id="recovery" hidden><h2>New password</h2><label for="new-password">Password</label><input id="new-password" type="password" autocomplete="new-password" minlength="12" maxlength="128" aria-describedby="new-password-hint" required><p class="hint" id="new-password-hint">At least 12 characters.</p><button class="primary wide" type="submit">Save password</button></form>
       <div id="member" hidden>
         <div class="member-line"><p id="member-email"></p><button id="signout" class="inline" type="button">Sign out</button></div>
         <div id="confirmation" hidden><h2 id="access-title">Request received.</h2><p id="saved-platform"></p><p class="hint" id="access-description">Your application is awaiting approval.</p><div class="actions"><a class="primary" id="open-app" href="/index.html" hidden>Open scanner</a><a class="glass" href="/try-on.html?demo=1">Try on demo frames</a><button class="glass" id="edit-application" type="button">Edit application</button></div></div>
@@ -42,5 +42,5 @@
       <noscript><p>Enable JavaScript to sign in. You can still <a href="/welcome.html">browse OptiFrame</a>.</p></noscript>
     </section>
   </main>
-  <script type="module" src="/account.js?v=42"></script>
+  <script type="module" src="/account.js?v=49"></script>
 </body></html>

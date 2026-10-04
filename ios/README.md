@@ -8,6 +8,12 @@ In the website's frame preview, download the **iPhone app file** JSON to Files. 
 
 The front-camera ARKit face anchor follows head movement, with depth-only face geometry hiding rear frame parts behind the face. Imported millimetre dimensions are preserved: there is no automatic scale-to-face fit. Placement uses the tracked eye midpoint plus an illustrative 18 mm forward offset. This is a visual preview, not a lens-retention, optical-alignment or comfort check. Lens placeholders are flat sections from the CAD model, not measured optical surfaces. No face geometry, images, or eye positions are saved or uploaded by try-on.
 
+Assembly imports carry the generated mesh parts for Screw (`screw`), Push pins
+(`snap`) or direct lens Clip-in (`clip`). The native model decoder does not
+replace or rebuild retention geometry. A successful import confirms only visual
+compatibility; clip-in prototypes still require the generated fit coupon and
+physical retention checks.
+
 The importer accepts the direct `/api/frame-preview` schema: `schemaVersion: 1`, `units: "millimetres"`, `opticalCentres` with two XYZ triples, and `meshes` containing `name`, `kind` (`printed` or `lens`), `vertices` and triangular `faces`. Limits are 20 MB, 32 meshes, 160,000 vertices and 250,000 triangles, finite coordinates within ±500 mm, and valid nondegenerate index triples. Unknown fields are ignored. Exported STL/build-plate geometry is not accepted. CAD coordinates transform to ARFaceAnchor coordinates as `(-x, y, z) / 1000` after centring on the two optical references; triangle winding is reversed to account for the X reflection. Wearer's left maps to ARKit +X and rearward temples remain -Z.
 
 Support uses `ARFaceTrackingConfiguration.isSupported`, independently of rear LiDAR or a TrueDepth hardware assumption. Camera permission is requested only after choosing a frame. Backgrounding, camera interruptions, serious thermal pressure and tracking loss hide the overlay; returning/retrying resets tracking. A permission response arriving after dismissal cannot restart capture.

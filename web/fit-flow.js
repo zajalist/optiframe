@@ -1,9 +1,9 @@
-import { leftPanel, rightPanel, capturesReady, getImportedCaptures, getRestoredMeasurementSource, makeFrame, project, getFrameStyle, setFrameStyle, getRetentionStyle, setRetentionStyle, getFrameAssembly, applyFaceMeasurements, useManualMeasurements, getMeasurementSource, getLensAdjustments, setLensAdjustments, getAdjustedLensOutlines } from './app.js?v=47';
+import { leftPanel, rightPanel, capturesReady, getImportedCaptures, getRestoredMeasurementSource, makeFrame, project, getFrameStyle, setFrameStyle, getRetentionStyle, setRetentionStyle, getFrameAssembly, applyFaceMeasurements, useManualMeasurements, getMeasurementSource, getLensAdjustments, setLensAdjustments, getAdjustedLensOutlines } from './app.js?v=49';
 import { openFaceScan } from './face-scan.js?v=47';
 import { loadConfirmedFace, saveConfirmedFace } from './face-confirmation.js?v=39';
 import { validateFaceFit, lensReady, marksReady } from './fit-validation.js';
 import { mountPupilMeasurements } from './pupil-measurements.js?v=27';
-import { mountFrameCatalog } from './frame-catalog.js?v=45';
+import { mountFrameCatalog } from './frame-catalog.js?v=49';
 import { mountThicknessMeasurements } from './thickness-measurements.js?v=35';
 import { mountLensAdjustments } from './lens-adjustment-controls.js?v=47';
 

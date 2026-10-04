@@ -18,12 +18,13 @@
 .fit-flow .frame-style:disabled{opacity:1;cursor:progress}
 .fit-flow .frame-style:disabled:not([aria-pressed="true"]){color:#aab4c1}
 .catalog-actions{gap:10px;align-items:center;flex-wrap:wrap}
-.catalog-retention{display:flex;flex:1;min-width:145px;max-width:240px;padding:3px;border-radius:999px;background:#ffffff0b;box-shadow:inset 0 1px 1px #ffffff12}
-.fit-flow .catalog-retention button{min-width:0;flex:1;min-height:44px;padding:8px 12px;border:0;border-radius:999px;background:transparent;color:#c0cad7;font-size:13px;font-weight:550;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none}
+.catalog-retention{display:flex;flex:1 1 220px;min-width:0;max-width:320px;padding:3px;border-radius:999px;background:#ffffff0b;box-shadow:inset 0 1px 1px #ffffff12}
+.fit-flow .catalog-retention button{min-width:0;flex:1;min-height:44px;padding:8px 6px;border:0;border-radius:999px;background:transparent;color:#c0cad7;font-size:12px;font-weight:550;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none}
 .fit-flow .catalog-retention button[aria-pressed="false"]{background:transparent!important;color:#c0cad7;box-shadow:none}
 .fit-flow .catalog-retention button[aria-pressed="true"]{background:linear-gradient(155deg,#535d6a,#363e49)!important;color:#fff;box-shadow:inset 0 1px 0 #ffffff40,0 2px 5px #0002}
 .fit-flow .catalog-retention button:disabled{opacity:1;cursor:progress}
 .fit-flow .catalog-retention button:focus-visible{outline:2px solid #c4d4e7;outline-offset:1px}
+@media(max-width:380px),(max-height:440px){.catalog-retention{flex-basis:100%;max-width:none}}
 .fit-flow .catalog-tryon{min-height:46px;min-width:104px;border:1px solid #ffffff38;border-radius:999px;background:#29303a;background-image:linear-gradient(155deg,#ffffff22,#ffffff04 60%,#ffffff0b);box-shadow:inset 0 1px 1px #ffffff40;font-weight:550;font-size:14px;color:#f2f5f9}
 .fit-flow .catalog-tryon:disabled{color:#c1cbd9;opacity:.65;box-shadow:none}
 .fit-flow .frame-style:focus-visible,.fit-flow .catalog-tryon:focus-visible{outline:2px solid #c4d4e7;outline-offset:3px}

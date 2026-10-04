@@ -1,4 +1,4 @@
-import {apiFetch,requireAppAccess} from './api-fetch.js?v=43';
+import {apiFetch,requireAppAccess} from './api-fetch.js?v=49';
 await requireAppAccess();
 const panels = [...document.querySelectorAll('.lens-panel')];
 const accessKey = new URLSearchParams(location.hash.slice(1)).get('access');
@@ -44,7 +44,7 @@ function useManualMeasurements() {
   for(const side of ['left','right']) {const field=document.getElementById(`${side}-pd`);field.value='';field.dispatchEvent(new Event('input',{bubbles:true}));}
 }
 try { const saved = sessionStorage.getItem('optiframe-frame-style'); if (['classic','bold','brow'].includes(saved)) frameStyle = saved; } catch {}
-try { const saved = sessionStorage.getItem('optiframe-retention-style'); if (['screw','snap'].includes(saved)) retentionStyle = saved; } catch {}
+try { const saved = sessionStorage.getItem('optiframe-retention-style'); if (['screw','snap','clip'].includes(saved)) retentionStyle = saved; } catch {}
 function getFrameStyle() { return frameStyle; }
 function getRetentionStyle() { return retentionStyle; }
 function getFrameAssembly() { return frameAssembly; }
@@ -56,7 +56,7 @@ function setFrameStyle(value) {
   invalidateFrameResult();
 }
 function setRetentionStyle(value) {
-  if (!['screw','snap'].includes(value)) throw new Error('Unknown lens retention');
+  if (!['screw','snap','clip'].includes(value)) throw new Error('Unknown lens retention');
   if (retentionStyle === value) return;
   retentionStyle = value;
   try { sessionStorage.setItem('optiframe-retention-style', value); } catch {}
@@ -829,7 +829,7 @@ async function makeFrame(preview, experimental = false) {
       frameAssembly = assembly;
       viewer.dataset.stale = 'false';
       viewer.setAttribute('aria-label', 'Rotatable 3D preview of current frame assembly');
-      designStatus.textContent = retentionStyle === 'snap' ? 'Experimental snap fit. Print a retention test first.' : 'Frame preview. Lens curvature is not measured.';
+      designStatus.textContent = retentionStyle === 'clip' ? 'Experimental clip-in · Print a fit coupon first.' : retentionStyle === 'snap' ? 'Experimental push pins · Test retention first.' : 'Frame preview. Lens curvature is not measured.';
     } else {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
