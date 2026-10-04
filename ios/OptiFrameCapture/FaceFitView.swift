@@ -12,20 +12,24 @@ struct FaceFitView: View {
             VStack(spacing: 20) {
                 if let result = capture.result {
                     Spacer()
-                    Text("Face estimate").font(.title2.weight(.semibold))
+                    Text("Review measurements").font(.title2.weight(.semibold))
                     HStack(spacing: 32) {
                         measurement("Left", result.leftMonocularEstimateMm)
                         measurement("Right", result.rightMonocularEstimateMm)
                     }
-                    Text("Eye-tracking estimate. Have an eye-care provider verify pupil distances before printing.")
+                    Text("TrueDepth-assisted eye-position estimate. Review does not verify optical accuracy.")
                         .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
                     Spacer()
                     if let url = capture.exportURL {
                         ShareLink("Export measurements", item: url)
                             .buttonStyle(.borderedProminent).controlSize(.large)
+                    } else {
+                        Button("Confirm measurements") { capture.confirmMeasurements() }
+                            .buttonStyle(.borderedProminent).controlSize(.large)
                     }
+                    Text(capture.status).font(.footnote).foregroundStyle(.secondary)
                     Button("Retry") { capture.retry() }.buttonStyle(.bordered)
-                } else if capture.supported {
+                } else if capture.depthMeasurementSupported {
                     FaceFitPreview(session: capture.session)
                         .clipShape(RoundedRectangle(cornerRadius: 20))
                         .frame(maxHeight: .infinity)
@@ -34,13 +38,13 @@ struct FaceFitView: View {
                         .accessibilityAddTraits(.updatesFrequently)
                     ProgressView(value: capture.progress).tint(.primary)
                         .accessibilityLabel("Stable face capture")
-                    Text("Face the camera. An estimate is saved automatically.")
+                    Text("Face the camera. Review the estimate when capture completes.")
                         .font(.footnote).foregroundStyle(.secondary)
                     Button("Retry") { capture.retry() }.buttonStyle(.bordered)
                 } else {
                     Spacer()
-                    Text("Face scan unavailable").font(.title2.weight(.semibold))
-                    Text("Enter the patient's measurements in the web fitting page.")
+                    Text("TrueDepth required").font(.title2.weight(.semibold))
+                    Text("Use an iPhone with a front TrueDepth camera, or enter measured values on the website.")
                         .foregroundStyle(.secondary).multilineTextAlignment(.center)
                     Spacer()
                 }
@@ -48,7 +52,7 @@ struct FaceFitView: View {
                     .frame(minHeight: 44)
             }
             .padding(20)
-            .navigationTitle("Face measurements")
+            .navigationTitle("TrueDepth scan")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }
         }

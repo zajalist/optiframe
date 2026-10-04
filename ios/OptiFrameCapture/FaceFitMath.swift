@@ -1,5 +1,18 @@
 import Foundation
 
+/// TrueDepth is a hardware/metric-depth gate, never an accuracy certification.
+enum FaceDepthGate {
+    static func supportsMeasurement(faceTracking: Bool, trueDepth: Bool) -> Bool {
+        faceTracking && trueDepth
+    }
+    static func accepts(frameTime: Double, depthTime: Double, absolute: Bool,
+                        previousDepthTime: Double?) -> Bool {
+        guard absolute, frameTime.isFinite, depthTime.isFinite, depthTime > 0,
+              abs(frameTime-depthTime) <= 0.12 else { return false }
+        return previousDepthTime.map { depthTime > $0 } ?? true
+    }
+}
+
 struct FaceFitSample: Codable {
     let timestamp: Double
     let leftMm: Double
@@ -75,6 +88,8 @@ struct FaceFitExport: Encodable {
     let kind = "optiframe-face-fit"
     let units = "mm"
     let source = "arkit-eye-transform-estimate"
+    let depthSource = "front-truedepth-absolute"
+    let userReviewed = true
     let requiresProviderVerification = true
     let reference = "ARFaceAnchor local x=0; eye-transform origins, not clinical pupil centres"
     let createdAt: Date
@@ -94,4 +109,13 @@ struct FaceFitExport: Encodable {
         let faceTrackingSupported: Bool
         let trueDepthAvailable: Bool
     }
+}
+
+/// A captured draft is not exportable until the operator explicitly confirms review.
+struct FaceFitReview {
+    private(set) var draft: FaceFitExport?
+    private(set) var confirmed: FaceFitExport?
+    mutating func stage(_ record: FaceFitExport) { draft = record; confirmed = nil }
+    mutating func confirm() { confirmed = draft }
+    mutating func reset() { draft = nil; confirmed = nil }
 }

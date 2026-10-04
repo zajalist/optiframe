@@ -24,7 +24,7 @@ struct CaptureView: View {
                 Text(capture.depthAvailable ? "LiDAR" : "RGB + pose")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Button("Face measurements") {
+            Button("TrueDepth face scan") {
                 capture.stop()
                 faceFitting = true
             }

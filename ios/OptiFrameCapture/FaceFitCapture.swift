@@ -9,6 +9,9 @@ final class FaceFitCapture: NSObject, ObservableObject, ARSessionDelegate {
     let supported = ARFaceTrackingConfiguration.isSupported
     let trueDepthAvailable = AVCaptureDevice.default(.builtInTrueDepthCamera,
                                                      for: .video, position: .front) != nil
+    var depthMeasurementSupported: Bool {
+        FaceDepthGate.supportsMeasurement(faceTracking: supported, trueDepth: trueDepthAvailable)
+    }
     @Published private(set) var status = "Look straight ahead"
     @Published private(set) var progress = 0.0
     @Published private(set) var result: FaceFitMeasurements?
@@ -18,6 +21,8 @@ final class FaceFitCapture: NSObject, ObservableObject, ARSessionDelegate {
     private var active = false
     private var thermalObserver: NSObjectProtocol?
     private var generation = 0
+    private var previousDepthTime: Double?
+    private var review = FaceFitReview()
 
     override init() {
         super.init()
@@ -36,7 +41,7 @@ final class FaceFitCapture: NSObject, ObservableObject, ARSessionDelegate {
         active = true
         generation += 1
         let current = generation
-        guard supported else { status = "Use manual measurements on this device"; return }
+        guard depthMeasurementSupported else { status = "TrueDepth is required for this face scan"; return }
         guard !tooWarm else { status = "Phone too warm. Let it cool"; return }
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized: run()
@@ -63,6 +68,7 @@ final class FaceFitCapture: NSObject, ObservableObject, ARSessionDelegate {
         if let exportURL { try? FileManager.default.removeItem(at: exportURL) }
         exportURL = nil
         result = nil
+        review.reset()
         start()
     }
 
@@ -90,7 +96,7 @@ final class FaceFitCapture: NSObject, ObservableObject, ARSessionDelegate {
         }
     }
     private func run() {
-        guard active, supported, !tooWarm, result == nil else { return }
+        guard active, depthMeasurementSupported, !tooWarm, result == nil else { return }
         resetWindow()
         let configuration = ARFaceTrackingConfiguration()
         configuration.maximumNumberOfTrackedFaces = min(2, ARFaceTrackingConfiguration.supportedNumberOfTrackedFaces)
@@ -102,6 +108,7 @@ final class FaceFitCapture: NSObject, ObservableObject, ARSessionDelegate {
         window.reset()
         faceID = nil
         progress = 0
+        previousDepthTime = nil
     }
     private func reject(_ message: String) {
         resetWindow()
@@ -137,6 +144,17 @@ final class FaceFitCapture: NSObject, ObservableObject, ARSessionDelegate {
         if let light = frame.lightEstimate, light.ambientIntensity < 150 {
             reject("Use brighter, even light"); return
         }
+        // Front depth can be absent on intermediate RGB frames; skip rather than
+        // resetting every other frame. A >0.35s gap resets the sample window on append.
+        guard let depth = frame.capturedDepthData else { return }
+        guard FaceDepthGate.accepts(frameTime: frame.timestamp,
+                                    depthTime: frame.capturedDepthDataTimestamp,
+                                    absolute: depth.depthDataAccuracy == .absolute,
+                                    previousDepthTime: previousDepthTime) else {
+            if depth.depthDataAccuracy != .absolute { reject("Waiting for metric TrueDepth tracking") }
+            return
+        }
+        previousDepthTime = frame.capturedDepthDataTimestamp
         guard let sample = FaceFitWindow.sample(timestamp: frame.timestamp,
             leftXMetres: Double(face.leftEyeTransform.columns.3.x),
             rightXMetres: Double(face.rightEyeTransform.columns.3.x)) else {
@@ -152,6 +170,16 @@ final class FaceFitCapture: NSObject, ObservableObject, ARSessionDelegate {
                            thermalState: thermalName),
             capability: .init(faceTrackingSupported: supported, trueDepthAvailable: trueDepthAvailable),
             samples: window.samples)
+        review.stage(record)
+        result = estimate
+        status = "Review your measurements"
+        session.pause()
+    }
+
+    func confirmMeasurements() {
+        guard result != nil, exportURL == nil else { return }
+        review.confirm()
+        guard let record = review.confirmed else { return }
         do {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -159,12 +187,10 @@ final class FaceFitCapture: NSObject, ObservableObject, ARSessionDelegate {
             let url = FileManager.default.temporaryDirectory
                 .appendingPathComponent("OptiFrame-face-fit-\(UUID().uuidString).json")
             try encoder.encode(record).write(to: url, options: [.atomic, .completeFileProtection])
-            result = estimate
             exportURL = url
-            status = "Estimate ready"
-            session.pause()
+            status = "Measurements confirmed"
         } catch {
-            reject("Could not save. Try again")
+            status = "Could not save. Confirm again to retry"
         }
     }
 

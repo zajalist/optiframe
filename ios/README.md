@@ -12,17 +12,19 @@ The importer accepts the direct `/api/frame-preview` schema: `schemaVersion: 1`,
 
 Support uses `ARFaceTrackingConfiguration.isSupported`, independently of rear LiDAR or a TrueDepth hardware assumption. Camera permission is requested only after choosing a frame. Backgrounding, camera interruptions, serious thermal pressure and tracking loss hide the overlay; returning/retrying resets tracking. A permission response arriving after dismissal cannot restart capture.
 
-**Build status:** the unsigned iOS Simulator app compiled successfully in [GitHub Actions run 37169212885](https://github.com/zajalist/optiframe/actions/runs/37169212885) at commit `aeb39e4805c1f7c4d34833e3138c17121321421e`. The XCTest stage was still running when this note was updated; no test-pass claim is made here. Device signing and physical iPhone execution remain unverified. This is not an App Store/TestFlight release. XcodeGen includes the new files automatically. On a Mac run the existing Xcode build/test workflow below; then test import, left/right orientation, size, face occlusion, head turns, denied permission, interruption, background/foreground, unsupported device and thermal pause on a physical iPhone. Confirm the full frame is visible and temples point behind the head before using screenshots in a demo. The simulator cannot validate live face tracking.
+**Build status:** the unsigned iOS Simulator app compiled successfully in [GitHub Actions run 37169212885](https://github.com/zajalist/optiframe/actions/runs/37169212885) at commit `aeb39e4805c1f7c4d34833e3138c17121321421e`. All 17 tests in that run passed. The later TrueDepth gate/confirmation changes require a fresh CI build and test. Device signing and physical iPhone execution remain unverified. This is not an App Store/TestFlight release. XcodeGen includes the new files automatically. On a Mac run the existing Xcode build/test workflow below; then test import, left/right orientation, size, face occlusion, head turns, denied permission, interruption, background/foreground, unsupported device and thermal pause on a physical iPhone. Confirm the full frame is visible and temples point behind the head before using screenshots in a demo. The simulator cannot validate live face tracking.
 
 Apple references: [ARFaceAnchor coordinates](https://developer.apple.com/documentation/arkit/arfaceanchor), [device support and permission](https://developer.apple.com/documentation/arkit/verifying-device-support-and-user-permission), [tracking and visualizing faces](https://developer.apple.com/documentation/arkit/tracking-and-visualizing-faces).
 
 ## Experimental face fitting
 
-Before capturing a lens, choose **Face measurements** for the optional front-camera ARKit estimate. Hold still and face the camera; a stable capture completes automatically. Export the JSON and import it in the web fitting page, or enter provider measurements manually. Left/right refer to the wearer. The estimate uses ARKit eye-transform origins and must be verified by an eye-care provider; it is not clinical pupil metrology.
+Before capturing a lens, choose **TrueDepth face scan**. This measurement mode requires both ARKit face tracking and a front TrueDepth camera. Hold still and face the camera; 21 accepted samples over at least 1.9 seconds produce a review screen. Check the left/right estimates, tap **Confirm measurements**, then **Export measurements** to Files and import that JSON on the website. Retry discards the draft. Confirmation records user review, not clinical verification. No camera card or assumed iris diameter is used.
 
-Support is checked on device. AR face tracking does not necessarily imply TrueDepth hardware. The face session pauses when iOS reports serious/critical thermal pressure, and clears partial estimates after tracking loss or backgrounding. It never saves or uploads face photos/meshes. Face entry is unavailable during an existing lens session to keep tracking coordinates separate.
+Every accepted sample must include fresh, distinct `ARFrame.capturedDepthData` with `.absolute` depth accuracy and a depth timestamp within 120 ms of its image. Intermediate RGB frames without depth are skipped; a gap over 350 ms resets the measurement window when sampling resumes. Repeatability gates remain: at most 0.4 mm standard deviation and 1.2 mm range on each side. ARKit face coordinates supply metre scale, converted to millimetres. Measurements still come from eye-transform origins: Apple defines these as eyeball centres, not clinical pupil centres. TrueDepth availability does not establish clinical PD accuracy. These thresholds require physical-device validation.
 
-See [capabilities, schema and validation limits](../docs/face-fitting.md). This feature still needs an Xcode build and physical iPhone validation; it is not accessible through Safari's camera API.
+Non-TrueDepth phones cannot enter this measurement mode; general visual try-on remains available wherever ARKit face tracking is supported. Serious/critical thermal pressure pauses the face session; tracking loss and backgrounding clear partial estimates. No face images, depth maps or meshes are saved/uploaded. Only the confirmed measurement record and numeric samples are exported. Face entry is unavailable during an existing lens capture session to keep coordinates separate.
+
+See [capabilities, schema and validation limits](../docs/face-fitting.md). The new TrueDepth gate and explicit confirmation changes require a fresh CI build/test and physical iPhone validation. Safari cannot expose this native ARKit/TrueDepth workflow.
 
 ## Capture sequence
 
@@ -44,6 +46,14 @@ Original JPEGs are always preserved. Enhanced JPEGs use modest contrast and lumi
 Controls scroll on small iPhones while the camera retains a 260-point height. Capture checks every saved frame against an 85 MB budget including a conservative raw-cloud reserve. A rejected frame is removed before manifest append, keeping prior frames exportable beneath the 90 MB ZIP budget; the reserve leaves room for archive headers and manifest metadata.
 
 ## Build and device test
+
+### Current install blocker
+
+There is no signed installable iPhone build or TestFlight release in this repository. `project.yml` has a bundle identifier but no development team or signing identity, and CI uses `CODE_SIGNING_ALLOWED=NO` for the Simulator. This Windows workspace cannot perform Xcode device signing. A Mac with Xcode, the user's Apple development team and a connected iPhone can build/run the app; TestFlight additionally needs the user's Apple Developer distribution setup. The unsigned Simulator build is not an iPhone installer.
+
+The face JSON remains version 1/source `arkit-eye-transform-estimate`. Confirmed exports add `depthSource: "front-truedepth-absolute"` and `userReviewed: true`; `requiresProviderVerification: true`, measurements, quality, capability and samples remain. Older files without the new fields are legacy estimates, not evidence of a depth-gated scan. Native try-on currently renders engraving in the frame colour; the website's silver infill preview is not yet applied natively.
+
+Apple references: [capturedDepthData](https://developer.apple.com/documentation/arkit/arframe/captureddepthdata), [depth timestamp](https://developer.apple.com/documentation/arkit/arframe/captureddepthdatatimestamp), [depth accuracy](https://developer.apple.com/documentation/avfoundation/avdepthdata/accuracy), [eye-transform origin](https://developer.apple.com/documentation/arkit/arfaceanchor/lefteyetransform). Absolute depth classification is not a millimetric PD accuracy guarantee.
 
 On a Mac with Xcode and [XcodeGen](https://github.com/yonaskolb/XcodeGen):
 
