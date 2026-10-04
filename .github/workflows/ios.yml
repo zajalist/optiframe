@@ -22,8 +22,9 @@ jobs:
         run: |
           xcodebuild -project ios/OptiFrameCapture.xcodeproj -scheme OptiFrameCapture -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' CODE_SIGNING_ALLOWED=NO test
       - name: Capture native launch screen
+        timeout-minutes: 5
         run: |
-          DEVICE=$(xcrun simctl list devices available --json | python3 -c 'import json,sys; d=[v for a in json.load(sys.stdin)["devices"].values() for v in a if v["name"]=="iPhone 16"]; print(next((v["udid"] for v in d if v["state"]=="Booted"),d[-1]["udid"]))')
+          DEVICE=$(xcrun simctl list devices available --json | python3 -c 'import json,sys; d=[v for a in json.load(sys.stdin)["devices"].values() for v in a if "iPhone 16" in v["name"]]; print(next((v["udid"] for v in d if v["state"]=="Booted"),d[-1]["udid"]))')
           xcrun simctl boot "$DEVICE" || true
           xcrun simctl bootstatus "$DEVICE" -b
           APP=$(find "$HOME/Library/Developer/Xcode/DerivedData" -path '*/Debug-iphonesimulator/OptiFrameCapture.app' -type d -print -quit)
