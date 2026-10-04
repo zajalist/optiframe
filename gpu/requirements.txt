@@ -8,6 +8,7 @@ torch
 transformers>=4.57,<5
 shapely
 trimesh
+scipy
 networkx
 mapbox-earcut
 manifold3d

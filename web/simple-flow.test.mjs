@@ -107,26 +107,22 @@ test('backgrounding an enabled or changing flashlight stops the camera in normal
   }
 });
 
-test('second lens can be acknowledged without discarding the confirmed first lens', async () => {
+test('second lens proceeds automatically after an empty sheet without an extra placement button', async () => {
   const app=harness(); await tick();
-  assert.equal(app.$('lens-placed').hidden,true);
   await app.accept(app.payload); app.click('primary'); await tick();
   assert.equal(app.body.dataset.phase,'live');
-  assert.equal(app.$('lens-placed').hidden,false);
-  app.click('lens-placed');
-  assert.equal(app.replacements,1); assert.equal(app.starts,2);
-  assert.equal(app.$('lens-placed').hidden,true);
-  app.click('lens-placed'); assert.equal(app.replacements,1);
+  assert.equal(app.startOptions[1].requireRemoval,true);
+  // Live segmentation handles the empty-sheet transition without UI intervention.
+  app.controllerOptions.onRemovalChange?.(false);
+  assert.equal(app.replacements,0); assert.equal(app.starts,2);
   await app.accept(app.payload); app.click('primary');
   assert.equal(app.body.dataset.phase,'pair');
-  assert.equal(app.$('lens-placed').hidden,true);
 });
 
-test('observing the empty sheet hides the replacement button automatically', async () => {
-  const app=harness(); await tick(); await app.accept(app.payload); app.click('primary'); await tick();
-  assert.equal(app.$('lens-placed').hidden,false);
-  app.controllerOptions.onRemovalChange(false);
-  assert.equal(app.$('lens-placed').hidden,true);
+test('scanner has no redundant second-lens placement control or binding', async () => {
+  const markup=await readFile(new URL('./index.html',import.meta.url),'utf8');
+  assert.doesNotMatch(markup,/lens-placed|Second lens placed/);
+  assert.doesNotMatch(source,/lens-placed|confirmLensChanged/);
 });
 
 async function confirmPair(app) {

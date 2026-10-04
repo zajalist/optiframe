@@ -15,7 +15,10 @@ export function faceScanDeadline(promise, ms, signal, message, disposeLate = () 
     signal.addEventListener('abort', abort, { once: true });
     if (signal.aborted) abort();
     Promise.resolve(promise).then(value => {
-      if (finished) { disposeLate(value); return; }
+      if (finished) {
+        try { disposeLate(value); } catch { /* A lost device must not create an unhandled late rejection. */ }
+        return;
+      }
       finished = true; clear(); resolve(value);
     }, fail);
   });

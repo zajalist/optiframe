@@ -55,3 +55,8 @@ test('deadline times out and disposes resources that arrive later',async()=>{
   await assert.rejects(faceScanDeadline(pending.promise,2,controller.signal,'timed out',()=>disposed++),/timed out/);
   pending.resolve({});await flush();assert.equal(disposed,1);
 });
+test('a throwing late disposer does not create an unhandled rejection after cancellation',async()=>{
+  const pending=deferred(),controller=new AbortController();let disposals=0;
+  const result=faceScanDeadline(pending.promise,100,controller.signal,'timed out',()=>{disposals++;throw new Error('device already lost')});
+  controller.abort();await assert.rejects(result,{name:'AbortError'});pending.resolve({});await flush();assert.equal(disposals,1);
+});

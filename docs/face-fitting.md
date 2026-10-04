@@ -6,8 +6,8 @@ Reviewed against the official platform documentation on 3 October 2026.
 
 | Surface | Available capture | Fitting limitation |
 | --- | --- | --- |
-| Web on iPhone | Normal camera photos and calibrated lens contours | Browser camera permission does not grant ARKit face anchors or TrueDepth. Enter fitting measurements manually or import the native JSON. |
-| Web on compatible Android | ARCore-backed WebXR scene tracking; depth only when the browser/session actually exposes it | WebXR is not the native ARCore Augmented Faces API. Scene depth does not supply pupil positions. Use manual fitting or an explicitly supported native export. |
+| Web on iPhone | Camera face tracking for visual try-on and reviewed iris-based pupil-distance estimates; calibrated lens contours | Browser camera permission does not grant ARKit face anchors or TrueDepth. Iris scaling assumes typical iris size and requires measurement verification. Manual entry and native JSON import remain available. |
+| Web on compatible Android | Camera face tracking for visual try-on and reviewed iris-based pupil-distance estimates; optional ARCore-backed WebXR scene tracking | WebXR is not the native ARCore Augmented Faces API. Scene depth does not supply pupil positions. Browser iris estimates require verification. |
 | Native iPhone app | Optional `ARFaceTrackingConfiguration` with eye transforms, after checking `isSupported` | The export is an eye-origin estimate relative to an AR face midline, not a clinically measured pupil distance. TrueDepth hardware presence is reported separately. |
 | Native Android (future integration) | ARCore Augmented Faces supports a front-camera mesh and face-region poses | No Android face-fitting exporter is implemented here. A mesh is not a verified pupil measurement; it must not silently supply prescription alignment. |
 
@@ -18,6 +18,16 @@ Apple's eye transforms describe eye position and orientation relative to the fac
 ARCore Augmented Faces requires a native front-camera session configured with `MESH3D`; it exposes a central pose, region poses and mesh. The browser WebXR API exposes XR sessions and poses, and does not bridge that native face API. The web capability check must not turn `isSessionSupported('immersive-ar')` into a “face measurement supported” result. [Google Android face guide](https://developers.google.com/ar/develop/java/augmented-faces/developer-guide), [WebXR specification](https://www.w3.org/TR/webxr/)
 
 ## Native iPhone flow
+
+### Browser flow and recovery (v41)
+
+Open **Try on** for appearance or **Scan face** for a frontal camera estimate. The scan stops the camera before review; the user can edit each side, retry, enter values manually, or explicitly confirm. Only confirmed numeric values and their source are saved for fitting. Confirmation does not mark measurements as clinically verified. Lens thickness, optical centres, bridge fit and temple length are not inferred from an iris scan.
+
+Try-on startup bounds camera permission (20 s), playback (8 s), module loading (15 s), fileset setup (10 s), and each GPU/CPU model attempt (20 s). A failed GPU attempt falls back to CPU. Failures show Retry; retry releases the previous camera, model and renderer. Late results cannot revive a closed session. Closing or backgrounding releases camera access. These recovery paths have deterministic tests and mobile browser checks; physical-device tracking and measurement accuracy still need validation.
+
+Native ARKit requires the signed iPhone app. The web preview does not become an ARKit/TrueDepth session on an iPhone, and simulator compilation does not provide an installable signed release.
+
+### Native capture
 
 Open **Face measurements** before starting a lens session. It pauses the rear session, opens a separate front-camera view and checks permission/support. Existing lens frames disable entry: export them and start a new lens first, so two unrelated tracking sessions cannot mix points.
 

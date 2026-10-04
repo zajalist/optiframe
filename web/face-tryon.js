@@ -1,18 +1,22 @@
 import { facePose, opticalAnchors, landmarkToView, frameRenderLayer } from './face-tryon-geometry.js?v=37';
 import { createFrameGeometry, createFrameMaterial, configureFrameRenderer } from './frame-appearance.js?v=39';
+import { faceScanDeadline } from './face-scan.js?v=41';
 
 const VISION_VERSION = '0.10.32';
 const VISION_ROOT = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${VISION_VERSION}`;
 const MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
 let closeActive = null;
+const dispose = action => { try { action(); } catch { /* Cleanup must continue after a lost device/context. */ } };
+const stopStream = value => dispose(() => { for (const track of value?.getTracks() || []) dispose(() => track.stop()); });
+const closeModel = value => dispose(() => value?.close());
 
 // Visual fitting only. Face frames remain on the device; no camera upload endpoint.
-export async function openFaceTryOn({ assembly, leftPd, rightPd }) {
+export async function openFaceTryOn({ assembly, leftPd, rightPd }, runtime = {}) {
   closeActive?.();
   const focusBefore = document.activeElement;
   if (!document.querySelector('link[data-face-tryon]')) {
     const link = document.createElement('link');
-    link.rel = 'stylesheet'; link.href = '/face-tryon.css?v=1'; link.dataset.faceTryon = '';
+    link.rel = 'stylesheet'; link.href = '/face-tryon.css?v=41'; link.dataset.faceTryon = '';
     document.head.appendChild(link);
   }
   const dialog = document.createElement('dialog');
@@ -20,21 +24,26 @@ export async function openFaceTryOn({ assembly, leftPd, rightPd }) {
   dialog.setAttribute('aria-labelledby', 'face-tryon-title');
   dialog.innerHTML = `<div class="face-tryon-stage"><video autoplay muted playsinline aria-label="Front camera"></video></div>
     <header class="face-tryon-header"><h2 id="face-tryon-title">Visual try-on</h2><button class="face-tryon-close" type="button" aria-label="Close try-on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></header>
-    <footer class="face-tryon-footer"><p class="face-tryon-status" role="status">Opening camera…</p><p class="face-tryon-disclaimer">Appearance only · Camera stays on this device</p></footer>`;
+    <footer class="face-tryon-footer"><p class="face-tryon-status" role="status">Opening camera…</p><button class="face-tryon-retry" type="button" hidden>Retry</button><p class="face-tryon-disclaimer">Appearance only · Camera stays on this device</p></footer>`;
   document.body.appendChild(dialog);
   dialog.showModal();
   const video = dialog.querySelector('video'), stage = dialog.querySelector('.face-tryon-stage');
   const status = dialog.querySelector('.face-tryon-status');
+  const retry = dialog.querySelector('.face-tryon-retry');
   let stopped = false, stream = null, model = null, renderer = null, scene = null, resize = null, animation = 0;
+  let generation = 0, controller = null, starting = false;
+  const timeouts = { camera: 20000, playback: 8000, dependencies: 15000, fileset: 10000, model: 20000, ...runtime.timeouts };
   const say = text => { if (!stopped && status.textContent !== text) status.textContent = text; };
   const release = () => {
+    generation++; controller?.abort(); controller = null; starting = false;
     cancelAnimationFrame(animation); animation = 0;
-    stream?.getTracks().forEach(track => track.stop()); stream = null;
-    video.pause(); video.srcObject = null;
-    model?.close(); model = null;
-    resize?.disconnect(); resize = null;
-    scene?.traverse(object => { object.geometry?.dispose(); object.material?.dispose(); }); scene = null;
-    renderer?.dispose(); renderer?.forceContextLoss(); renderer = null;
+    const oldStream=stream, oldModel=model, oldResize=resize, oldScene=scene, oldRenderer=renderer;
+    stream=null;model=null;resize=null;scene=null;renderer=null;
+    dispose(() => stopStream(oldStream));
+    dispose(() => video.pause());dispose(() => {video.srcObject=null;});
+    closeModel(oldModel);dispose(() => oldResize?.disconnect());
+    dispose(() => oldScene?.traverse(object => {dispose(() => object.geometry?.dispose());for(const material of Array.isArray(object.material)?object.material:[object.material])dispose(() => material?.dispose());}));
+    dispose(() => oldRenderer?.domElement.remove());dispose(() => oldRenderer?.dispose());dispose(() => oldRenderer?.forceContextLoss());
   };
   const close = () => {
     if (stopped) return;
@@ -42,9 +51,9 @@ export async function openFaceTryOn({ assembly, leftPd, rightPd }) {
     release();
     document.removeEventListener('visibilitychange', visibility);
     window.removeEventListener('pagehide', close);
-    dialog.close(); dialog.remove();
+    dispose(() => dialog.close());dispose(() => dialog.remove());
     if (closeActive === close) closeActive = null;
-    if (focusBefore?.isConnected) focusBefore.focus({ preventScroll: true });
+    if (focusBefore?.isConnected) dispose(() => focusBefore.focus({ preventScroll: true }));
   };
   const visibility = () => { if (document.hidden) close(); };
   closeActive = close;
@@ -52,37 +61,45 @@ export async function openFaceTryOn({ assembly, leftPd, rightPd }) {
   dialog.addEventListener('cancel', event => { event.preventDefault(); close(); });
   document.addEventListener('visibilitychange', visibility);
   window.addEventListener('pagehide', close);
+  const fail = message => { release(); say(message); if (!stopped) { retry.hidden = false; retry.disabled = false; } };
 
   // Start asynchronously so callers receive cleanup even while permission/model loading is pending.
-  void (async () => {
+  const start = async () => {
+    if (stopped || starting) return;
+    release(); starting = true; retry.hidden = true; retry.disabled = true;
+    controller = new AbortController(); const signal = controller.signal, request = generation;
+    const current = () => !stopped && request === generation && !signal.aborted;
+    const bounded = (promise, step, message, dispose) => faceScanDeadline(promise, timeouts[step], signal, message, dispose);
+    say('Opening camera…');
     try {
       const anchors = opticalAnchors(assembly, leftPd, rightPd);
       if (!assembly.meshes?.length) throw new Error('Build a frame preview first.');
-      if (!navigator.mediaDevices?.getUserMedia) throw new Error('Camera unavailable. Open this page in Safari or Chrome.');
-      const opened = await navigator.mediaDevices.getUserMedia({ audio: false, video: {
+      if (!runtime.getUserMedia && !navigator.mediaDevices?.getUserMedia) throw new Error('Camera unavailable. Open this page in Safari or Chrome.');
+      const cameraRequest = runtime.getUserMedia || (constraints => navigator.mediaDevices.getUserMedia(constraints));
+      const opened = await bounded(cameraRequest({ audio: false, video: {
         facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 24, max: 30 },
-      } });
-      if (stopped) { opened.getTracks().forEach(track => track.stop()); return; }
+      } }), 'camera', 'Camera permission timed out. Tap Retry.', stopStream);
+      if (!current()) { stopStream(opened); return; }
       stream = opened;
       video.srcObject = stream;
-      await video.play();
-      if (stopped) return;
+      await bounded(video.play(), 'playback', 'Camera preview timed out. Tap Retry.');
+      if (!current()) return;
       say('Loading face tracking…');
-      const [THREE, vision] = await Promise.all([import('three'), import(`${VISION_ROOT}/vision_bundle.mjs`)]);
-      if (stopped) return;
-      const files = await vision.FilesetResolver.forVisionTasks(`${VISION_ROOT}/wasm`);
-      if (stopped) return;
+      const [THREE, vision] = await bounded((runtime.loadDependencies || (() => Promise.all([import('three'), import(`${VISION_ROOT}/vision_bundle.mjs`)])))(), 'dependencies', 'Tracking download timed out. Check your connection and retry.');
+      if (!current()) return;
+      const files = await bounded(vision.FilesetResolver.forVisionTasks(`${VISION_ROOT}/wasm`), 'fileset', 'Tracking setup timed out. Tap Retry.');
+      if (!current()) return;
       say('Starting face tracking…');
       const options = { baseOptions: { modelAssetPath: MODEL, delegate: 'GPU' }, runningMode: 'VIDEO',
         numFaces: 1, minFaceDetectionConfidence: .65, minFacePresenceConfidence: .65, minTrackingConfidence: .65 };
       let loaded;
-      try { loaded = await vision.FaceLandmarker.createFromOptions(files, options); }
+      try { loaded = await bounded(vision.FaceLandmarker.createFromOptions(files, options), 'model', 'GPU tracking timed out.', closeModel); }
       catch (error) {
-        if (stopped) return;
-        options.baseOptions.delegate = 'CPU';
-        loaded = await vision.FaceLandmarker.createFromOptions(files, options);
+        if (!current()) return;
+        say('Starting compatible tracking…');
+        loaded = await bounded(vision.FaceLandmarker.createFromOptions(files, {...options, baseOptions:{...options.baseOptions,delegate:'CPU'}}), 'model', 'Tracking startup timed out. Tap Retry.', closeModel);
       }
-      if (stopped) { loaded.close(); return; }
+      if (!current()) { closeModel(loaded); return; }
       model = loaded;
       renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
       configureFrameRenderer(THREE, renderer);
@@ -116,20 +133,24 @@ export async function openFaceTryOn({ assembly, leftPd, rightPd }) {
       const ambient=new THREE.HemisphereLight(0xffffff, 0xa8abb0, 1.8);ambient.layers.enableAll();scene.add(ambient);
       const light = new THREE.DirectionalLight(0xffffff, 2.4);light.layers.enableAll(); light.position.set(-200, 400, 700); scene.add(light);
       const resizeView = () => {
-        const width = stage.clientWidth, height = stage.clientHeight;
-        renderer.setSize(width, height);
-        camera.left = -width / 2; camera.right = width / 2; camera.top = height / 2; camera.bottom = -height / 2;
-        camera.updateProjectionMatrix();
+        if (!current() || !renderer) return;
+        try {
+          const width = Math.max(1,stage.clientWidth), height = Math.max(1,stage.clientHeight);
+          renderer.setSize(width, height);
+          camera.left = -width / 2; camera.right = width / 2; camera.top = height / 2; camera.bottom = -height / 2;
+          camera.updateProjectionMatrix();
+        } catch { fail('3D view paused. Tap Retry.'); }
       };
       resize = new ResizeObserver(resizeView); resize.observe(stage); resizeView();
+      if (!current()) return;
       renderer.domElement.addEventListener('webglcontextlost', event => {
-        event.preventDefault(); release(); say('Try-on paused. Close and try again.');
+        event.preventDefault(); if(current()) fail('3D view paused. Tap Retry.');
       });
       const matrix = basis => new THREE.Matrix4().makeBasis(...basis.map(v => new THREE.Vector3(...v)));
       let lastTime = -1, lastDetection = -Infinity, hasPose = false;
       const targetQuaternion = new THREE.Quaternion(), targetPosition = new THREE.Vector3();
       const loop = time => {
-        if (stopped || !renderer || !model) return;
+        if (!current() || !renderer || !model) return;
         // Bound synchronous inference to 12.5 fps; camera video continues at native speed.
         if (video.readyState >= 2 && video.currentTime !== lastTime && time - lastDetection >= 80) {
           lastTime = video.currentTime; lastDetection = time;
@@ -153,28 +174,31 @@ export async function openFaceTryOn({ assembly, leftPd, rightPd }) {
               hasPose = true; say('');
             } else { hasPose = false; say('Look toward the camera'); }
           } catch {
-            release(); say('Try-on paused. Close and try again.'); return;
+            fail('Tracking paused. Tap Retry.'); return;
           }
         }
         if (Number.isFinite(lastDetection) && time - lastDetection > 500) {
           frame.visible = false; skin.visible = false; hasPose = false;
           say('Camera paused');
         }
-        renderer.clear();
-        camera.layers.set(0);renderer.render(scene, camera);
-        renderer.clearDepth();
-        camera.layers.set(1);renderer.render(scene, camera);
+        try {
+          renderer.clear();
+          camera.layers.set(0);renderer.render(scene, camera);
+          renderer.clearDepth();
+          camera.layers.set(1);renderer.render(scene, camera);
+        } catch { fail('3D view paused. Tap Retry.'); return; }
         animation = requestAnimationFrame(loop);
       };
-      say('Look toward the camera'); animation = requestAnimationFrame(loop);
+      starting = false; say('Look toward the camera'); animation = requestAnimationFrame(loop);
     } catch (error) {
-      if (stopped) return;
-      release();
-      say(error.name === 'NotAllowedError' ? 'Allow camera access in browser settings, then try again.'
+      if (!current()) return;
+      fail(error.name === 'NotAllowedError' ? 'Allow camera access in browser settings, then try again.'
         : error.name === 'NotFoundError' ? 'No front camera found.'
         : error.name === 'NotReadableError' ? 'Camera is busy. Close other camera apps and try again.'
-        : /Frame|Build|Camera unavailable/.test(error.message || '') ? error.message : 'Try-on could not load. Check your connection and try again.');
+        : /Frame|Build|Camera unavailable|timed out/.test(error.message || '') ? error.message : 'Try-on could not load. Check your connection and try again.');
     }
-  })();
+  };
+  retry.addEventListener('click', () => void start());
+  void start();
   return close;
 }

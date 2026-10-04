@@ -14,4 +14,5 @@
 .face-tryon-status{margin:0;max-width:30ch;padding:11px 18px;border-radius:28px;background:#25272dd9;color:#fff;font-size:15px;line-height:1.4;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
 .face-tryon-status:empty{visibility:hidden}
 .face-tryon-disclaimer{margin:0;color:#fff;font-size:12px;line-height:1.4;text-shadow:0 1px 3px #000}
+.face-tryon .face-tryon-retry{pointer-events:auto;min-height:46px;padding:11px 30px;border:1px solid #ffffff50;border-radius:999px;color:#fff;background:linear-gradient(140deg,#ffffff28,#ffffff0c);box-shadow:inset 0 1px #ffffff30;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);font:500 15px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;cursor:pointer}.face-tryon .face-tryon-retry[hidden]{display:none}.face-tryon .face-tryon-retry:focus-visible{outline:2px solid white;outline-offset:4px}
 @media(prefers-reduced-motion:no-preference){.face-tryon[open]{animation:face-tryon-enter .18s ease-out}@keyframes face-tryon-enter{from{opacity:.8}to{opacity:1}}}

@@ -69,7 +69,7 @@ export function mountFrameCatalog({body, viewer, status, panels, getStyle, setSt
     if(!assembly||viewer.dataset.stale!=='false'){visualTryOn?.();return;}
     busy=true;refresh();
     try {
-      const {openFaceTryOn}=await import('./face-tryon.js?v=39');
+      const {openFaceTryOn}=await import('./face-tryon.js?v=41');
       if(!alive)return;
       closeTryOn=await openFaceTryOn({assembly,leftPd:leftPd(),rightPd:rightPd()});
       if(!alive)closeTryOn?.();

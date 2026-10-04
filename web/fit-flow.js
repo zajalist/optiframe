@@ -1,9 +1,9 @@
 import { leftPanel, rightPanel, capturesReady, makeFrame, project, getFrameStyle, setFrameStyle, getRetentionStyle, setRetentionStyle, getFrameAssembly, applyFaceMeasurements, useManualMeasurements, getMeasurementSource } from './app.js?v=40';
-import { openFaceScan } from './face-scan.js?v=39';
+import { openFaceScan } from './face-scan.js?v=41';
 import { loadConfirmedFace, saveConfirmedFace } from './face-confirmation.js?v=39';
 import { validateFaceFit, lensReady, marksReady } from './fit-validation.js';
 import { mountPupilMeasurements } from './pupil-measurements.js?v=27';
-import { mountFrameCatalog } from './frame-catalog.js?v=40';
+import { mountFrameCatalog } from './frame-catalog.js?v=41';
 import { mountThicknessMeasurements } from './thickness-measurements.js?v=35';
 
 if (new URLSearchParams(location.search).get('advanced') !== '1') void startFitFlow();
@@ -44,7 +44,7 @@ async function startFitFlow() {
       sessionStorage.setItem('optiframe-visual-outlines',JSON.stringify(outlines));
       // Keep the fitting flow recoverable when returning from visual try-on.
       if(captureBackup)sessionStorage.setItem('optiframe-captures',JSON.stringify(captureBackup));
-      location.href='/try-on.html?v=40'+location.hash;
+      location.href='/try-on.html?v=41'+location.hash;
     } catch(error){message.textContent=error.message;}
   }
   function inputs(ids) {

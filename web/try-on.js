@@ -61,14 +61,14 @@ $('retry').addEventListener('click',build);
 $('sample').addEventListener('click',()=>{outlines=null;void build();});
 $('try').addEventListener('click',async()=>{
   if(!assembly||opening)return;const current=assembly;opening=true;ready(true);$('try').textContent='Opening…';
-  try{closeScan?.();const {openFaceTryOn}=await import('./face-tryon.js?v=39');closeTryOn=await openFaceTryOn({assembly:current});}
+  try{closeScan?.();const {openFaceTryOn}=await import('./face-tryon.js?v=41');closeTryOn=await openFaceTryOn({assembly:current});}
   catch(error){$('status').textContent=error.message;}
   finally{opening=false;$('try').textContent='Try on';ready(Boolean(assembly));}
 });
 $('scan-face').addEventListener('click',async()=>{
   if(opening)return;opening=true;$('scan-face').disabled=true;
   try{
-    closeTryOn?.();const {openFaceScan}=await import('./face-scan.js?v=39');
+    closeTryOn?.();const {openFaceScan}=await import('./face-scan.js?v=41');
     closeScan=openFaceScan({onConfirm:values=>{
       try{saveConfirmedFace(values);renderFace();}
       catch(error){$('status').textContent=error.message||'Could not save your confirmed estimates.';}

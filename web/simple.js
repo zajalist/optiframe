@@ -23,7 +23,6 @@ const apiFetch = (url, options = {}) => fetch(url, {
 
 let side = 'left';
 let phase = 'idle';
-let waitingForReplacement = false;
 let captureGeneration = 0;
 let controller;
 let pendingPhoto = null;
@@ -191,7 +190,6 @@ function setPhase(next, message) {
   primary.setAttribute('aria-label', next === 'pair' ? 'Confirm both lenses and fit frame' : 'Confirm lens');
   photoLabel.hidden = !cameraPhase;
   $('camera-retry').hidden = next !== 'idle';
-  $('lens-placed').hidden = next !== 'live' || !waitingForReplacement;
   $('empty').textContent = next === 'idle' ? 'Camera unavailable. Retry or use a photo.' : 'Opening camera…';
   secondary.hidden = !['markers', 'aim', 'result'].includes(next);
   secondary.textContent = 'Retry';
@@ -454,10 +452,6 @@ controller = createLiveSegmentSession({
   apiFetch, side: 'lens', onCapture: acceptCapture, minimalStatus: true,
   autoCapture: true,
   onTorchChange(state) { torchState = state; renderTorch(); },
-  onRemovalChange(waiting) {
-    waitingForReplacement = waiting;
-    $('lens-placed').hidden = phase !== 'live' || !waiting;
-  },
   viewSweep: new URLSearchParams(location.search || '').get('capture') === 'sweep',
   calibrateFrame(imageData, contour) {
     const markers = detectSheetMarkers(imageData);
@@ -509,9 +503,6 @@ $('retry-right').addEventListener('click', () => retryLens('right'));
 $('camera-retry').addEventListener('click', () => { enableSound(); void startCamera(); });
 $('torch-toggle').addEventListener('click', () => {
   if (phase === 'live' && torchState.supported && !torchState.busy) void controller.setTorch(!torchState.enabled);
-});
-$('lens-placed').addEventListener('click', () => {
-  if (phase === 'live' && waitingForReplacement) controller.confirmLensChanged();
 });
 $('review-photo').addEventListener('click', () => selectResultView('photo'));
 $('review-outline').addEventListener('click', () => selectResultView('outline'));
