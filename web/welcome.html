@@ -7,18 +7,19 @@
   <meta name="description" content="Capture two recovered lenses, review their outlines, and generate an experimental printable frame around their individual shapes.">
   <title>OptiFrame — A new frame for the lenses already here.</title>
   <link rel="stylesheet" href="/assets/fonts.css">
-  <link rel="stylesheet" href="/welcome.css?v=19">
+  <link rel="stylesheet" href="/welcome.css?v=30">
   <link rel="stylesheet" href="/tutorial.css?v=27">
   <link rel="stylesheet" href="/glass.css?v=14">
   <script src="/tutorial.js?v=27" defer></script>
-  <script src="/welcome.js?v=19" type="module"></script>
+  <script src="/welcome.js?v=30" type="module"></script>
 </head>
 <body class="home">
   <a class="skip-link" href="#main">Skip to content</a>
   <header class="site-header">
-    <a class="wordmark" href="/welcome.html" data-preserve-access aria-label="OptiFrame home"><svg viewBox="0 0 44 25" aria-hidden="true"><path d="M2 12.5C2 5.4 5.2 2 11.5 2S21 5.4 21 12.5 17.8 23 11.5 23 2 19.6 2 12.5Zm21 0C23 5.4 26.2 2 32.5 2S42 5.4 42 12.5 38.8 23 32.5 23 23 19.6 23 12.5Zm-2 0h2"/></svg><span>OptiFrame</span></a>
+    <a class="wordmark" href="/welcome.html" data-preserve-access aria-label="OptiFrame home"><img src="/assets/optiframe-logo.svg" width="112" height="56" alt="OptiFrame"></a>
     <nav aria-label="Main navigation">
-      <button class="nav-guide" type="button" data-tutorial="printing">Printing guide</button>
+      <a class="nav-collection" href="#collection">Frames</a>
+      <button class="nav-guide" type="button" data-tutorial="printing">Print guide</button>
       <a class="nav-scan" href="/" data-preserve-access>Open scanner</a>
     </nav>
   </header>
@@ -36,6 +37,24 @@
         <img id="hero-image" alt="Generated concept illustration of an eyeglass frame made around two differently shaped lenses" fetchpriority="high" width="1536" height="1024" hidden>
       </figure>
     </section>
+    <section class="collection" id="collection" aria-labelledby="collection-title">
+      <div class="collection-heading"><h2 id="collection-title">Find your frame.</h2><p>Three styles. Your own lens shapes.</p></div>
+      <div class="collection-grid" role="group" aria-label="Choose a frame style" aria-describedby="collection-note">
+        <button class="collection-style" type="button" data-style="classic" aria-pressed="true"><span class="collection-art"><img data-concept="0" alt="Classic asymmetric frame concept" width="360" height="197"></span><span class="collection-name">Classic</span><span class="collection-selected" aria-hidden="true"><svg viewBox="0 0 20 20"><path d="m5 10 3 3 7-7"/></svg></span></button>
+        <button class="collection-style" type="button" data-style="bold" aria-pressed="false"><span class="collection-art"><img data-concept="1" alt="Bold asymmetric frame concept" width="360" height="197"></span><span class="collection-name">Bold</span><span class="collection-selected" aria-hidden="true"><svg viewBox="0 0 20 20"><path d="m5 10 3 3 7-7"/></svg></span></button>
+        <button class="collection-style" type="button" data-style="brow" aria-pressed="false"><span class="collection-art"><img data-concept="2" alt="Brow asymmetric frame concept" width="360" height="197"></span><span class="collection-name">Brow</span><span class="collection-selected" aria-hidden="true"><svg viewBox="0 0 20 20"><path d="m5 10 3 3 7-7"/></svg></span></button>
+      </div>
+      <div class="collection-bottom"><p id="collection-note">Style concepts. Your scans create the final frame.</p><a class="button collection-scan" id="collection-scan" href="/" data-preserve-access>Scan for Classic</a></div>
+    </section>
+    <section class="process" aria-labelledby="process-title">
+      <div class="process-intro"><h2 id="process-title">From lens<br>to frame.</h2><button class="text-action" type="button" data-tutorial="capture">Capture guide</button></div>
+      <ol class="process-steps">
+        <li><span class="step-number">01</span><div><h3>Scan both lenses.</h3><p>Use the printed reference sheet. Check each outline.</p><a class="inline-link" href="/calibration-sheet.svg" target="_blank" rel="noopener">Print sheet</a></div></li>
+        <li><span class="step-number">02</span><div><h3>Make it personal.</h3><p>Add the wearer’s measurements. Choose a style and lens retainer.</p></div></li>
+        <li><span class="step-number">03</span><div><h3>Print a test kit.</h3><p>Download the STL parts. Check lens retention and fit before use.</p><button class="inline-link" type="button" data-tutorial="printing">Print guide</button></div></li>
+      </ol>
+    </section>
   </main>
+  <footer class="site-footer"><a class="wordmark" href="/welcome.html" data-preserve-access aria-label="OptiFrame home"><img src="/assets/optiframe-logo.svg" width="112" height="56" alt="OptiFrame"></a><p>Recovered lenses. A frame made around them.</p></footer>
 </body>
 </html>

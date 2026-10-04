@@ -8,7 +8,7 @@ from zipfile import ZipFile
 import trimesh
 import numpy as np
 
-from shapely.geometry import Polygon
+from shapely.geometry import Point, Polygon
 from frame import (Settings, generate, preview, build_parts, _polygon, _outer_profile,
                    OUTLINE_SIMPLIFICATION_MM, FRAME_STYLES)
 
@@ -25,6 +25,88 @@ def bed_contact_area(mesh):
 
 
 class FrameTests(unittest.TestCase):
+    def test_snap_kit_has_real_split_pins_and_independent_thickness_grips(self):
+        settings = Settings(33, 33, 2.5, 125, left_edge_thickness=1,
+                            right_edge_thickness=6, retention_style="snap")
+        parts, _, notes = build_parts(ellipse(25, 19), ellipse(23, 17), settings)
+        self.assertEqual(len(parts), 13)
+        self.assertEqual(notes["retention_style"], "snap")
+        self.assertAlmostEqual(notes["snap_pin"]["grip_length_mm"]["left"], 5.1)
+        self.assertAlmostEqual(notes["snap_pin"]["grip_length_mm"]["right"], 10.1)
+        self.assertIn("not physically validated", notes["status"])
+        for side, grip in (("left", 5.1), ("right", 10.1)):
+            pin = parts[f"{side}-snap-pin-1"]
+            self.assertTrue(pin.is_watertight)
+            self.assertEqual(len(pin.split()), 1)
+            self.assertAlmostEqual(pin.bounds[0, 2], -1.5, places=5)
+            self.assertAlmostEqual(pin.bounds[1, 2], grip+1.55, places=5)
+            # At the front bore plane the two legs are separated, while their
+            # common root behind the retainer keeps the printable pin connected.
+            xy = pin.bounds.mean(axis=0)[:2]
+            for z, components in ((0, 2), (grip-.5, 1)):
+                slab = trimesh.creation.box(extents=[10, 10, .2])
+                slab.apply_translation([*xy, z])
+                section = trimesh.boolean.intersection([pin, slab], engine="manifold")
+                self.assertEqual(len(section.split()), components)
+            self.assertGreater(notes["snap_pin"]["barb_diameter_mm"], notes["snap_pin"]["bore_diameter_mm"])
+            self.assertLess(notes["snap_pin"]["shaft_diameter_mm"], notes["snap_pin"]["bore_diameter_mm"])
+        names = list(parts)
+        for i, first in enumerate(names):
+            for second in names[i+1:]:
+                overlap = trimesh.boolean.intersection([parts[first], parts[second]], engine="manifold")
+                self.assertLess(abs(overlap.volume), 1e-5, f"snap {first}/{second}")
+
+    def test_snap_preview_export_and_head_down_plate_match_for_each_style(self):
+        for style in FRAME_STYLES:
+            settings = Settings(33, 33, 2.5, 125, frame_style=style, retention_style="snap")
+            result = preview(ellipse(25, 19), ellipse(23, 17), settings)
+            self.assertEqual(result["retentionStyle"], "snap")
+            meshes = {p["name"]: trimesh.Trimesh(vertices=p["vertices"], faces=p["faces"])
+                      for p in result["meshes"] if p["kind"] == "printed"}
+            archive, notes = generate(ellipse(25, 19), ellipse(23, 17), settings)
+            with ZipFile(io.BytesIO(archive)) as files:
+                self.assertEqual(len([n for n in files.namelist() if n.endswith(".stl")]), 14)
+                for name, expected in meshes.items():
+                    actual = trimesh.load(io.BytesIO(files.read(name+".stl")), file_type="stl")
+                    self.assertTrue(actual.is_watertight, name)
+                    np.testing.assert_allclose(actual.bounds, expected.bounds, atol=1e-4)
+                plate = trimesh.load(io.BytesIO(files.read("plate.stl")), file_type="stl")
+            pieces = list(plate.split())
+            self.assertEqual(len(pieces), 13)
+            for piece in pieces:
+                self.assertAlmostEqual(piece.bounds[0, 2], 0, places=5)
+                self.assertGreater(bed_contact_area(piece), 15)
+                self.assertLessEqual(piece.bounds[1, 0], 220+1e-5)
+                self.assertLessEqual(piece.bounds[1, 1], 220+1e-5)
+            for i, first in enumerate(pieces):
+                for second in pieces[i+1:]:
+                    gap = np.maximum(first.bounds[0, :2]-second.bounds[1, :2],
+                                     second.bounds[0, :2]-first.bounds[1, :2])
+                    self.assertGreaterEqual(max(gap), 6-1e-5)
+
+    def test_snap_rejects_bad_retention_and_undersized_bed_without_bypassing_geometry(self):
+        with self.assertRaisesRegex(ValueError, "Retention style"):
+            build_parts(ellipse(25, 19), ellipse(23, 17), Settings(33, 33, 2.5, 125, retention_style="glue"))
+        with self.assertRaisesRegex(ValueError, "full 13-part kit"):
+            generate(ellipse(25, 19), ellipse(23, 17), Settings(33, 33, 2.5, 125, 150, 70, retention_style="snap"))
+        with self.assertRaisesRegex(ValueError, "outer rims.*clearance"):
+            build_parts(ellipse(25, 19), ellipse(23, 17), Settings(27, 27, 2.5, 125, retention_style="snap"))
+
+    def test_snap_pin_positions_follow_real_asymmetric_rim_stock(self):
+        payload = json.loads((Path(__file__).parent / "fixtures" / "scanned-lens-outlines.json").read_text())
+        settings = Settings(**dict(payload["settings"], retention_style="snap"))
+        parts, lenses, _ = build_parts(payload["left"], payload["right"], settings)
+        for side, lens in zip(("left", "right"), lenses):
+            rim = _outer_profile(lens, settings.frame_style).difference(lens.buffer(-.7))
+            for index in range(1, 5):
+                pin = parts[f"{side}-snap-pin-{index}"]
+                centre = pin.bounds.mean(axis=0)[:2]
+                self.assertTrue(rim.contains(Point(centre).buffer(2.5)))
+                self.assertGreaterEqual(Point(centre).distance(lens), 2.10)
+                for assembly_part in ("front", side+"-retainer"):
+                    overlap = trimesh.boolean.intersection([pin, parts[assembly_part]], engine="manifold")
+                    self.assertLess(abs(overlap.volume), 1e-5)
+
     def test_style_profiles_add_material_without_changing_lens_openings(self):
         lens = _polygon(ellipse(25, 19), -1, 33)
         base = lens.buffer(5.3, join_style=1)

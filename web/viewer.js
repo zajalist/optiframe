@@ -91,6 +91,7 @@ export function showSTL(buffer, element) {
       const name = mesh.userData.partName;
       mesh.position.set(0, 0, 0);
       if (exploded && name.includes('retainer')) mesh.position.z = 18;
+      if (exploded && name.includes('snap-pin')) mesh.position.z = 30;
       if (exploded && mesh.userData.kind === 'lens') mesh.position.z = 9;
       if (exploded && name.includes('temple')) mesh.position.x = name.startsWith('left') ? -15 : 15;
     });

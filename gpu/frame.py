@@ -12,13 +12,15 @@ import numpy as np
 import trimesh
 from shapely.affinity import translate
 from shapely.geometry import LineString, Point, Polygon, box
-from shapely.ops import unary_union
+from shapely.ops import nearest_points, unary_union
 from shapely.strtree import STRtree
+from temple_brand import apply_temple_brand
 
 
 OUTLINE_SIMPLIFICATION_MM = 0.05
 MIN_OUTLINE_CLEARANCE_MM = 0.2
 FRAME_STYLES = ("classic", "bold", "brow")
+RETENTION_STYLES = ("screw", "snap")
 
 
 def _check_nonlocal_clearance(polygon: Polygon) -> None:
@@ -57,6 +59,7 @@ class Settings:
     left_vertical_offset: float = 0
     right_vertical_offset: float = 0
     frame_style: str = "classic"
+    retention_style: str = "screw"
 
     def edge_thicknesses(self) -> tuple[float, float]:
         return (self.edge_thickness if self.left_edge_thickness is None else self.left_edge_thickness,
@@ -136,6 +139,33 @@ def _block(extents: tuple[float, float, float], centre: tuple[float, float, floa
     return mesh
 
 
+def _snap_pin(x: float, y: float, rear_z: float) -> trimesh.Trimesh:
+    """Experimental split push pin: head at rear, two flexible barbs ahead of front.
+
+    A 3.0 mm shaft slides in a 3.4 mm bore. The 3.8 mm split barb must compress
+    during insertion, then catches the front face with 0.15 mm axial clearance.
+    The two legs stay connected by the unsplit root under the 5 mm head.
+    """
+    head_bottom = rear_z + .15
+    shaft_bottom = -.35
+    shaft = trimesh.creation.cylinder(radius=1.5, height=head_bottom-shaft_bottom+.1,
+                                     sections=32)
+    shaft.apply_translation((x, y, (head_bottom+shaft_bottom+.1)/2))
+    head = trimesh.creation.cylinder(radius=2.5, height=1.4, sections=32)
+    head.apply_translation((x, y, head_bottom+.7))
+    # Revolved profile makes a tapered lead-in and a flat retention shoulder.
+    barb = trimesh.creation.revolve(np.array([[0, -1.5], [1.1, -1.5],
+        [1.9, -.35], [1.9, -.15], [0, -.15]]), sections=32)
+    barb.apply_translation((x, y, 0))
+    pin = _union([shaft, head, barb])
+    split_top = head_bottom-1.8
+    slit = _block((.7, 6, split_top+2), (x, y, (split_top-2)/2))
+    pin = trimesh.boolean.difference([pin, slit], engine="manifold")
+    if len(pin.split(only_watertight=False)) != 1:
+        raise RuntimeError("Snap pin legs disconnected from their head")
+    return pin
+
+
 def _hinge_bore(x: float, y: float, z: float, length: float) -> trimesh.Trimesh:
     transform = trimesh.transformations.rotation_matrix(math.pi / 2, (1, 0, 0))
     transform[:3, 3] = (x, y, z)
@@ -173,6 +203,9 @@ def _build_plate(parts: dict[str, trimesh.Trimesh], width: float,
             # The outward stem face extends furthest in X and gives broad contact.
             angle = math.pi / 2 if name.startswith("right") else -math.pi / 2
             mesh.apply_transform(trimesh.transformations.rotation_matrix(angle, (0, 1, 0)))
+        elif "snap-pin" in name:
+            # The full flat head sits on the bed; tips face upward.
+            mesh.apply_transform(trimesh.transformations.rotation_matrix(math.pi, (1, 0, 0)))
         mesh.apply_translation(-mesh.bounds[0])
         flat[name] = mesh
     # Larger rectangles first; backtrack over orthogonal orientations and positions
@@ -209,7 +242,8 @@ def _build_plate(parts: dict[str, trimesh.Trimesh], width: float,
 
     packed = place(0, [], [])
     if packed is None:
-        raise ValueError(f"Cannot pack the full five-part kit on a {width:g} × {depth:g} mm "
+        kit = "five-part" if len(parts) == 5 else f"{len(parts)}-part"
+        raise ValueError(f"Cannot pack the full {kit} kit on a {width:g} × {depth:g} mm "
                          "printer bed with 6 mm separation; select a larger bed")
     return trimesh.util.concatenate(packed)
 
@@ -218,6 +252,8 @@ def build_parts(left: list[list[float]], right: list[list[float]], settings: Set
     """Build printable solids in their shared assembly coordinates."""
     if settings.frame_style not in FRAME_STYLES:
         raise ValueError("Frame style must be classic, bold or brow")
+    if settings.retention_style not in RETENTION_STYLES:
+        raise ValueError("Retention style must be screw or snap")
     if not (np.isfinite([settings.left_pd, settings.right_pd]).all() and
             20 <= settings.left_pd <= 40 and 20 <= settings.right_pd <= 40):
         raise ValueError("Monocular pupil distances must each be 20–40 mm")
@@ -246,9 +282,26 @@ def build_parts(left: list[list[float]], right: list[list[float]], settings: Set
     if any(p.is_empty for p in inner):
         raise ValueError("Lens contour is too narrow for the retaining lip")
     rim_shapes = [o.difference(i) for o, i in zip(outer, inner)]
+    bore_radius = 1.7 if settings.retention_style == "snap" else 1.1
+    if settings.retention_style == "snap":
+        # Real asymmetric contours do not necessarily meet their bounding-box
+        # midpoints. Move pin centres to nearby verified head-supporting stock.
+        snap_centres = []
+        for rim, lens, targets in zip(rim_shapes, lenses, centres):
+            # A 1.7 mm bore needs 0.2 mm rail wall beyond the 0.2 mm lens gap.
+            safe = rim.buffer(-2.56).difference(lens.buffer(2.11))
+            if safe.is_empty:
+                raise ValueError("A lens has insufficient material around a snap-pin head")
+            group = [tuple(nearest_points(Point(x, y), safe)[1].coords[0]) for x, y in targets]
+            if any(Point(a).distance(Point(b)) < 5.2 for i, a in enumerate(group) for b in group[i+1:]):
+                raise ValueError("Snap-pin heads cannot maintain their required clearance")
+            snap_centres.append(group)
+        centres = snap_centres
     for group, rim in zip(centres, rim_shapes):
-        if any(not rim.contains(Point(x, y).buffer(1.15)) for x, y in group):
-            raise ValueError("A lens has insufficient material around an M2 fastener")
+        clearance_radius = 2.55 if settings.retention_style == "snap" else 1.15
+        if any(not rim.contains(Point(x, y).buffer(clearance_radius)) for x, y in group):
+            fitting = "a snap-pin head" if settings.retention_style == "snap" else "an M2 fastener"
+            raise ValueError(f"A lens has insufficient material around {fitting}")
 
     # The bridge joins the upper inner edges and leaves the nose opening clear.
     left_inner = lens_l.bounds[2]
@@ -284,7 +337,7 @@ def build_parts(left: list[list[float]], right: list[list[float]], settings: Set
         hinge_lugs.append(_block((8, 8, 6), (x, y, 3)))
     face = _union([face] + rails + hinge_lugs)
     all_centres = centres[0] + centres[1]
-    face = _holes(face, all_centres, 1.1, -0.5, front_z + max(seat_z) + 1)
+    face = _holes(face, all_centres, bore_radius, -0.5, front_z + max(seat_z) + 1)
     for x, y in hinge_centres:
         face = trimesh.boolean.difference([face, _hinge_bore(x, y, 3, 9)],
                                           engine="manifold")
@@ -292,14 +345,18 @@ def build_parts(left: list[list[float]], right: list[list[float]], settings: Set
     retainers = []
     for rim, group, seat in zip(rim_shapes, centres, seat_z):
         retainer = _extrude(rim, 1.8, front_z + seat)
-        retainers.append(_holes(retainer, group, 1.1, front_z + seat - 0.5, 2.8))
+        retainers.append(_holes(retainer, group, bore_radius, front_z + seat - 0.5, 2.8))
 
     temples = [
-        _temple(-1, settings.temple_length, *hinge_centres[0]),
-        _temple(1, settings.temple_length, *hinge_centres[1]),
+        apply_temple_brand(_temple(-1, settings.temple_length, *hinge_centres[0]), -1, *hinge_centres[0]),
+        apply_temple_brand(_temple(1, settings.temple_length, *hinge_centres[1]), 1, *hinge_centres[1]),
     ]
     parts = {"front": face, "left-retainer": retainers[0], "right-retainer": retainers[1],
              "left-temple": temples[0], "right-temple": temples[1]}
+    if settings.retention_style == "snap":
+        for side, group, seat in zip(("left", "right"), centres, seat_z):
+            for index, (x, y) in enumerate(group, 1):
+                parts[f"{side}-snap-pin-{index}"] = _snap_pin(x, y, front_z+seat+1.8)
     for name, mesh in parts.items():
         if not mesh.is_watertight or mesh.volume <= 0:
             raise RuntimeError(f"{name} mesh failed watertight validation")
@@ -308,6 +365,8 @@ def build_parts(left: list[list[float]], right: list[list[float]], settings: Set
         "status": "experimental; lens fit and hinge strength require physical validation",
         "units": "millimetres", "parts": list(parts),
         "frame_style": settings.frame_style,
+        "retention_style": settings.retention_style,
+        "temple_branding": "OptiFrame wordmark, engraved 0.4 mm into each outward temple face",
         "outline_cleanup_max_boundary_deviation_mm": OUTLINE_SIMPLIFICATION_MM,
         "hardware": "Eight M2 through fasteners for lens retainers; two M2 hinge screws and matching nuts. Check actual screw length and clearance.",
         "lens_edge_thickness_mm": {"left": edge_thicknesses[0], "right": edge_thicknesses[1]},
@@ -320,6 +379,19 @@ def build_parts(left: list[list[float]], right: list[list[float]], settings: Set
         "assembly": "Individual STLs share assembly coordinates: retainers begin at the rear lens-seat plane; hinge axes lie 8 mm beyond outer rim bounds at Z=3 mm.",
         "supports": "Review temple fork/block overhangs and horizontal hinge bores in the slicer; support-free printing is not validated.",
     }
+    if settings.retention_style == "snap":
+        notes.update({
+            "status": "experimental snap-pin print test; insertion force, retention, fatigue and lens fit are not physically validated",
+            "hardware": "Eight printed split snap pins included; two M2 hinge screws and matching nuts still required.",
+            "snap_pin": {"shaft_diameter_mm": 3.0, "bore_diameter_mm": 3.4,
+                         "barb_diameter_mm": 3.8, "head_diameter_mm": 5.0,
+                         "split_width_mm": .7, "axial_clearance_per_end_mm": .15,
+                         "grip_length_mm": {"left": front_z+seat_z[0]+1.8,
+                                            "right": front_z+seat_z[1]+1.8}},
+            "assembly": "Seat each lens, place its matching rear ring, then insert its four thickness-matched split pins from the rear until the barbs clear the front face. Never force a lens. Pin removal requires compressing both barbs from the front; accessibility and repeated removal are not validated.",
+            "supports": "Plate places pins head-down. PETG is a starting material for coupons only: thin split legs, barb overhangs and layer adhesion require slicer review and destructive retention tests. Review temple and hinge supports too.",
+            "warning": "Experimental snap mechanism, not a validated wearable product. First print one pin plus a same-thickness bore coupon and test insertion, pullout and fatigue without a lens. Do not rely on these dimensions for brittle resin or PLA. Lens power and optical centres still require an eye care professional.",
+        })
     return parts, lenses, notes
 
 
@@ -336,6 +408,7 @@ def preview(left: list[list[float]], right: list[list[float]], settings: Setting
         meshes.append(mesh_data(side + "-lens", _extrude(lens, thickness, 2.15), "lens"))
     return {"schemaVersion": 1, "units": "millimetres", "meshes": meshes,
             "frameStyle": settings.frame_style,
+            "retentionStyle": settings.retention_style,
             "opticalCentres": [[-settings.left_pd, settings.left_vertical_offset, 2.15],
                                [settings.right_pd, settings.right_vertical_offset, 2.15]],
             "lensRepresentation": "Flat outlines with measured edge thickness; optical curvature is not measured",

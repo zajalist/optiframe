@@ -14,15 +14,24 @@ import {createPreviewScheduler} from './preview-scheduler.js';
 
 let activeLivePanel = null;
 let automaticPreview = null;
-let frameStyle = 'classic', frameAssembly = null;
+let frameStyle = 'classic', retentionStyle = 'screw', frameAssembly = null;
 try { const saved = sessionStorage.getItem('optiframe-frame-style'); if (['classic','bold','brow'].includes(saved)) frameStyle = saved; } catch {}
+try { const saved = sessionStorage.getItem('optiframe-retention-style'); if (['screw','snap'].includes(saved)) retentionStyle = saved; } catch {}
 function getFrameStyle() { return frameStyle; }
+function getRetentionStyle() { return retentionStyle; }
 function getFrameAssembly() { return frameAssembly; }
 function setFrameStyle(value) {
   if (!['classic','bold','brow'].includes(value)) throw new Error('Unknown frame style');
   if (frameStyle === value) return;
   frameStyle = value;
   try { sessionStorage.setItem('optiframe-frame-style', value); } catch {}
+  invalidateFrameResult();
+}
+function setRetentionStyle(value) {
+  if (!['screw','snap'].includes(value)) throw new Error('Unknown lens retention');
+  if (retentionStyle === value) return;
+  retentionStyle = value;
+  try { sessionStorage.setItem('optiframe-retention-style', value); } catch {}
   invalidateFrameResult();
 }
 
@@ -713,6 +722,7 @@ function framePayload() {
   const rightThickness = number('right-edge-thickness');
   return { left, right, settings: {
     frame_style: frameStyle,
+    retention_style: retentionStyle,
     left_pd: number('left-pd'), right_pd: number('right-pd'),
     edge_thickness: leftThickness, left_edge_thickness: leftThickness, right_edge_thickness: rightThickness,
     left_vertical_offset: number('left-vertical-offset'), right_vertical_offset: number('right-vertical-offset'),
@@ -745,16 +755,19 @@ async function makeFrame(preview, experimental = false) {
     const blob = await response.blob();
     if (!isCurrentFrameRequest(request, snapshot)) return;
     if (preview) {
-      const { showSTL } = await import('./viewer.js?v=18');
+      const { showSTL } = await import('./viewer.js?v=30');
       if (!isCurrentFrameRequest(request, snapshot)) return;
       const buffer = await blob.arrayBuffer();
       if (!isCurrentFrameRequest(request, snapshot)) return;
+      const assembly = JSON.parse(new TextDecoder().decode(buffer));
+      if (assembly.retentionStyle !== payload.settings.retention_style)
+        throw new Error('Lens retention preview is outdated. Rebuild after updating the server.');
       const viewer = document.getElementById('viewer');
       showSTL(buffer, viewer);
-      frameAssembly = JSON.parse(new TextDecoder().decode(buffer));
+      frameAssembly = assembly;
       viewer.dataset.stale = 'false';
       viewer.setAttribute('aria-label', 'Rotatable 3D preview of current frame assembly');
-      designStatus.textContent = 'Frame preview. Lens curvature is not measured.';
+      designStatus.textContent = retentionStyle === 'snap' ? 'Experimental snap fit. Print a retention test first.' : 'Frame preview. Lens curvature is not measured.';
     } else {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -776,4 +789,4 @@ automaticPreview = createPreviewScheduler({
   shouldRender: () => !document.body.classList.contains('fit-flow') || document.getElementById('viewer').offsetParent !== null,
   render: () => makeFrame(true),
 });
-export { distance, polygonArea, measure, sheetHomography, project, leftPanel, rightPanel, capturesReady, framePayload, makeFrame, getFrameStyle, setFrameStyle, getFrameAssembly };
+export { distance, polygonArea, measure, sheetHomography, project, leftPanel, rightPanel, capturesReady, framePayload, makeFrame, getFrameStyle, setFrameStyle, getRetentionStyle, setRetentionStyle, getFrameAssembly };

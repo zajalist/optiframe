@@ -219,7 +219,7 @@ The stage is the largest available region. A compact heading identifies the lens
 
 ### Phone fitting
 
-The landing page is a single viewport with the frame concept and scanner/guide actions. Fitting is a separate viewport sequence: summary, measurement source, pupil distances, edge thicknesses, left/right marks, fitting settings, actual assembly and print preparation. Use the platform font, neutral paper background and rounded silver controls. Dimensions sit within the lens silhouettes. Keep necessary measurement provenance and errors concise; do not add explanatory panels or decorative arrows. Numeric fields adapt to the software keyboard. Optional detailed physical verification remains in the advanced studio.
+The landing page scrolls through the frame concept, selectable style concepts and a concise capture-to-print guide, following the user's updated brief. Camera capture remains within one viewport. Fitting is a separate viewport sequence: summary, measurement source, pupil distances, edge thicknesses, left/right marks, fitting settings, actual assembly and print preparation. Use the platform font, neutral paper background and rounded silver controls. Dimensions sit within the lens silhouettes. Keep necessary measurement provenance and errors concise; do not add explanatory panels or decorative arrows. Numeric fields adapt to the software keyboard. Optional detailed physical verification remains in the advanced studio.
 
 ### Optional tutorial
 

@@ -1,7 +1,7 @@
-import { leftPanel, rightPanel, capturesReady, makeFrame, project, getFrameStyle, setFrameStyle, getFrameAssembly } from './app.js?v=27';
+import { leftPanel, rightPanel, capturesReady, makeFrame, project, getFrameStyle, setFrameStyle, getRetentionStyle, setRetentionStyle, getFrameAssembly } from './app.js?v=30';
 import { validateFaceFit, lensReady, marksReady } from './fit-validation.js';
 import { mountPupilMeasurements } from './pupil-measurements.js?v=27';
-import { mountFrameCatalog } from './frame-catalog.js?v=27';
+import { mountFrameCatalog } from './frame-catalog.js?v=30';
 
 if (new URLSearchParams(location.search).get('advanced') !== '1') void startFitFlow();
 
@@ -138,7 +138,7 @@ async function startFitFlow() {
     if(step===3){note('Measure each lens edge with calipers, in millimetres.');inputs(['left-edge-thickness','right-edge-thickness']);}
     if(step===4||step===5)markScreen(step===4?left:right);
     if(step===6){inputs(['left-vertical-offset','right-vertical-offset','temple-length']);note('Zero offsets and 130 mm temples are starting settings. Adjust for the wearer.');}
-    if(step===7)cleanupStep=mountFrameCatalog({body,viewer,status:designStatus,panels,getStyle:getFrameStyle,setStyle:setFrameStyle,getAssembly:getFrameAssembly,rebuild:()=>makeFrame(true),onUpdate:update,leftPd:()=>Number(fields('left-pd').value),rightPd:()=>Number(fields('right-pd').value)});
+    if(step===7)cleanupStep=mountFrameCatalog({body,viewer,status:designStatus,panels,getStyle:getFrameStyle,setStyle:setFrameStyle,getRetention:getRetentionStyle,setRetention:setRetentionStyle,getAssembly:getFrameAssembly,rebuild:()=>makeFrame(true),onUpdate:update,leftPd:()=>Number(fields('left-pd').value),rightPd:()=>Number(fields('right-pd').value)});
     if(step===8){inputs(['bed-width','bed-depth']);note('Unverified fit-test STL kit. Slice at 100% in millimetres.');body.append(designStatus);const a=document.createElement('a');a.className='fit-link';a.href='?advanced=1'+location.hash;a.textContent='Physical checks';a.addEventListener('click',event=>{
       try {
         if(!Array.isArray(captureBackup))throw new Error('Return to Scanner to transfer both captures again.');

@@ -302,7 +302,7 @@ def inspect_capture(data: bytes) -> dict:
 @app.get("/api/health")
 def health() -> dict:
     started = _model_started_at
-    worker = {"modelBusy": _model_lock.locked(),
+    worker = {"edgeRefinement": "shadow-aware-rim-dp-v2", "modelBusy": _model_lock.locked(),
               "inferenceAgeMs": round((time.monotonic() - started) * 1000, 1) if started is not None else None,
               "lastInferenceMs": _last_inference_ms}
     try:
@@ -477,7 +477,7 @@ def segment_live_photo(photo: np.ndarray, parsed: tuple[int, int, int, int], *, 
             "presence": presence,
             "quality": live_quality(photo, contour, parsed),
             "method": "sam2.1-hiera-small-cuda",
-            "preprocessing": "local-image-edge-dp" if refinement else "edge-supported-lens-v3",
+            "preprocessing": diagnostics.get("method", "shadow-aware-rim-dp-v2") if refinement else "edge-supported-lens-v3",
             "measurementStatus": "proposal-only; review contour and calibrate sheet scale"}
 
 
@@ -501,7 +501,7 @@ def live_segment(image: UploadFile = File(...), box: str = Form(...)) -> dict:
                     "rawContour": result.get("rawContour", []),
                     "edgeRefinement": result.get("edgeRefinement", {}),
                     "method": "sam2.1-hiera-small-cuda",
-                    "preprocessing": "local-image-edge-dp",
+                    "preprocessing": "shadow-aware-rim-dp-v2",
                     "measurementStatus": "proposal-only; edge evidence insufficient"}
         return result
     except ModelBusyError as error:

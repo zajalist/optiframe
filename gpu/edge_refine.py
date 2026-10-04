@@ -32,6 +32,36 @@ def _outward_normals(points):
     return normal/np.maximum(np.linalg.norm(normal, axis=1)[:, None], 1e-9)
 
 
+def _strongly_dark_interior(gray, contour):
+    """Select step edges only for a strongly dark interior, never as a fallback.
+
+    This is an appearance cue, not proof of opacity or object identity.
+    """
+    mask = np.zeros(gray.shape, np.uint8)
+    cv2.fillPoly(mask, [np.round(contour).astype(np.int32)], 1)
+    inward = cv2.distanceTransform(mask, cv2.DIST_L2, 3)
+    outward = cv2.distanceTransform(1-mask, cv2.DIST_L2, 3)
+    inside, outside = gray[inward > 8], gray[(outward > 8) & (outward < 20)]
+    if len(inside) < 100 or len(outside) < 100:
+        return False
+    interior, background = np.percentile(inside, 75), np.percentile(outside, 25)
+    return bool(interior < background*.35 and background-interior > 255*.25)
+
+
+def _ridge_evidence(gx, gy, xx, yy, normal):
+    """Paired opposite slopes around thin bright/dark rims, not a shadow step."""
+    def gradient(distance):
+        x = (xx+distance*normal[:, 0, None]).astype(np.float32)
+        y = (yy+distance*normal[:, 1, None]).astype(np.float32)
+        return (cv2.remap(gx, x, y, cv2.INTER_LINEAR)*normal[:, 0, None]
+                + cv2.remap(gy, x, y, cv2.INTER_LINEAR)*normal[:, 1, None])
+    scores = []
+    for half_width in (1., 1.5, 2., 2.5):
+        a, b = gradient(-half_width), gradient(half_width)
+        scores.append(np.where(a*b < 0, np.minimum(abs(a), abs(b)), 0))
+    return np.max(scores, axis=0)
+
+
 def refine_lens_edge(image_rgb, contour, max_shift_px=12.0):
     """Return (contour, diagnostics), retaining input on unsupported proposals.
 
@@ -60,6 +90,8 @@ def refine_lens_edge(image_rgb, contour, max_shift_px=12.0):
         return reject('outside-image')
     local = raw - lo
     gray = cv2.cvtColor(image[lo[1]:hi[1], lo[0]:hi[0]], cv2.COLOR_RGB2GRAY)
+    dark_interior = _strongly_dark_interior(gray, local)
+    edge_model = 'dark-interior-step' if dark_interior else 'paired-rim'
     span = np.ptp(local, axis=0)
     if min(span) < 40:
         return reject('too-small')
@@ -94,8 +126,10 @@ def refine_lens_edge(image_rgb, contour, max_shift_px=12.0):
     yy = (centre[1]+rr*np.sin(angles[:, None])).astype(np.float32)
     edge = abs(cv2.remap(gx, xx, yy, cv2.INTER_LINEAR)*normal[:, 0, None]
                + cv2.remap(gy, xx, yy, cv2.INTER_LINEAR)*normal[:, 1, None])
-    unary = -30*edge + .002*offsets**2
-    pair = .3*(offsets[:, None]-offsets[None, :])**2
+    if not dark_interior:
+        edge = _ridge_evidence(gx, gy, xx, yy, normal)
+    unary = -30*edge + (.002 if dark_interior else .0005)*offsets**2
+    pair = (.3 if dark_interior else .7)*(offsets[:, None]-offsets[None, :])**2
     cost = unary[0].copy()
     back = []
     for index in range(1, 3*count):
@@ -118,21 +152,27 @@ def refine_lens_edge(image_rgb, contour, max_shift_px=12.0):
     ny = new[:, 1].astype(np.float32).reshape(-1, 1)
     support = abs(cv2.remap(ox, nx, ny, cv2.INTER_LINEAR).ravel()*normal[:, 0]
                   + cv2.remap(oy, nx, ny, cv2.INTER_LINEAR).ravel()*normal[:, 1])
+    if not dark_interior:
+        support = _ridge_evidence(ox, oy, nx, ny, normal).ravel()
     occluded = cv2.remap(grid, nx, ny, cv2.INTER_NEAREST).ravel() > 0
     original_profile = abs(cv2.remap(ox, xx, yy, cv2.INTER_LINEAR)*normal[:, 0, None]
                            + cv2.remap(oy, xx, yy, cv2.INTER_LINEAR)*normal[:, 1, None])
+    if not dark_interior:
+        original_profile = _ridge_evidence(ox, oy, xx, yy, normal)
     profile_masked = cv2.remap(grid, xx, yy, cv2.INTER_NEAREST) > 0
     separated = abs(offsets[None, :]-offsets[path, None]) >= 5
     competing = np.max(np.where(separated & ~profile_masked, original_profile, 0), axis=1)
     ambiguous_fraction = float(np.mean((competing >= np.maximum(.01, support*.8)) & ~occluded))
     if ambiguous_fraction > .35:
         return unchanged, {'accepted': False, 'reason': 'competing-edges',
+                           'edgeModel': edge_model,
                            'ambiguousEdgeFraction': ambiguous_fraction}
     evidence = (support >= .008) & ~occluded
     supported = sum(float(np.mean(sector)) >= .35 for sector in np.array_split(evidence, 8))
     visible = support[~occluded]
     if supported < 7 or len(visible) < count*.45 or float(np.median(visible)) < .01:
         return unchanged, {'accepted': False, 'reason': 'weak-edge-evidence',
+                           'edgeModel': edge_model,
                            'supportedSectors': supported, 'maskedFraction': float(np.mean(occluded)),
                            'edgeSupportFraction': float(np.mean(evidence)),
                            'ambiguousEdgeFraction': ambiguous_fraction}
@@ -142,9 +182,10 @@ def refine_lens_edge(image_rgb, contour, max_shift_px=12.0):
     to_raw = _distance_to_loop(new, raw)
     from_raw = _distance_to_loop(raw, new)
     diagnostics = {'accepted': True, 'supportedSectors': supported,
+                   'edgeModel': edge_model,
                    'ambiguousEdgeFraction': ambiguous_fraction,
                    'maskedFraction': float(np.mean(occluded)), 'edgeSupportFraction': float(np.mean(evidence)),
                    'maxCorrectionPx': float(max(to_raw.max(), from_raw.max())),
                    'meanCorrectionPx': float(to_raw.mean()), 'correctionMetric': 'sampled-point-to-segment',
-                   'searchBandPx': float(max_shift_px), 'method': 'local-image-edge-dp'}
+                   'searchBandPx': float(max_shift_px), 'method': 'shadow-aware-rim-dp-v2'}
     return new.tolist(), diagnostics

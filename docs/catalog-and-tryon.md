@@ -19,6 +19,18 @@ the original controls and their values.
 
 ## Catalog
 
+The scrollable landing and fitting catalog now use Higgsfield concept artwork
+for all three styles (job `5205075f-eed0-427e-89f7-3d6c5a0ff2e5`). The generated
+concepts are labels for style selection; the large interactive viewer is the
+actual geometry made around the captured contours. Art is about 10.6 KB WebP,
+embedded locally with provenance in `web/assets/catalog-provenance.json`.
+
+The fitting catalog also offers Screw and experimental Snap retention. Both
+selections persist, invalidate stale previews, rebuild the actual assembly, and
+flow through to STL export. In Parts view, snap pins separate from the retaining
+rings. See [retention options](retention-options.md) and
+[temple branding](temple-branding.md) for printable geometry and limitations.
+
 Classic, Bold and Brow use the same measured lens openings. See
 [frame styles](frame-styles.md) for actual geometry. Thumbnails are schematic
 silhouettes; the large 3D viewer shows the generated assembly. Style selection
