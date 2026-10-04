@@ -50,7 +50,7 @@ async function build(){
       result=await response.json();cache.set(key,result);
     }
     if(request!==sequence)return;
-    const {showSTL}=await import('./viewer.js?v=39');if(request!==sequence)return;
+    const {showSTL}=await import('./viewer.js?v=40');if(request!==sequence)return;
     showSTL(new TextEncoder().encode(JSON.stringify(result)).buffer,$('viewer'));
     assembly=nativeTryOnFile(result);$('viewer').dataset.stale='false';$('status').textContent='';ready(true);
   }catch(error){if(request!==sequence)return;$('status').textContent=error.name==='AbortError'?'Preview timed out. Retry.':error.message;$('retry').hidden=false;$('sample').hidden=false;}

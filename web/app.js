@@ -790,7 +790,7 @@ async function makeFrame(preview, experimental = false) {
     const blob = await response.blob();
     if (!isCurrentFrameRequest(request, snapshot)) return;
     if (preview) {
-      const { showSTL } = await import('./viewer.js?v=39');
+      const { showSTL } = await import('./viewer.js?v=40');
       if (!isCurrentFrameRequest(request, snapshot)) return;
       const buffer = await blob.arrayBuffer();
       if (!isCurrentFrameRequest(request, snapshot)) return;

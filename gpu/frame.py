@@ -20,6 +20,8 @@ from temple_brand import apply_temple_brand
 OUTLINE_SIMPLIFICATION_MM = 0.05
 MIN_OUTLINE_CLEARANCE_MM = 0.2
 FRAME_STYLES = ("classic", "bold", "brow")
+TEMPLE_PROFILES = {"classic": "slim taper, softened end", "bold": "wide sculpted arm, deep bevel",
+                   "brow": "stepped architectural arm, tapered tip"}
 RETENTION_STYLES = ("screw", "snap")
 
 
@@ -175,15 +177,77 @@ def _hinge_bore(x: float, y: float, z: float, length: float) -> trimesh.Trimesh:
                                      transform=transform)
 
 
-def _temple(side: int, length: float, pivot_x: float, pivot_y: float) -> trimesh.Trimesh:
-    """Rearward temple with a two-knuckle fork around the front hinge lug."""
+def _beveled_block(extents, centre, bevel=.3) -> trimesh.Trimesh:
+    """Convex chamfered block; bevel removes stock without enlarging mating envelopes."""
+    half = np.asarray(extents, dtype=float) / 2
+    points = []
+    for signs in np.ndindex(2, 2, 2):
+        sign = np.asarray(signs) * 2 - 1
+        for axis in range(3):
+            point = half - bevel
+            point[axis] = half[axis]
+            points.append(point * sign + centre)
+    return trimesh.convex.convex_hull(np.asarray(points))
+
+
+def _temple_arm(stations, centre_x, centre_y, side) -> trimesh.Trimesh:
+    """Loft closed chamfered XY sections along rearward Z, with no hollow shell."""
+    vertices = []
+    for z, width, height, drop, bevel in stations:
+        x, y = width / 2, height / 2
+        ring = [(-x+bevel, -y), (x-bevel, -y), (x, -y+bevel), (x, y-bevel),
+                (x-bevel, y), (-x+bevel, y), (-x, y-bevel), (-x, -y+bevel)]
+        # A common outward plane preserves broad build-plate contact while the
+        # inside tapers; bevels/height/drop provide the visible sculpted profile.
+        section_x = centre_x + side * (5-width)/2
+        vertices.extend((section_x+px, centre_y+drop+py, z) for px, py in ring)
+    faces = []
+    for section in range(len(stations)-1):
+        a, b = section*8, (section+1)*8
+        for i in range(8):
+            j = (i+1) % 8
+            faces.extend([(a+i, b+i, b+j), (a+i, b+j, a+j)])
+    for i in range(1, 7):
+        faces.append((0, i, i+1))
+        end = (len(stations)-1)*8
+        faces.append((end, end+i+1, end+i))
+    mesh = trimesh.Trimesh(vertices=vertices, faces=faces, process=True)
+    mesh.fix_normals()
+    return mesh
+
+
+def _temple(side: int, length: float, pivot_x: float, pivot_y: float,
+            style: str = "classic") -> trimesh.Trimesh:
+    """Shared hinge and logo stock with three genuinely different beveled arms."""
+    if style not in FRAME_STYLES:
+        raise ValueError("Frame style must be classic, bold or brow")
     offset = side * 7
     fork_y = 5.7
+    # The common -12..-44 stock keeps the entire 18.44 x 3.5 mm engraving flat.
+    stations = [(-12, 5, 5.5, 0, .4), (-44, 5, 5.5, 0, .4)]
+    if style == "classic":
+        stations += [(-length*.63, 4.2, 5.0, -.2, .55),
+                     (-length+10, 3.8, 4.8, -1.6, .7),
+                     (-length+1, 3.8, 4.8, -3.0, .8),
+                     (-length, 2.8, 3.8, -3.0, .7)]
+    elif style == "bold":
+        stations += [(-50, 7, 9, -.1, 1.0),
+                     (-length*.73, 7, 9, -.1, 1.0),
+                     (-length+8, 5, 7, -1.5, 1.0),
+                     (-length+1, 5, 7, -3.5, 1.0),
+                     (-length, 3.8, 5.8, -3.5, .9)]
+    else:
+        stations += [(-50, 5, 8.5, 1.5, .65),
+                     (-length*.65, 5, 8.5, 1.5, .65),
+                     (-length*.65-4, 4.6, 5.5, 0, .65),
+                     (-length+8, 4.2, 5.5, -2.0, .7),
+                     (-length+1, 4.2, 5.5, -3.0, .8),
+                     (-length, 3.2, 4.5, -3.0, .75)]
     parts = [
-        _block((8, 2.5, 14), (pivot_x, pivot_y - fork_y, -4)),
-        _block((8, 2.5, 14), (pivot_x, pivot_y + fork_y, -4)),
-        _block((10, 14, 5), (pivot_x + offset / 2, pivot_y, -10)),
-        _block((5, 5.5, length - 12), (pivot_x + offset, pivot_y, -(length + 12) / 2)),
+        _beveled_block((8, 2.5, 14), (pivot_x, pivot_y - fork_y, -4)),
+        _beveled_block((8, 2.5, 14), (pivot_x, pivot_y + fork_y, -4)),
+        _beveled_block((10, 14, 5), (pivot_x + offset / 2, pivot_y, -10)),
+        _temple_arm(stations, pivot_x + offset, pivot_y, side),
     ]
     mesh = _union(parts)
     # Match the front's raised hinge axis while retaining the fork's relative shape.
@@ -354,8 +418,8 @@ def build_parts(left: list[list[float]], right: list[list[float]], settings: Set
         retainers.append(_holes(retainer, group, bore_radius, front_z + seat - 0.5, 2.8))
 
     temples = [
-        apply_temple_brand(_temple(-1, settings.temple_length, *hinge_centres[0]), -1, *hinge_centres[0]),
-        apply_temple_brand(_temple(1, settings.temple_length, *hinge_centres[1]), 1, *hinge_centres[1]),
+        apply_temple_brand(_temple(-1, settings.temple_length, *hinge_centres[0], settings.frame_style), -1, *hinge_centres[0]),
+        apply_temple_brand(_temple(1, settings.temple_length, *hinge_centres[1], settings.frame_style), 1, *hinge_centres[1]),
     ]
     parts = {"front": face, "left-retainer": retainers[0], "right-retainer": retainers[1],
              "left-temple": temples[0], "right-temple": temples[1]}
@@ -371,6 +435,8 @@ def build_parts(left: list[list[float]], right: list[list[float]], settings: Set
         "status": "experimental; lens fit and hinge strength require physical validation",
         "units": "millimetres", "parts": list(parts),
         "frame_style": settings.frame_style,
+        "temple_style": settings.frame_style,
+        "temple_profile": TEMPLE_PROFILES[settings.frame_style],
         "retention_style": settings.retention_style,
         "temple_branding": "OptiFrame wordmark, engraved 0.4 mm into each outward temple face",
         "outline_cleanup_max_boundary_deviation_mm": OUTLINE_SIMPLIFICATION_MM,
@@ -425,6 +491,8 @@ def preview(left: list[list[float]], right: list[list[float]], settings: Setting
         meshes.append(mesh_data(side + "-lens", _extrude(lens, thickness, 2.15), "lens"))
     return {"schemaVersion": 1, "units": "millimetres", "meshes": meshes,
             "frameStyle": settings.frame_style,
+            "templeStyle": settings.frame_style,
+            "templeProfile": TEMPLE_PROFILES[settings.frame_style],
             "retentionStyle": settings.retention_style,
             "alignmentSource": settings.alignment_source,
             "measurementSource": settings.measurement_source,

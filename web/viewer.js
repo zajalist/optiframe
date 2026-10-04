@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createFrameGeometry, createFrameMaterial, configureFrameRenderer } from './frame-appearance.js?v=39';
 
 let active = null;
+let selectedView = new URLSearchParams(location.search).get('view') === 'side' ? 'side' : '3d';
 
 export function showSTL(buffer, element) {
   const assembly = JSON.parse(new TextDecoder().decode(buffer));
@@ -45,18 +46,32 @@ export function showSTL(buffer, element) {
   const light = new THREE.DirectionalLight(0xffffff, 2.4);
   light.position.set(-50, 80, -90);
   scene.add(light);
+  // Raking fill reveals the real side bevels and shallow wordmark when rotated.
+  const sideLight = new THREE.DirectionalLight(0xe8edf5, 2.0);
+  sideLight.position.set(200, 45, 30);
+  scene.add(sideLight);
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.minDistance = span * 0.15;
   controls.maxDistance = span * 8;
   controls.target.set(0, 0, 0);
   controls.update();
-  const setView = front => {
+  const viewButtons = new Map();
+  const setView = view => {
+    selectedView = view;
     const vertical = THREE.MathUtils.degToRad(camera.fov / 2);
     const horizontal = Math.atan(Math.tan(vertical) * camera.aspect);
-    const distance = span / 2 / Math.sin(Math.min(vertical, horizontal)) * 1.12;
+    const direction = new THREE.Vector3(...(view==='front' ? [0,0,-1] : view==='side' ? [1,.12,-.12] : [.65,.4,-1])).normalize();
+    const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0), direction).normalize();
+    const up = new THREE.Vector3().crossVectors(direction,right).normalize();
+    let distance = 0;
+    for(const x of [box.min.x,box.max.x])for(const y of [box.min.y,box.max.y])for(const z of [box.min.z,box.max.z]) {
+      const corner = new THREE.Vector3(x,y,z).sub(centre);
+      distance = Math.max(distance, Math.abs(corner.dot(right))/Math.tan(horizontal)+corner.dot(direction), Math.abs(corner.dot(up))/Math.tan(vertical)+corner.dot(direction));
+    }
     controls.target.set(0, 0, 0);
-    camera.position.copy(new THREE.Vector3(front ? 0 : 0.65, front ? 0 : 0.4, -1).normalize().multiplyScalar(distance));
+    camera.position.copy(direction.multiplyScalar(distance*1.14));
+    for(const [name,button] of viewButtons)button.setAttribute('aria-pressed',String(name===view));
     controls.update();
     invalidate();
   };
@@ -64,12 +79,14 @@ export function showSTL(buffer, element) {
   toolbar.className = 'frame-views';
   toolbar.setAttribute('role', 'group');
   toolbar.setAttribute('aria-label', 'Frame view');
-  for (const [label, front] of [['3D', false], ['Front', true]]) {
+  for (const [label, view] of [['3D', '3d'], ['Front', 'front'], ['Side', 'side']]) {
     const button = document.createElement('button');
     button.type = 'button';
     button.textContent = label;
     button.style.minHeight = '44px';
-    button.addEventListener('click', () => setView(front));
+    button.setAttribute('aria-pressed',String(selectedView===view));
+    button.addEventListener('click', () => setView(view));
+    viewButtons.set(view,button);
     toolbar.appendChild(button);
   }
   let exploded = false;
@@ -125,6 +142,6 @@ export function showSTL(buffer, element) {
     notice.textContent = '3D paused. Update the preview to retry.';
     element.appendChild(notice);
   });
-  setView(false);
+  setView(selectedView);
   invalidate();
 }
