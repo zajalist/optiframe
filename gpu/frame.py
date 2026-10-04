@@ -178,6 +178,41 @@ def _outer_profile(lens: Polygon, style: str) -> Polygon:
     return base
 
 
+def _fit_medial_rims(outer: list[Polygon], lenses: list[Polygon]) -> tuple[list[Polygon], bool]:
+    """Keep the requested silhouette where possible, trimming only the bridge-facing stock.
+
+    A 0.3 mm split leaves tolerance beyond the required 0.2 mm separation.
+    Optical centres and the measured lens-seat boundaries are never moved.
+    """
+    if outer[0].distance(outer[1]) >= MIN_OUTLINE_CLEARANCE_MM:
+        return outer, False
+    split = (lenses[0].bounds[2] + lenses[1].bounds[0]) / 2
+    left = outer[0].intersection(box(-1000, -1000, split - .15, 1000))
+    right = outer[1].intersection(box(split + .15, -1000, 1000, 1000))
+    fitted = [left, right]
+    if any(p.geom_type != "Polygon" or p.is_empty or not p.is_valid or
+           lens.buffer(1.8).difference(p).area > 1e-7
+           for p, lens in zip(fitted, lenses)):
+        raise ValueError("The outer rims and rear retainers cannot keep 1.8 mm stock and 0.2 mm separation at these pupil distances")
+    return fitted, True
+
+
+def _relocate_screw_centres(rims: list[Polygon], lenses: list[Polygon],
+                            targets: list[list[tuple[float, float]]]) -> list[list[tuple[float, float]]]:
+    """Place M2 bores in verified stock when a medial rim had to be trimmed."""
+    groups = []
+    for rim, lens, group in zip(rims, lenses, targets):
+        # 1.25 mm from both edges leaves 0.15 mm beyond the 1.1 mm bore.
+        safe = rim.buffer(-1.25).difference(lens.buffer(1.25))
+        if safe.is_empty:
+            raise ValueError("The outer rims cannot keep enough stock around an M2 fastener at these pupil distances")
+        fitted = [tuple(nearest_points(Point(x, y), safe)[1].coords[0]) for x, y in group]
+        if any(Point(a).distance(Point(b)) < 2.5 for i, a in enumerate(fitted) for b in fitted[i+1:]):
+            raise ValueError("The outer rims cannot separate M2 fasteners at these pupil distances")
+        groups.append(fitted)
+    return groups
+
+
 def _block(extents: tuple[float, float, float], centre: tuple[float, float, float]) -> trimesh.Trimesh:
     mesh = trimesh.creation.box(extents=extents)
     mesh.apply_translation(centre)
@@ -403,14 +438,15 @@ def build_parts(left: list[list[float]], right: list[list[float]], settings: Set
     centres = [_fastener_centres(lens) for lens in lenses]
     front_z = 2.0
     seat_z = [thickness + 0.3 for thickness in edge_thicknesses]
-    outer = [_outer_profile(lens, settings.frame_style) for lens in lenses]
-    if outer[0].distance(outer[1]) < 0.2:
-        raise ValueError("The outer rims and rear retainers overlap or have less than 0.2 mm clearance at these pupil distances")
+    outer, medial_rim_fallback = _fit_medial_rims(
+        [_outer_profile(lens, settings.frame_style) for lens in lenses], lenses)
     inner = [lens.buffer(-0.7, join_style=1) for lens in lenses]
     if any(p.is_empty for p in inner):
         raise ValueError("Lens contour is too narrow for the retaining lip")
     rim_shapes = [o.difference(i) for o, i in zip(outer, inner)]
     bore_radius = 1.7 if settings.retention_style == "snap" else 1.1
+    if medial_rim_fallback and settings.retention_style == "screw":
+        centres = _relocate_screw_centres(rim_shapes, lenses, centres)
     if settings.retention_style == "snap":
         # Real asymmetric contours do not necessarily meet their bounding-box
         # midpoints. Move pin centres to nearby verified head-supporting stock.
@@ -504,6 +540,7 @@ def build_parts(left: list[list[float]], right: list[list[float]], settings: Set
         "status": "experimental; lens fit and hinge strength require physical validation",
         "units": "millimetres", "parts": list(parts),
         "frame_style": settings.frame_style,
+        "medial_rim_fallback": medial_rim_fallback,
         "temple_style": settings.frame_style,
         "temple_profile": TEMPLE_PROFILES[settings.frame_style],
         "retention_style": settings.retention_style,
@@ -566,7 +603,7 @@ def build_parts(left: list[list[float]], right: list[list[float]], settings: Set
 
 def preview(left: list[list[float]], right: list[list[float]], settings: Settings) -> dict:
     """Assembly only: skip print-bed packing, compression and STL round trips."""
-    parts, lenses, _ = build_parts(left, right, settings)
+    parts, lenses, notes = build_parts(left, right, settings)
 
     def mesh_data(name, mesh, kind):
         result = {"name": name, "kind": kind,
@@ -583,6 +620,7 @@ def preview(left: list[list[float]], right: list[list[float]], settings: Setting
             "templeStyle": settings.frame_style,
             "templeProfile": TEMPLE_PROFILES[settings.frame_style],
             "retentionStyle": settings.retention_style,
+            "medialRimFallback": notes["medial_rim_fallback"],
             "alignmentSource": settings.alignment_source,
             "measurementSource": settings.measurement_source,
             "measurementsRequireVerification": True,

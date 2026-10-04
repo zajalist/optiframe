@@ -11,7 +11,7 @@ function setup(t,{lost=false,requireRemoval=false}={}) {
  const previous=globalThis.document;let captured=null,index=0;const requests=[];
  const canvas=()=>{const value={width:0,height:0,index:0,textContent:'',addEventListener(){},
    toBlob(done,type,quality){done(new Blob([`jpeg-${value.index}-${quality}`]));}};
-  value.getContext=()=>({drawImage(source){value.index=source.index??index;},clearRect(){},beginPath(){},moveTo(){},lineTo(){},closePath(){},stroke(){},
+  value.getContext=()=>({drawImage(source){value.index=source.index??index;},clearRect(){},beginPath(){},moveTo(){},lineTo(){},closePath(){},stroke(){},save(){},restore(){},arc(){},fill(){},
    getImageData(x,y,width,height){return {width,height,index:value.index,data:new Uint8ClampedArray(width*height*4).fill(180)};}});
   return value;};
  globalThis.document={createElement:canvas};

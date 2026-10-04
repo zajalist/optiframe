@@ -277,6 +277,27 @@ test('burst frames are independently measured and fused in sheet millimetres', {
   } finally {fixture.session.stop();}
 });
 
+test('unavailable burst endpoint refines a fresh still and reaches review', {timeout:4000}, async () => {
+  let captured=null, singles=0, bursts=0;
+  const data={...result,presence:{detected:true},quality:{score:.7,sharpness:180}};
+  const fixture=setup(async(path)=>{
+    if(path==='/api/segment-burst') {bursts++;return {status:404,ok:false,json:async()=>({detail:'Not found'})};}
+    if(bursts) singles++;
+    return {status:200,ok:true,json:async()=>data};
+  },value=>{captured=value;},{...autoOptions,stillCapture:true,captureFrame:async()=>{
+    const frames=Array.from({length:5},(_,id)=>{
+      const canvas=document.createElement('canvas');canvas.width=640;canvas.height=480;
+      return {canvas,id,sampledAt:performance.now()+id,capturedAt:new Date().toISOString()};
+    });
+    return {...frames[0],frames};
+  }});
+  try {await fixture.session.start();await pause(900);
+    assert.equal(bursts,1);assert.equal(singles,1);
+    assert.ok(captured,'a separately segmented still should reach review');
+    assert.equal(captured.source,'sharp-still');
+  } finally {fixture.session.stop();}
+});
+
 test('disagreeing burst contours cannot export a plausible averaged result', {timeout:4000}, async () => {
   let captured=null, still=false, measured=0, calibrationIndex=0;
   const fixture=setup(async(path)=>{

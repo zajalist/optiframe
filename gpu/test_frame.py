@@ -94,13 +94,16 @@ class FrameTests(unittest.TestCase):
                                      second.bounds[0, :2]-first.bounds[1, :2])
                     self.assertGreaterEqual(max(gap), 6-1e-5)
 
-    def test_snap_rejects_bad_retention_and_undersized_bed_without_bypassing_geometry(self):
+    def test_snap_rejects_bad_retention_and_undersized_bed_and_fits_narrow_rims(self):
         with self.assertRaisesRegex(ValueError, "Retention style"):
             build_parts(ellipse(25, 19), ellipse(23, 17), Settings(33, 33, 2.5, 125, retention_style="glue"))
         with self.assertRaisesRegex(ValueError, "full 15-part kit"):
             generate(ellipse(25, 19), ellipse(23, 17), Settings(33, 33, 2.5, 125, 150, 70, retention_style="snap"))
-        with self.assertRaisesRegex(ValueError, "outer rims.*clearance"):
-            build_parts(ellipse(25, 19), ellipse(23, 17), Settings(27, 27, 2.5, 125, retention_style="snap"))
+        parts, _, notes = build_parts(ellipse(25, 19), ellipse(23, 17),
+                                      Settings(27, 27, 2.5, 125, retention_style="snap"))
+        self.assertTrue(notes["medial_rim_fallback"])
+        self.assertGreaterEqual(parts["right-retainer"].bounds[0, 0] -
+                                parts["left-retainer"].bounds[1, 0], .2 - 1e-5)
 
     def test_snap_pin_positions_follow_real_asymmetric_rim_stock(self):
         payload = json.loads((Path(__file__).parent / "fixtures" / "scanned-lens-outlines.json").read_text())
@@ -169,14 +172,17 @@ class FrameTests(unittest.TestCase):
         self.assertGreater(volumes[1], volumes[0])
         self.assertGreater(volumes[2], volumes[0])
 
-    def test_unknown_style_and_too_close_bold_rims_are_rejected(self):
+    def test_unknown_style_rejected_and_close_bold_rims_are_fitted(self):
         for style in ("unknown", "Classic", None):
             with self.subTest(style=style), self.assertRaisesRegex(ValueError, "Frame style"):
                 build_parts(ellipse(25, 19), ellipse(23, 17), Settings(32, 31, 2.5, 125, frame_style=style))
-        # Enlarging the outer silhouette must not bypass the inter-rim clearance gate.
+        # The medial stock may shrink while the styled exterior stays broad.
         build_parts(ellipse(25, 19), ellipse(23, 17), Settings(30, 30, 2.5, 125))
-        with self.assertRaisesRegex(ValueError, "outer rims.*clearance"):
-            build_parts(ellipse(25, 19), ellipse(23, 17), Settings(30, 30, 2.5, 125, frame_style="bold"))
+        parts, _, notes = build_parts(ellipse(25, 19), ellipse(23, 17),
+                                      Settings(30, 30, 2.5, 125, frame_style="bold"))
+        self.assertTrue(notes["medial_rim_fallback"])
+        self.assertGreaterEqual(parts["right-retainer"].bounds[0, 0] -
+                                parts["left-retainer"].bounds[1, 0], .2 - 1e-5)
 
     def test_dense_adjacent_samples_are_not_a_narrow_lens(self):
         points = ellipse(25, 19, 2000)
@@ -404,9 +410,32 @@ class FrameTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "overlap"):
             generate(ellipse(27, 20), ellipse(27, 20), Settings(24, 24, 2, 125))
 
-    def test_overlapping_outer_rims_are_rejected_even_when_lenses_clear(self):
-        with self.assertRaisesRegex(ValueError, "outer rims and rear retainers overlap"):
-            generate(ellipse(25, 19), ellipse(23, 17), Settings(27, 27, 2.5, 125))
+    def test_narrow_rims_are_trimmed_with_measured_pd_and_printable_export(self):
+        settings = Settings(27, 27, 2.5, 125)
+        parts, lenses, notes = build_parts(ellipse(25, 19), ellipse(23, 17), settings)
+        self.assertTrue(notes["medial_rim_fallback"])
+        self.assertAlmostEqual(lenses[0].centroid.x, -27, delta=.08)
+        self.assertAlmostEqual(lenses[1].centroid.x, 27, delta=.08)
+        self.assertGreaterEqual(parts["left-retainer"].bounds[0, 2], 4.8)
+        gap = parts["right-retainer"].bounds[0, 0] - parts["left-retainer"].bounds[1, 0]
+        self.assertGreaterEqual(gap, .2 - 1e-5)
+        for name, mesh in parts.items():
+            self.assertTrue(mesh.is_watertight, name)
+        for a, b in (("left-retainer", "right-retainer"), ("front", "left-retainer"),
+                     ("front", "right-retainer")):
+            overlap = trimesh.boolean.intersection([parts[a], parts[b]], engine="manifold")
+            self.assertLess(abs(overlap.volume), 1e-5, f"{a}/{b}")
+        self.assertTrue(preview(ellipse(25, 19), ellipse(23, 17), settings)["medialRimFallback"])
+        archive, exported_notes = generate(ellipse(25, 19), ellipse(23, 17), settings)
+        self.assertTrue(exported_notes["medial_rim_fallback"])
+        with ZipFile(io.BytesIO(archive)) as files:
+            for name in exported_notes["parts"]:
+                mesh = trimesh.load(io.BytesIO(files.read(name + ".stl")), file_type="stl")
+                self.assertTrue(mesh.is_watertight, name)
+
+    def test_narrow_placement_rejects_when_fastener_stock_cannot_fit(self):
+        with self.assertRaisesRegex(ValueError, "fastener|outer rims"):
+            build_parts(ellipse(25, 19), ellipse(23, 17), Settings(25, 25, 2.5, 125))
 
 
 if __name__ == "__main__":

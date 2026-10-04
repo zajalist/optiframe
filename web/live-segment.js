@@ -600,25 +600,13 @@ export function createLiveSegmentSession({
       }
       const remaining=deadline-performance.now();
       if(remaining<=0)throw new Error('Refinement timed out. Retrying…');
-      let results;
-      if(frames.length>1) {
-        const body=new FormData();
-        prepared.forEach(item=>body.append('images',item.blob,`${side}-${item.id}.jpg`));
-        body.append('boxes',JSON.stringify(prepared.map(item=>item.prompt)));
-        const response=await boundedStartup(apiFetch('/api/segment-burst',{method:'POST',body,signal}),remaining,signal,'Refinement timed out. Retrying…');
-        const payload=await response.json();
-        if(!response.ok)throw new Error(payload.detail||'Could not refine the burst');
-        if(!Array.isArray(payload.frames)||payload.frames.length!==prepared.length)throw new Error('Incomplete burst response');
-        results=payload.frames;
-      } else {
-        const item=prepared[0],body=new FormData();body.append('image',item.blob,`${side}-still.jpg`);body.append('box',JSON.stringify(item.prompt));
-        let still;
+      async function segmentFinalItem(item) {
+        const body=new FormData();body.append('image',item.blob,`${side}-still.jpg`);body.append('box',JSON.stringify(item.prompt));
         for (let retry=0;retry<10;retry++) {
           const timeLeft=deadline-performance.now();
           if(timeLeft<=0)throw new Error('Refinement timed out. Retrying…');
           try {
-            still=await boundedStartup(segmentFrame(body,signal,item.frame,item.prompt),timeLeft,signal,'Refinement timed out. Retrying…');
-            break;
+            return await boundedStartup(segmentFrame(body,signal,item.frame,item.prompt),timeLeft,signal,'Refinement timed out. Retrying…');
           } catch(error) {
             if(!error.busy || retry===9)throw error;
             message('Finishing this lens scan…');
@@ -626,7 +614,26 @@ export function createLiveSegmentSession({
               timeLeft,signal,'Refinement timed out. Retrying…');
           }
         }
-        results=[still];
+      }
+      let results, singleFallback=false;
+      if(frames.length>1) {
+        const body=new FormData();
+        prepared.forEach(item=>body.append('images',item.blob,`${side}-${item.id}.jpg`));
+        body.append('boxes',JSON.stringify(prepared.map(item=>item.prompt)));
+        const response=await boundedStartup(apiFetch('/api/segment-burst',{method:'POST',body,signal}),remaining,signal,'Refinement timed out. Retrying…');
+        const payload=await response.json().catch(()=>({}));
+        if(!response.ok && ![404,405,502,503,504].includes(response.status))
+          throw new Error(payload.detail||'Could not refine the burst');
+        if(response.ok && Array.isArray(payload.frames) && payload.frames.length===prepared.length)
+          results=payload.frames;
+        else {
+          // Older or busy GPU deployments can still refine the captured photo.
+          singleFallback=true;
+          results=Array(prepared.length).fill(null);
+          results[0]=await segmentFinalItem(prepared[0]);
+        }
+      } else {
+        results=[await segmentFinalItem(prepared[0])];
       }
       if(token!==generation || signal.aborted)return;
       for(let index=0;index<prepared.length;index++) {
@@ -645,7 +652,7 @@ export function createLiveSegmentSession({
         observations.push({id,contour:calibration.contour,calibration,data,blob,candidate,width,height});
       }
       let reference=observations[0], refined, refinement;
-      if(frames.length>1) {
+      if(frames.length>1 && !singleFallback) {
         const combined=fuseContours(observations);
         reference=observations.find(item=>combined.diagnostics.acceptedIds.includes(item.id));
         const h=sheetHomography(reference.calibration.markers);

@@ -97,13 +97,13 @@ test('delayed SAM outline follows the current perspective without changing captu
 test('lost or invalid sheet markers hide the outline and valid markers restore it',async t=>{
   const fixture=setup(t);
   await fixture.session.start();await fixture.reply();
-  assert.equal(fixture.overlay.paths.length,1);
+  assert.equal(fixture.overlay.paths.length,2,'sheet boundary and lens outline are both visible');
   fixture.video.pose=null;await fixture.tick();
   assert.equal(fixture.overlay.paths.length,0);
   fixture.video.pose=[originalPose[0],originalPose[2],originalPose[1],originalPose[3]];
   await fixture.tick();assert.equal(fixture.overlay.paths.length,0);
   fixture.video.pose=changedPose;await fixture.tick();
-  assert.equal(fixture.overlay.paths.length,1);
+  assert.equal(fixture.overlay.paths.length,2,'both overlays return with valid markers');
   assert.deepEqual(fixture.source.contour,rawContour);
   assert.ok(fixture.trackingSizes.every(([width,height])=>width===fixture.source.width&&height===fixture.source.height));
 });
