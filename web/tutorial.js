@@ -2,6 +2,9 @@
 (() => {
   'use strict';
   if (window.openOptiframeTutorial) return;
+  // Higgsfield gpt_image_2_5, job 33f53d52-678f-4cfa-abe3-b2f032d35564.
+  // Editorial illustration only; measured contours and assembly instructions remain separate.
+  const frameGuidePhoto = 'https://d8j0ntlcm91z4.cloudfront.net/user_3KA92iU6u67O0dIGe7uHUkaeji3/hf_20261004_020137_33f53d52-678f-4cfa-abe3-b2f032d35564.png';
 
   // Captured contours from gpu/fixtures/scanned-lens-outlines.json, rounded to 0.01.
   const leftContour = 'M-29.18,-12.68 L-29.94,-10.86 L-29.96,-10.07 L-30.2,-9.81 L-30.23,-8.5 L-30.47,-8.25 L-30.53,-4.85 L-30.3,-4.58 L-30.33,-2.5 L-30.1,-2.24 L-29.89,-0.16 L-29.2,1.41 L-29.21,1.93 L-28.98,2.19 L-28.76,3.49 L-28.3,4.27 L-28.31,4.79 L-26.91,7.13 L-26.7,8.16 L-26.23,8.69 L-26.24,9.2 L-25.31,10.25 L-24.39,12.06 L-22.06,14.67 L-21.83,14.68 L-19.73,16.77 L-15.51,19.17 L-15.03,19.19 L-13.39,20 L-12.43,20.03 L-12.2,20.29 L-11.01,20.33 L-10.78,20.59 L-9.59,20.63 L-9.36,20.89 L-7.45,20.96 L-7.22,21.22 L-5.07,21.29 L-4.84,21.55 L3.78,21.84 L4.03,21.6 L5.95,21.67 L6.2,21.42 L8.61,21.5 L8.86,21.26 L11.03,21.33 L11.28,21.09 L13.69,21.17 L13.94,20.93 L14.91,20.96 L15.9,20.49 L17.35,20.54 L18.35,20.06 L19.07,20.09 L19.59,19.6 L20.81,19.39 L21.33,18.9 L21.81,18.91 L23.11,17.68 L23.35,17.69 L25.72,14.96 L25.75,14.45 L26.53,13.7 L26.58,12.94 L27.1,12.44 L27.14,11.92 L27.68,11.17 L27.71,10.65 L28.27,9.64 L28.32,8.86 L28.58,8.61 L28.64,7.84 L28.9,7.59 L28.95,6.81 L29.21,6.56 L29.65,3.71 L29.92,3.45 L30.22,-0.99 L30.48,-1.25 L30.53,-2.04 L30.3,-2.31 L30.52,-5.48 L30.29,-5.75 L30.2,-8.14 L29.97,-8.41 L29.61,-10.56 L28.51,-12.73 L25.94,-15.48 L24.49,-16.32 L24.02,-16.88 L23.52,-16.89 L21.84,-18.01 L21.34,-18.02 L18.91,-19.17 L15.94,-19.78 L15.71,-20.06 L14.71,-20.08 L14.47,-20.36 L12.73,-20.4 L12.49,-20.68 L9.77,-21.02 L9.53,-21.29 L9.02,-21.04 L8.78,-21.31 L6.54,-21.37 L6.31,-21.64 L-1.64,-21.84 L-1.9,-21.58 L-7.11,-21.44 L-7.36,-21.18 L-8.6,-21.21 L-8.86,-20.95 L-10.58,-20.99 L-10.84,-20.73 L-12.07,-20.76 L-12.33,-20.5 L-13.31,-20.52 L-13.57,-20.26 L-14.8,-20.29 L-15.05,-20.03 L-16.78,-19.81 L-17.78,-19.29 L-18.52,-19.31 L-18.77,-19.05 L-21.49,-18.32 L-24.21,-17.06 L-24.71,-16.54 L-25.2,-16.55 L-25.95,-15.77 L-27.19,-15.01 Z';
@@ -59,6 +62,19 @@
     get('.oft-title').textContent = title;
     get('.oft-description').textContent = description;
     get('.oft-visual').innerHTML = `<svg viewBox="0 0 360 240" aria-hidden="true" focusable="false">${illustrations[illustration]()}</svg>`;
+    if (illustration === 'preview') {
+      const visual = get('.oft-visual');
+      const diagram = visual.querySelector('svg');
+      const photo = document.createElement('img');
+      photo.className = 'oft-photo';
+      photo.alt = 'Illustrative asymmetric frame with separate lenses and temples; not the patient’s generated frame';
+      photo.width = 1024; photo.height = 688;
+      photo.decoding = 'async'; photo.hidden = true;
+      photo.addEventListener('load', () => { photo.hidden = false; diagram.style.display = 'none'; });
+      photo.addEventListener('error', () => photo.remove());
+      visual.append(photo);
+      photo.src = frameGuidePhoto;
+    }
     get('.oft-sheet-link').hidden = !link;
     get('.oft-back').hidden = step === 0;
     get('.oft-next').textContent = step === guide.steps.length - 1 ? guide.done : 'Next';

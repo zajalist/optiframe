@@ -1,4 +1,5 @@
 import { facePose, opticalAnchors, landmarkToView, frameRenderLayer } from './face-tryon-geometry.js?v=37';
+import { createFrameGeometry, createFrameMaterial, configureFrameRenderer } from './frame-appearance.js?v=39';
 
 const VISION_VERSION = '0.10.32';
 const VISION_ROOT = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${VISION_VERSION}`;
@@ -84,6 +85,7 @@ export async function openFaceTryOn({ assembly, leftPd, rightPd }) {
       if (stopped) { loaded.close(); return; }
       model = loaded;
       renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+      configureFrameRenderer(THREE, renderer);
       renderer.autoClear = false;
       renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.5));
       stage.appendChild(renderer.domElement);
@@ -106,20 +108,13 @@ export async function openFaceTryOn({ assembly, leftPd, rightPd }) {
       skin.frustumCulled = false; skin.visible = false; skin.renderOrder = -1; scene.add(skin);
       const cad = new THREE.Group(); cad.scale.x = -1; frame.add(cad);
       for (const part of assembly.meshes) {
-        const geometry = new THREE.BufferGeometry();
-        geometry.setAttribute('position', new THREE.Float32BufferAttribute(part.vertices.flat(), 3));
-        geometry.setIndex(part.faces.flat()); geometry.computeVertexNormals();
-        const lens = part.kind === 'lens';
-        const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({
-          color: lens ? 0xd4e1e9 : 0x26272a, roughness: .32, metalness: .12,
-          transparent: lens, opacity: lens ? .08 : 1, depthWrite: !lens, side: THREE.DoubleSide,
-        }));
+        const mesh = new THREE.Mesh(createFrameGeometry(THREE,part), createFrameMaterial(THREE,part,{tryOn:true}));
         mesh.layers.set(frameRenderLayer(part));cad.add(mesh);
       }
       // Centre on optical references, preserving asymmetric frames and fitting offsets.
       const anchor = new THREE.Vector3(...anchors.centre);
-      const ambient=new THREE.HemisphereLight(0xffffff, 0x5d6170, 3);ambient.layers.enableAll();scene.add(ambient);
-      const light = new THREE.DirectionalLight(0xffffff, 3);light.layers.enableAll(); light.position.set(-200, 400, 700); scene.add(light);
+      const ambient=new THREE.HemisphereLight(0xffffff, 0xa8abb0, 1.8);ambient.layers.enableAll();scene.add(ambient);
+      const light = new THREE.DirectionalLight(0xffffff, 2.4);light.layers.enableAll(); light.position.set(-200, 400, 700); scene.add(light);
       const resizeView = () => {
         const width = stage.clientWidth, height = stage.clientHeight;
         renderer.setSize(width, height);

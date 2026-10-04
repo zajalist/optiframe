@@ -11,10 +11,27 @@ const responseData = response => response.headers.get('content-type')?.includes(
 import {distance,polygonArea,measure,sheetHomography,project,benchmark,pixelResolution,contourRepeatability,normalizeLensOrientation,outlineProofSVG} from './calibration.js';
 import {createLiveSegmentSession} from './live-segment.js';
 import {createPreviewScheduler} from './preview-scheduler.js';
+import {loadConfirmedFace} from './face-confirmation.js?v=39';
 
 let activeLivePanel = null;
 let automaticPreview = null;
 let frameStyle = 'classic', retentionStyle = 'screw', frameAssembly = null;
+let measurementSource = 'manual';
+function getMeasurementSource() { return measurementSource; }
+function applyFaceMeasurements(value) {
+  if (!['browser-iris-estimate','arkit-eye-transform-estimate'].includes(value?.source) ||
+      ![value.left,value.right].every(v=>Number.isFinite(v)&&v>=20&&v<=40)) throw new Error('Review both face estimates first.');
+  measurementSource=value.source;
+  for(const [side,amount] of [['left',value.left],['right',value.right]]) {
+    const field=document.getElementById(`${side}-pd`);field.value=amount.toFixed(1);
+    field.dispatchEvent(new Event('input',{bubbles:true}));
+  }
+}
+function useManualMeasurements() {
+  measurementSource='manual';
+  try { sessionStorage.removeItem('optiframe-face-estimate'); } catch {}
+  for(const side of ['left','right']) {const field=document.getElementById(`${side}-pd`);field.value='';field.dispatchEvent(new Event('input',{bubbles:true}));}
+}
 try { const saved = sessionStorage.getItem('optiframe-frame-style'); if (['classic','bold','brow'].includes(saved)) frameStyle = saved; } catch {}
 try { const saved = sessionStorage.getItem('optiframe-retention-style'); if (['screw','snap'].includes(saved)) retentionStyle = saved; } catch {}
 function getFrameStyle() { return frameStyle; }
@@ -659,6 +676,13 @@ try {
     if (input?.matches('.design-inputs input') && typeof value === 'string') input.value = value;
   }
 } catch { /* Missing or blocked session storage leaves manual fields available. */ }
+const confirmedFace=loadConfirmedFace();
+if(confirmedFace) {
+  measurementSource=confirmedFace.source;
+  for(const [side,value] of [['left',confirmedFace.left],['right',confirmedFace.right]]) {
+    const input=document.getElementById(`${side}-pd`);if(!input.value.trim())input.value=value.toFixed(1);
+  }
+}
 const designStatus = document.querySelector('#design-status');
 const number = id => {
   const input = document.getElementById(id);
@@ -727,6 +751,7 @@ function framePayload() {
   const rightThickness = number('right-edge-thickness');
   return { left, right, settings: {
     alignment_source: [leftPanel,rightPanel].some(panel=>panel.illustrativeAlignment) ? 'illustrative' : 'provider-marked',
+    measurement_source: measurementSource,
     frame_style: frameStyle,
     retention_style: retentionStyle,
     left_pd: number('left-pd'), right_pd: number('right-pd'),
@@ -743,6 +768,8 @@ async function makeFrame(preview, experimental = false) {
   try {
     if (!preview && !experimental && [leftPanel,rightPanel].some(panel=>panel.illustrativeAlignment))
       throw new Error('Checked export needs both provider optical-centre and top marks. Use the unverified prototype kit for approximate alignment.');
+    if (!preview && !experimental && measurementSource !== 'manual')
+      throw new Error('Face scan values are estimates. Use the prototype kit, or enter physically measured pupil distances in Fit measurements.');
     if ([leftPanel, rightPanel].some(panel => panel.photoLoading))
       throw new Error('Wait for both selected photos to finish loading before previewing or exporting.');
     if(!preview&&!experimental&&[leftPanel,rightPanel].some(p=>!p.homography||!p.opticalCentre||!p.topMark||!p.caliperCheck?.pass||!p.repeatCheck?.pass||!p.edgeRepeatCheck?.pass||!p.el.querySelector('.evidence-confirmed').checked))
@@ -763,7 +790,7 @@ async function makeFrame(preview, experimental = false) {
     const blob = await response.blob();
     if (!isCurrentFrameRequest(request, snapshot)) return;
     if (preview) {
-      const { showSTL } = await import('./viewer.js?v=30');
+      const { showSTL } = await import('./viewer.js?v=39');
       if (!isCurrentFrameRequest(request, snapshot)) return;
       const buffer = await blob.arrayBuffer();
       if (!isCurrentFrameRequest(request, snapshot)) return;
@@ -797,4 +824,4 @@ automaticPreview = createPreviewScheduler({
   shouldRender: () => !document.body.classList.contains('fit-flow') || document.getElementById('viewer').offsetParent !== null,
   render: () => makeFrame(true),
 });
-export { distance, polygonArea, measure, sheetHomography, project, leftPanel, rightPanel, capturesReady, framePayload, makeFrame, getFrameStyle, setFrameStyle, getRetentionStyle, setRetentionStyle, getFrameAssembly };
+export { distance, polygonArea, measure, sheetHomography, project, leftPanel, rightPanel, capturesReady, framePayload, makeFrame, getFrameStyle, setFrameStyle, getRetentionStyle, setRetentionStyle, getFrameAssembly, applyFaceMeasurements, useManualMeasurements, getMeasurementSource };

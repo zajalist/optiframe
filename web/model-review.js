@@ -61,7 +61,7 @@ async function build() {
       if (request !== generation) return;
       cache.set(key, buffer);
     }
-    const { showSTL } = await import('./viewer.js?v=30');
+    const { showSTL } = await import('./viewer.js?v=39');
     if (request !== generation) return;
     showSTL(buffer, $('viewer'));
     ready = true;

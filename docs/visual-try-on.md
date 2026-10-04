@@ -1,10 +1,20 @@
 # Visual try-on without fitting measurements
 
-`/try-on.html` builds an appearance preview using projected lens shapes, geometric centres and illustrative clearance. It never reads or updates pupil distances, optical marks, thickness inputs or print-fit settings. The summary and measurement-source screens offer **Just try on**. A failed printable frame preview also offers this route, so random measurements cannot trap users behind a disabled camera button.
+`/try-on.html` builds an appearance preview using projected lens shapes, geometric centres and illustrative clearance. Its preview geometry never reads patient measurements. The separate **Scan face** action saves numeric estimates only after explicit review and confirmation; fitting can then use those values. The summary and measurement-source screens offer **Just try on**. A failed printable frame preview also offers this route, so random measurements cannot trap users behind a disabled camera button.
 
 When transferred captures are present, their sheet homography supplies the shapes. Otherwise the page explicitly labels the saved example as sample lenses. Preview defaults include 2 mm edge thickness, 130 mm temples and a 16 mm gap between lens bounding boxes. Shapes wider than 60 mm are uniformly scaled only in this appearance preview. These are not wearer measurements or a printable fit. There is no STL export on this page.
 
 The website uses MediaPipe face landmarks with a local front-camera stream. It is not ARKit, and face frames are not uploaded. The **iPhone app file** exports the assembled mesh JSON with `purpose: visual-try-on`, `alignmentSource: illustrative` and `requiresFitVerification: true`. The native app imports that file using ARKit face tracking; see `ios/README.md` for build status. Physical iPhone validation and signing remain separate.
+
+## Face scan and confirmation
+
+The fitting measurement-source screen offers Camera scan, Enter manually, and iPhone app scan. The camera fallback works without ARKit/ARCore on browsers supporting camera access and MediaPipe WASM. It is not guaranteed on every phone. GPU initialization falls back to CPU; unsupported devices retain manual entry. No camera opens before the user chooses Scan face. Stable observations over at least two seconds produce separate wearer-left/right estimates and stop the camera. The user edits and explicitly confirms the values; closing, denial, retry or backgrounding never saves them.
+
+The browser estimator assumes an iris diameter of 11.7 mm, based on [Google Research's iris method](https://research.google/blog/mediapipe-iris-real-time-iris-tracking-depth-estimation/). Individual iris size, convergence, lens distortion, facial asymmetry and model error remain unknown. Quality/temporal gates reject bad observations but do not establish clinical accuracy. Only confirmed numbers/source are stored in session storage, never face imagery or landmarks. Editing the estimate retains its provenance. Explicit manual entry clears the estimated values before allowing new measurements.
+
+Frame preview and ZIP metadata preserve `measurement_source` (`manual`, `browser-iris-estimate`, or `arkit-eye-transform-estimate`). Confirmation does not change an estimate into verified measurements: the checked-export path rejects estimated sources; experimental fit kits remain available. Thickness, temple length and optical marks are not inferred from the browser scan. Native ARKit estimates use eyeball-transform origins and also require review; they are not clinical pupil centres.
+
+Version 39 also uses angle-weighted crease normals for clean satin frame shading and faint unlit lenses, preserving CAD positions and the front/temple depth passes. Native simulator compilation and 17 XCTest tests passed; signed hardware installation remains unverified. Browser face lifecycle, estimator and storage tests use synthetic data; no claim of physical pupil-distance accuracy has been validated.
 
 Only temples use the estimated face-depth occluder. The front, retainers and lenses render in a second depth pass so approximate monocular depth cannot cut holes through rims or the bridge. Their actual CAD geometry remains unchanged. The visual front offset is 18 mm before the browser's appearance scale; it is not recorded as a fitting measurement.
 

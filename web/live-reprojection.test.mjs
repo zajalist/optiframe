@@ -4,6 +4,11 @@ import {createLiveSegmentSession} from './live-segment.js';
 import {sheetHomography,project,unproject} from './calibration.js';
 
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+async function eventually(predicate,message,timeoutMs=1500) {
+  const deadline=performance.now()+timeoutMs;
+  while(!predicate()&&performance.now()<deadline)await pause(5);
+  assert.ok(predicate(),message);
+}
 const originalPose=[[.15,.15],[.8,.15],[.8,.8],[.15,.8]];
 const changedPose=[[.24,.12],[.86,.20],[.78,.88],[.1,.72]];
 const rawContour=[[300,250],[600,250],[600,480],[300,480]];
@@ -22,7 +27,6 @@ function setup(t) {
       stroke(){value.paths.push(value.path.map(p=>[...p]));},save(){},restore(){},arc(){},fill(){},
       drawImage(source){value.pose=source.pose;},
       getImageData(x,y,width,height){
-        if(width<=480)trackingSizes.push([width,height]);
         return {width,height,pose:value.pose,data:new Uint8ClampedArray(width*height*4).fill(180)};
       },
     };
@@ -40,6 +44,9 @@ function setup(t) {
     mediaDevices:{getUserMedia:async()=>({getTracks:()=>[{stop(){}}]})},
     apiFetch:()=>new Promise(resolve=>{response=()=>resolve({ok:true,json:async()=>source});}),
     calibrateFrame(pixels,contour){
+      // Empty contour identifies the current-video tracking pass, independently
+      // of its pixel budget or other quality reads from the sampled image.
+      if(!contour.length)trackingSizes.push([pixels.width,pixels.height]);
       if(!pixels.pose)return null;
       const corners=markers(pixels.pose,pixels.width,pixels.height),h=sheetHomography(corners);
       return {markers:corners,contour:contour.map(p=>project(p,h))};
@@ -53,7 +60,11 @@ function setup(t) {
     globalThis.cancelAnimationFrame=old.cancel;
   });
   return {session,video,overlay,source,trackingSizes,
-    reply:async()=>{while(!response)await pause(1);response();await pause(5);},
+    reply:async()=>{
+      await eventually(()=>Boolean(response),'segmentation request must start');
+      response();
+      await eventually(()=>trackingSizes.length>0,'completed segmentation must reproject onto the current video');
+    },
     tick:async()=>{await pause(205);const callback=scheduled;assert.ok(callback);callback();},
     get captured(){return captured;},
   };
@@ -70,12 +81,12 @@ test('delayed SAM outline follows the current perspective without changing captu
   fixture.video.pose=changedPose;
   await fixture.reply();
   const initial=sheetHomography(markers(originalPose,960,720));
-  const current=sheetHomography(markers(changedPose,480,360));
-  const expected=rawContour.map(p=>unproject(project(p,initial),current).map(v=>v*2));
+  const current=sheetHomography(markers(changedPose,960,720));
+  const expected=rawContour.map(p=>unproject(project(p,initial),current));
   assertPoints(fixture.overlay.paths.at(-1),expected);
   assert.notDeepEqual(fixture.overlay.paths.at(-1),rawContour);
   assert.deepEqual(fixture.source.contour,rawContour);
-  assert.deepEqual(fixture.trackingSizes,[[480,360]]);
+  assert.deepEqual(fixture.trackingSizes,[[960,720]],'tracking must retain the segmentation resolution so marker centres survive');
   // Exercise the stored source capture, independently of its preview drawing.
   await fixture.session.capture(undefined,true);
   assert.deepEqual(fixture.captured.contour,rawContour);
@@ -94,5 +105,5 @@ test('lost or invalid sheet markers hide the outline and valid markers restore i
   fixture.video.pose=changedPose;await fixture.tick();
   assert.equal(fixture.overlay.paths.length,1);
   assert.deepEqual(fixture.source.contour,rawContour);
-  assert.ok(fixture.trackingSizes.every(([width,height])=>Math.max(width,height)<=480));
+  assert.ok(fixture.trackingSizes.every(([width,height])=>width===fixture.source.width&&height===fixture.source.height));
 });

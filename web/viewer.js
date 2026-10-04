@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { createFrameGeometry, createFrameMaterial, configureFrameRenderer } from './frame-appearance.js?v=39';
 
 let active = null;
 
@@ -19,6 +20,7 @@ export function showSTL(buffer, element) {
   element.classList.add('active');
   element.style.position = 'relative';
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  configureFrameRenderer(THREE, renderer);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.setSize(element.clientWidth, element.clientHeight);
   element.appendChild(renderer.domElement);
@@ -29,16 +31,7 @@ export function showSTL(buffer, element) {
   const group = new THREE.Group();
   scene.add(group);
   for (const part of assembly.meshes) {
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute(part.vertices.flat(), 3));
-    geometry.setIndex(part.faces.flat());
-    geometry.computeVertexNormals();
-    const lens = part.kind === 'lens';
-    const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({
-      color: lens ? 0xc9deed : part.name.includes('retainer') ? 0x535e6e : 0x252c38,
-      metalness: 0.18, roughness: 0.34, side: THREE.DoubleSide,
-      transparent: lens, opacity: lens ? 0.22 : 1, depthWrite: !lens,
-    }));
+    const mesh = new THREE.Mesh(createFrameGeometry(THREE, part), createFrameMaterial(THREE, part));
     mesh.userData.partName = part.name;
     mesh.userData.kind = part.kind;
     group.add(mesh);
@@ -48,8 +41,8 @@ export function showSTL(buffer, element) {
   const centre = box.getCenter(new THREE.Vector3());
   group.position.copy(centre).multiplyScalar(-1);
   const span = box.getSize(new THREE.Vector3()).length();
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x8090a5, 2.6));
-  const light = new THREE.DirectionalLight(0xffffff, 3.4);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0xa8abb0, 1.8));
+  const light = new THREE.DirectionalLight(0xffffff, 2.4);
   light.position.set(-50, 80, -90);
   scene.add(light);
   const controls = new OrbitControls(camera, renderer.domElement);

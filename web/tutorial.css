@@ -1,4 +1,5 @@
 html.oft-guide-open { overflow: hidden; }
+/* The guide floats above the working camera; its frosted surface keeps that context visible. */
 .oft-dialog { --oft-fg: #f5f6f8; --oft-muted: #b6bdc8; --oft-accent: #d6e5f8; color-scheme: dark; box-sizing: border-box; width: min(440px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 32px); padding: 0; border: 0; border-radius: 30px; background: #202329; color: var(--oft-fg); box-shadow: 0 24px 80px #0006; font: 400 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; overscroll-behavior: contain; }
 .oft-dialog *, .oft-dialog *::before, .oft-dialog *::after { box-sizing: border-box; }
 .oft-dialog::backdrop { background: #030504b8; }
@@ -57,3 +58,59 @@ html.oft-guide-open { overflow: hidden; }
 @media (min-width: 521px) and (max-height: 570px) { .oft-dialog { width: min(660px, calc(100vw - 24px)); margin: auto; } .oft-shell { grid-template-columns: minmax(100px, 1fr) minmax(160px, 1.2fr); grid-template-rows: 44px minmax(128px, auto) auto; gap: 0 20px; padding: 8px 20px 14px; } .oft-header, .oft-footer { grid-column: 1 / -1; } .oft-visual { margin: 4px 0; } .oft-copy { align-self: center; padding: 12px 0; } .oft-title { font-size: 22px; } .oft-description { line-height: 1.4; } }
 @media (max-width: 520px) and (max-height: 440px) { .oft-shell { grid-template-rows: 44px auto auto; padding: 8px 18px 14px; } .oft-visual { display: none; } .oft-copy { padding-top: 8px; } .oft-title { font-size: 21px; } .oft-description { font-size: 13px; line-height: 1.4; } .oft-footer { margin-top: 12px; } }
 @media (prefers-reduced-motion: reduce) { .oft-dialog, .oft-dialog *, .oft-dialog *::before, .oft-dialog *::after { animation: none !important; transition: none !important; } }
+
+.oft-dialog.oft-dialog {
+  --oft-muted: #c4c8d0;
+  width: min(460px, calc(100vw - 32px));
+  border-radius: 32px;
+  background: linear-gradient(145deg, #ffffff1c, #ffffff03 46%, #ffffff0a), #202329c9;
+  -webkit-backdrop-filter: blur(34px) saturate(120%);
+  backdrop-filter: blur(34px) saturate(120%);
+  box-shadow: inset 0 1px 0 #ffffff6b, inset 1px 0 0 #ffffff24, inset -1px -1px 0 #ffffff13, 0 28px 80px #0008;
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #ffffff40 transparent;
+}
+.oft-dialog.oft-dialog::backdrop { background: #05060880; -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
+.oft-dialog .oft-shell { padding: 14px 24px 24px; grid-template-rows: auto clamp(148px, 25dvh, 220px) auto auto; }
+.oft-dialog .oft-header { gap: 12px; color: #d5d7dc; font-weight: 500; }
+.oft-dialog .oft-count { font-size: 12px; color: #bdc2cb; }
+.oft-dialog .oft-close { margin-right: -8px; background: #ffffff0b; box-shadow: inset 0 1px 0 #ffffff32, 0 3px 8px #0001; }
+.oft-dialog .oft-visual { margin: 6px -8px 16px; isolation: isolate; }
+.oft-dialog .oft-visual::before { content: ''; position: absolute; inset: 9% 8%; border-radius: 50%; background: radial-gradient(ellipse, #f1f4fa0b, transparent 70%); z-index: -1; }
+.oft-dialog .oft-title { font-size: clamp(24px, 5.8vw, 28px); letter-spacing: -.035em; line-height: 1.15; margin-bottom: 10px; }
+.oft-dialog .oft-description { color: #c4c8d0; font-size: 14px; line-height: 1.55; }
+.oft-dialog .oft-footer { margin-top: 24px; }
+.oft-dialog .oft-actions { gap: 10px; }
+.oft-dialog .oft-next, .oft-dialog .oft-back, .oft-dialog .oft-sheet-link {
+  background: linear-gradient(160deg, #ffffff26, #ffffff08 65%);
+  box-shadow: inset 0 1px 0 #ffffff6b, inset 0 -1px 0 #ffffff12, 0 5px 14px #0002;
+  color: #f5f6f8;
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  min-height: 48px;
+}
+.oft-dialog .oft-next { background: linear-gradient(150deg, #ffffff42, #ffffff15); font-weight: 600; }
+.oft-dialog .oft-next:hover, .oft-dialog .oft-back:hover:not(:disabled), .oft-dialog .oft-sheet-link:hover { background-color: #ffffff18; }
+.oft-dialog .oft-next:focus-visible, .oft-dialog .oft-back:focus-visible, .oft-dialog .oft-close:focus-visible, .oft-dialog .oft-sheet-link:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+.oft-dialog .oft-photo { position: absolute; inset: 0; width: 100%; height: 100%; max-height: 100%; object-fit: contain; border-radius: 20px; display: block; }
+.oft-dialog .oft-photo[hidden] { display: none; }
+@media (max-width: 520px) {
+  .oft-dialog.oft-dialog { width: calc(100vw - 24px); margin: auto auto max(12px, env(safe-area-inset-bottom)); }
+  .oft-dialog .oft-shell { padding: 12px 22px 22px; }
+}
+@media (max-height: 570px) {
+  .oft-dialog .oft-shell { grid-template-rows: auto 126px auto auto; padding: 8px 20px 16px; }
+  .oft-dialog .oft-visual { margin-bottom: 8px; }
+  .oft-dialog .oft-footer { margin-top: 16px; }
+  .oft-dialog .oft-title { font-size: 23px; }
+}
+@media (min-width: 521px) and (max-height: 570px) {
+  .oft-dialog.oft-dialog { width: min(660px, calc(100vw - 24px)); margin: auto; }
+  .oft-dialog .oft-shell { grid-template-rows: 44px minmax(128px, auto) auto; }
+}
+@media (max-width: 520px) and (max-height: 440px) {
+  .oft-dialog .oft-shell { grid-template-rows: 44px auto auto; }
+}
+@media (prefers-reduced-transparency: reduce) { .oft-dialog.oft-dialog { background: #262a31; -webkit-backdrop-filter: none; backdrop-filter: none; } }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .oft-dialog.oft-dialog { background: #262a31; } }
