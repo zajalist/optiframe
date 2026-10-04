@@ -55,6 +55,23 @@ const result = { width: 640, height: 480, contour: [[10, 10], [100, 10], [100, 1
   quality: { score: 0.7 }, method: 'sam2.1-hiera-small-cuda' };
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+test('changing lighting invalidates the old outline and waits for exposure before sampling',async()=>{
+  let enabled=false,calls=0,stopped=false;
+  const track={getCapabilities:()=>({torch:true}),getSettings:()=>({torch:enabled}),
+    async applyConstraints(value){if(typeof value.torch==='boolean')enabled=value.torch;},stop(){stopped=true;}};
+  const fixture=setup(async()=>{calls++;return {ok:true,json:async()=>result};},async()=>{},
+    {mediaDevices:{getUserMedia:async()=>({getTracks:()=>[track],getVideoTracks:()=>[track]})}});
+  try {
+    await fixture.session.start();await pause(30);
+    assert.equal(fixture.captureButton.disabled,false);
+    assert.equal(await fixture.session.setTorch(true),true);
+    assert.equal(fixture.captureButton.disabled,true);
+    const before=calls;await pause(100);assert.equal(calls,before);
+    await pause(550);assert.ok(calls>before);assert.equal(enabled,true);
+  } finally {fixture.session.stop();}
+  assert.equal(stopped,true);assert.equal(enabled,false);
+});
+
 const autoOutline = Array.from({length: 80}, (_, i) => [50 + 25 * Math.cos(i * Math.PI / 40), 35 + 20 * Math.sin(i * Math.PI / 40)]);
 const autoOptions = {autoCapture: true, calibrateFrame: () => ({markers: [[80,50],[560,50],[560,386],[80,386]], contour: autoOutline})};
 

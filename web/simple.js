@@ -1,4 +1,4 @@
-import { createLiveSegmentSession } from './live-segment.js?v=25';
+import { createLiveSegmentSession } from './live-segment.js?v=28';
 import { sheetHomography, project, measure } from './calibration.js';
 import { detectSheetMarkers } from './marker-detect.js?v=9';
 import { photoReviewLayout } from './photo-review.js?v=23';
@@ -30,6 +30,19 @@ let pendingPhoto = null;
 let targetPointer = null;
 let audioContext = null;
 let resultView = 'photo';
+const lightingTest = new URLSearchParams(location.search || '').get('test') === 'lighting';
+let torchState = {supported:false,enabled:false,busy:false,error:''};
+function renderTorch() {
+  const button = $('torch-toggle');
+  button.hidden = !lightingTest || phase !== 'live';
+  button.disabled = !torchState.supported || torchState.busy;
+  button.setAttribute('aria-pressed', String(torchState.enabled));
+  button.setAttribute('aria-label', !torchState.supported ? 'Flashlight unavailable in this browser' : torchState.enabled ? 'Turn off flashlight' : 'Turn on flashlight');
+  $('torch-label').textContent = !torchState.supported ? 'No flash' : torchState.busy ? 'Changing…' : torchState.enabled ? 'Flash on' : 'Flash off';
+  const note = torchState.error || (!torchState.supported ? 'Flashlight unavailable in this browser' : '');
+  $('torch-note').textContent = note;
+  $('torch-note').hidden = button.hidden || !note;
+}
 
 // Unlock sound during a user gesture; camera startup never plays audio.
 function enableSound() {
@@ -184,6 +197,7 @@ function setPhase(next, message) {
   secondary.hidden = !['markers', 'aim', 'result'].includes(next);
   secondary.textContent = 'Retry';
   status.textContent = message || '';
+  renderTorch();
 }
 
 function stopCamera() {
@@ -440,6 +454,7 @@ controller = createLiveSegmentSession({
   video, overlay: $('camera-overlay'), status, captureButton: controllerButton,
   apiFetch, side: 'lens', onCapture: acceptCapture, minimalStatus: true,
   autoCapture: true,
+  onTorchChange(state) { torchState = state; renderTorch(); },
   onRemovalChange(waiting) {
     waitingForReplacement = waiting;
     $('lens-placed').hidden = phase !== 'live' || !waiting;
@@ -493,6 +508,9 @@ secondary.addEventListener('click', () => retryLens());
 $('retry-left').addEventListener('click', () => retryLens('left'));
 $('retry-right').addEventListener('click', () => retryLens('right'));
 $('camera-retry').addEventListener('click', () => { enableSound(); void startCamera(); });
+$('torch-toggle').addEventListener('click', () => {
+  if (lightingTest && phase === 'live') void controller.setTorch(!torchState.enabled);
+});
 $('lens-placed').addEventListener('click', () => {
   if (phase === 'live' && waitingForReplacement) controller.confirmLensChanged();
 });
@@ -580,4 +598,9 @@ async function openStudio() {
 
 window.addEventListener('resize', () => { fitCamera(); fitReview(); syncAimOverlay(); });
 window.addEventListener('pagehide', stopCamera);
+window.addEventListener('visibilitychange', () => {
+  if (document.hidden && lightingTest && (torchState.enabled || torchState.busy)) {
+    stopCamera(); setPhase('idle');
+  }
+});
 void startCamera();

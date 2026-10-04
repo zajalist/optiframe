@@ -81,6 +81,19 @@ test('guided sweep is explicitly selected by the test link', () => {
   assert.equal(harness({search:'?capture=sweep&v=24'}).controllerOptions.viewSweep, true);
 });
 
+test('flashlight control is internal only and reflects supported, busy, and unavailable states',async()=>{
+  const normal=harness();await tick();assert.equal(normal.$('torch-toggle').hidden,true);
+  const app=harness({search:'?test=lighting'});await tick();
+  assert.equal(app.$('torch-toggle').hidden,false);assert.equal(app.$('torch-toggle').disabled,true);
+  app.controllerOptions.onTorchChange({supported:true,enabled:true,busy:false,error:''});
+  assert.equal(app.$('torch-label').textContent,'Flash on');
+  assert.equal(app.$('torch-toggle').attributes['aria-pressed'],'true');
+  assert.equal(app.$('torch-note').hidden,true);
+  app.controllerOptions.onTorchChange({supported:true,enabled:true,busy:true,error:''});
+  assert.equal(app.$('torch-toggle').disabled,true);
+  await app.accept(app.payload);assert.equal(app.$('torch-toggle').hidden,true);
+});
+
 test('second lens can be acknowledged without discarding the confirmed first lens', async () => {
   const app=harness(); await tick();
   assert.equal(app.$('lens-placed').hidden,true);

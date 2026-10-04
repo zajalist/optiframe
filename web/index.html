@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#101112">
   <title>OptiFrame — lens capture</title>
-  <link rel="stylesheet" href="/simple.css?v=23">
+  <link rel="stylesheet" href="/simple.css?v=28">
   <link rel="stylesheet" href="/tutorial.css?v=27">
   <link rel="stylesheet" href="/glass.css?v=14">
 </head>
@@ -29,6 +29,8 @@
         </div>
         <label id="photo-label" class="photo-import" for="photo-input" aria-label="Use a photo" tabindex="0"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.5"/><path d="m4 18 6-6 4 4 3-3 4 4"/></svg><span>Photo</span><input id="photo-input" type="file" accept="image/*"></label>
         <button id="camera-retry" type="button" hidden>Retry camera</button>
+        <button id="torch-toggle" class="torch-toggle" type="button" aria-label="Turn on flashlight" aria-pressed="false" aria-describedby="torch-note" hidden><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="m14 2-9 12h6l-1 8 9-12h-6z"/></svg><span id="torch-label">Flash off</span></button>
+        <span id="torch-note" class="torch-note" role="status" hidden></span>
       </div>
       <div class="action-area">
         <div id="review-switch" class="review-switch" role="group" aria-label="Review view" hidden><button id="review-photo" type="button" aria-pressed="true">Photo</button><button id="review-outline" type="button" aria-pressed="false">Outline</button></div>
@@ -39,7 +41,7 @@
     </main>
   </div>
   <button id="controller-capture" type="button" hidden disabled></button>
-  <script type="module" src="/simple.js?v=25"></script>
+  <script type="module" src="/simple.js?v=28"></script>
   <script src="/tutorial.js?v=27" defer></script>
   <script src="/navigation.js?v=12" defer></script>
 </body>

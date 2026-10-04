@@ -4,6 +4,7 @@ import { captureSharpFrame } from './sharp-frame.js?v=22';
 import { fuseContours } from './contour-fusion.js?v=22';
 import { sheetHomography, project, unproject } from './calibration.js?v=22';
 import { createViewSweep, countDistinctViews } from './view-sweep.js?v=24';
+import { createCameraTorch } from './camera-torch.js?v=28';
 // Live camera proposals are only inputs to the existing photo review flow.
 const MAX_SIDE = 1280;
 const INTERVAL_MS = 50;
@@ -42,12 +43,15 @@ export function createLiveSegmentSession({
   autoCapture = false, calibrateFrame = null,
   stillCapture = true, captureFrame = captureSharpFrame, viewSweep = false,
   onRemovalChange = () => {},
+  onTorchChange = () => {},
 }) {
   if (!video || !overlay || !status || !captureButton || typeof onCapture !== 'function')
     throw new TypeError('Live segmentation needs video, overlay, status, captureButton and onCapture');
 
   const context = overlay.getContext('2d');
   let stream = null;
+  let lightingPending = false, lightingReadyAt = 0;
+  const torch = createCameraTorch(onTorchChange);
   let timer = null;
   let request = null;
   let generation = 0;
@@ -334,6 +338,7 @@ export function createLiveSegmentSession({
   async function sample(token) {
     timer = null;
     if (token !== generation || !stream || working || !video.videoWidth) return;
+    if(lightingPending || performance.now()<lightingReadyAt){schedule(token);return;}
     const job = { abort: new AbortController() };
     working = job;
     request = job.abort;
@@ -631,12 +636,14 @@ export function createLiveSegmentSession({
       late => late.getTracks().forEach(track => track.stop()));
       if (token !== generation) { acquired.getTracks().forEach(track => track.stop()); return; }
       stream = acquired;
-      void optimizeCameraTrack(acquired.getVideoTracks?.()[0]);
+      await boundedStartup(optimizeCameraTrack(acquired.getVideoTracks?.()[0]),startupTimeoutMs,signal,'Camera settings timed out. Retry camera.');
+      if(token!==generation)return;
       video.srcObject = stream;
       await boundedStartup(video.play(), startupTimeoutMs, signal,
         'Camera preview timed out. Close other camera apps and try again.');
       if (token !== generation) return;
       if (!video.videoWidth || !video.videoHeight) throw new Error('Camera has no video frames');
+      torch.attach(acquired.getVideoTracks?.()[0]);
       [overlay.width, overlay.height] = dimensions();
       captureButton.disabled = true;
       draw();
@@ -651,6 +658,8 @@ export function createLiveSegmentSession({
     }
   }
   function stop() {
+    torch.attach(null);
+    lightingPending=false;lightingReadyAt=0;
     sweep.reset();
     capturePending = null;
     refinementRetryAt=0; refinementHint='';
@@ -732,6 +741,14 @@ export function createLiveSegmentSession({
     message('');
     return true;
   }
-  return { start, stop, capture, setBoxNormalized, confirmLensChanged,
+  async function setTorch(enabled) {
+    if(!stream || capturePending || lightingPending || !torch.state.supported)return false;
+    const token=generation;
+    lightingPending=true;boxVersion++;request?.abort();sweep.reset();clearResult();guidance.reset();
+    try {return await torch.set(Boolean(enabled));}
+    finally {if(token===generation){lightingPending=false;lightingReadyAt=performance.now()+600;}}
+  }
+  return { start, stop, capture, setBoxNormalized, confirmLensChanged, setTorch,
+    get torchState(){return torch.state;},
     get active() { return !!stream; } };
 }
