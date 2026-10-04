@@ -306,7 +306,7 @@ def health() -> dict:
     started = _model_started_at
     worker = {"edgeRefinement": "shadow-aware-rim-dp-v2", "modelBusy": _model_lock.locked(),
               "inferenceAgeMs": round((time.monotonic() - started) * 1000, 1) if started is not None else None,
-              "lastInferenceMs": _last_inference_ms}
+              "lastInferenceMs": _last_inference_ms, **runtime.worker_status}
     try:
         import torch
     except ImportError:

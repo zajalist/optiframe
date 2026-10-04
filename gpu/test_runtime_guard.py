@@ -111,13 +111,30 @@ class RuntimeGuardTests(unittest.IsolatedAsyncioTestCase):
         guarded = RuntimeGuard(held, RuntimeState())
         first = asyncio.create_task(request(guarded))
         await entered.wait()
-        code, headers, _ = await request(guarded, "/api/live-segment")
+        code, headers, _ = await request(guarded, "/api/import")
         self.assertEqual(code, 503)
         self.assertEqual(headers[b"retry-after"], b"1")
         self.assertEqual((await request(guarded, "/healthz"))[0], 200)
         release.set()
         self.assertEqual((await first)[0], 200)
         self.assertEqual((await request(guarded, "/api/import"))[0], 200)
+
+    async def test_live_frame_waits_for_current_frame_and_then_runs(self):
+        entered, release = asyncio.Event(), asyncio.Event()
+        async def held(scope, receive, send):
+            if scope["path"] == "/api/frame":
+                entered.set()
+                await release.wait()
+            await echo(scope, receive, send)
+        guarded = RuntimeGuard(held, RuntimeState())
+        first = asyncio.create_task(request(guarded))
+        await entered.wait()
+        second = asyncio.create_task(request(guarded, "/api/live-segment"))
+        await asyncio.sleep(0.1)
+        self.assertFalse(second.done())
+        release.set()
+        self.assertEqual((await first)[0], 200)
+        self.assertEqual((await second)[0], 200)
 
     async def test_timeout_and_handler_error_release_slot_and_keep_secure_headers(self):
         guarded = RuntimeGuard(CaptureBodyLimit(echo), RuntimeState())

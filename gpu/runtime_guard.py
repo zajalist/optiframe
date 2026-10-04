@@ -51,6 +51,14 @@ class RuntimeState:
         with self._lock:
             return any(worker for _, worker in self._work.values())
 
+    @property
+    def worker_status(self):
+        """Coarse queue diagnostics without paths, images, tokens or identities."""
+        with self._lock:
+            ages = [self._clock() - started for started, worker in self._work.values() if worker]
+            return {"workerCount": len(ages),
+                    "longestWorkerAgeMs": round(max(ages, default=0) * 1000, 1)}
+
     def begin_work(self, *, worker=False):
         token = uuid.uuid4().hex
         with self._lock:
@@ -113,6 +121,9 @@ class RuntimeGuard:
         self.app = app
         self.runtime = runtime
         self._slots = threading.BoundedSemaphore(max_expensive)
+        # One camera frame may wait for the frame currently being processed.
+        # Keep this bounded so disconnected phones cannot build a stale queue.
+        self._live_waiters = threading.BoundedSemaphore(2)
         self.account_access = account_access or AccountAccess()
 
     async def __call__(self, scope, receive, send):
@@ -170,15 +181,30 @@ class RuntimeGuard:
                 return await reject("Service is not configured", 503, True)
         admitted = False
         work_token = None
+        waiting = False
         if expensive_route(path):
             if self.runtime.production and (not self.runtime.ready or not self.runtime.healthy):
                 return await reject("Service is warming up. Retrying…", 503, True)
-            if self.runtime.worker_busy:
-                return await reject("Service busy. Retrying…", 503, True)
-            admitted = self._slots.acquire(blocking=False)
-            if not admitted:
-                return await reject("Service busy. Retrying…", 503, True)
-            work_token = self.runtime.begin_work()
+            try:
+                if path == "/api/live-segment":
+                    waiting = self._live_waiters.acquire(blocking=False)
+                    if not waiting:
+                        return await reject("Service busy. Retrying…", 503, True)
+                    deadline = monotonic() + 8
+                    while monotonic() < deadline:
+                        if not self.runtime.worker_busy:
+                            admitted = self._slots.acquire(blocking=False)
+                            if admitted:
+                                break
+                        await asyncio.sleep(0.05)
+                elif not self.runtime.worker_busy:
+                    admitted = self._slots.acquire(blocking=False)
+                if not admitted:
+                    return await reject("Service busy. Retrying…", 503, True)
+                work_token = self.runtime.begin_work()
+            finally:
+                if waiting:
+                    self._live_waiters.release()
         try:
             await self.app(scope, receive, secured_send)
         except Exception as error:
