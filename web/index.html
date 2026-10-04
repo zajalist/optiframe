@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#101112">
   <title>OptiFrame — lens capture</title>
-  <link rel="stylesheet" href="/simple.css?v=50">
+  <link rel="stylesheet" href="/simple.css?v=51">
   <link rel="stylesheet" href="/tutorial.css?v=46">
   <link rel="stylesheet" href="/glass.css?v=33">
 </head>
@@ -20,6 +20,7 @@
       <div class="stage" id="stage">
         <div class="empty" id="empty">Opening camera…</div>
         <div class="camera-frame" id="camera-frame" hidden><video id="camera" playsinline muted autoplay aria-label="Live lens camera"></video><canvas id="camera-overlay" aria-label="Live lens outline"></canvas></div>
+        <div id="live-guide" class="live-guide" role="status" aria-live="polite" hidden>Finding four sheet dots…</div>
         <div id="remove-overlay" class="remove-overlay" hidden><svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="29" width="46" height="27" rx="3"/><path d="M14 34h36M14 41h36M14 48h36" opacity=".4"/><path d="M25 22c0-7 14-7 14 0s-14 7-14 0Z"/><path d="M32 18V7m0 0-5 5m5-5 5 5"/></svg><strong>Remove the left lens</strong><span>Show the empty sheet to the camera</span><button id="remove-confirm" type="button">Sheet is empty</button></div>
         <canvas id="review-canvas" aria-label="Captured lens. Press and drag for precise adjustment." hidden></canvas>
         <svg id="result-svg" viewBox="0 0 320 220" role="img" aria-label="Measured lens outline" hidden><path id="result-path" d=""></path><g id="result-dimensions"></g></svg>
@@ -34,6 +35,7 @@
         <span id="torch-note" class="torch-note" role="status" hidden></span>
       </div>
       <div class="action-area">
+        <button id="scan-now" class="scan-now" type="button" hidden>Capture lens</button>
         <div id="review-switch" class="review-switch" role="group" aria-label="Review view" hidden><button id="review-photo" type="button" aria-pressed="true">Photo</button><button id="review-outline" type="button" aria-pressed="false">Outline</button></div>
         <p id="status" role="status" aria-live="polite"></p>
         <div class="controls"><button id="secondary" class="secondary" type="button" hidden>Retry</button><button id="primary" class="primary" type="button" hidden aria-label="Confirm lens">Confirm</button></div>
@@ -41,7 +43,7 @@
     </main>
   </div>
   <button id="controller-capture" type="button" hidden disabled></button>
-  <script type="module" src="/simple.js?v=49"></script>
+  <script type="module" src="/simple.js?v=50"></script>
   <script src="/tutorial.js?v=50" defer></script>
   <script src="/navigation.js?v=12" defer></script>
 </body>

@@ -5,6 +5,7 @@ import vm from 'node:vm';
 import { sheetHomography, project, measure } from './calibration.js';
 import { photoReviewLayout } from './photo-review.js';
 import { createApiFetch } from './api-fetch.js';
+import { requestLensSegmentation } from './segment-request.js';
 
 // Camera/review interaction fixtures start after approved access; entry ordering
 // and rejection are exercised in app-access-order.test.mjs with the real gate.
@@ -18,7 +19,7 @@ function harness({ cameraError = null, storageError = null, deferReads = false, 
   const drawing = new Proxy({drawImage(...args) { imageDraws.push(args); }}, { get: (object, key) => object[key] ?? (() => {}) });
   function element() {
     return { hidden: false, disabled: false, textContent: '', innerHTML: '', style: {}, handlers: {}, attributes: {},
-      width: 1000, height: 700, clientWidth: 360, clientHeight: 450,
+      width: 1000, height: 700, videoWidth: 1000, videoHeight: 700, clientWidth: 360, clientHeight: 450,
       classList: { toggle() {} }, getContext: () => drawing, querySelector: () => element(),
       getBoundingClientRect: () => ({ left: 0, top: 0, width: 360, height: 450 }),
       setAttribute(key, value) { this.attributes[key] = value; },
@@ -57,12 +58,12 @@ function harness({ cameraError = null, storageError = null, deferReads = false, 
     document: { getElementById: $, createElement: element, body },
     window: { addEventListener(name,callback) { windowListeners.set(name,callback); }, AudioContext }, location, FileReader,
     URLSearchParams, Blob, File, FormData, DOMException, performance,
-    sheetHomography, project, measure, photoReviewLayout,
+    sheetHomography, project, measure, photoReviewLayout, requestLensSegmentation,
     detectSheetMarkers: () => [[0, 0], [1000, 0], [1000, 700], [0, 700]],
     createLiveSegmentSession(options) { callbacks = options; return controller; },
     createImageBitmap: async () => ({ width: 1000, height: 700, close() {} }),
     ResizeObserver: class { observe() {} }, MutationObserver: class { observe() {} },
-    requestAnimationFrame: callback => callback(), fetch() {}, sessionStorage: { setItem(key,value) { if(storageError) throw new Error(storageError); storage.set(key,value); } },
+    requestAnimationFrame: callback => callback(), setTimeout, fetch() {}, sessionStorage: { setItem(key,value) { if(storageError) throw new Error(storageError); storage.set(key,value); } },
   });
   context.apiFetch=createApiFetch({fetcher:(...args)=>context.fetch(...args),
     location:{...location,href:'https://optiframe.test/index.html',origin:'https://optiframe.test'}});
@@ -107,6 +108,17 @@ test('persistent scanner failure reveals retry and photo import', () => {
   assert.equal(app.$('camera-retry').hidden,false);
   assert.equal(app.$('photo-label').hidden,false);
   assert.match(app.$('status').textContent,/Service busy/);
+});
+
+test('live camera exposes immediate sheet feedback and a direct capture action', async () => {
+  const app=harness(); await tick();
+  assert.equal(app.$('scan-now').hidden,false);
+  assert.equal(app.$('live-guide').hidden,false);
+  app.controllerOptions.onPreview({sheetReady:true});
+  assert.match(app.$('live-guide').textContent,/Four dots in view/);
+  app.click('scan-now'); await tick(); await tick();
+  assert.ok(app.stops>0,'live camera request is stopped before still processing');
+  assert.equal(app.$('scan-now').hidden,true);
 });
 
 test('flashlight control is shown in every live camera session and reflects supported, busy, and unavailable states',async()=>{

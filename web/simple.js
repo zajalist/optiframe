@@ -1,7 +1,8 @@
-import { createLiveSegmentSession } from './live-segment.js?v=42';
+import { createLiveSegmentSession } from './live-segment.js?v=43';
 import { sheetHomography, project, measure } from './calibration.js';
 import { detectSheetMarkers } from './marker-detect.js?v=9';
 import { photoReviewLayout } from './photo-review.js?v=23';
+import { requestLensSegmentation } from './segment-request.js?v=1';
 import {apiFetch,requireAppAccess} from './api-fetch.js?v=43';
 await requireAppAccess();
 
@@ -15,6 +16,8 @@ const status = $('status');
 const primary = $('primary');
 const secondary = $('secondary');
 const photoLabel = $('photo-label');
+const scanNowButton = $('scan-now');
+const liveGuide = $('live-guide');
 const controllerButton = $('controller-capture');
 const captures = { left: null, right: null };
 const accessKey = new URLSearchParams(location.hash.slice(1)).get('access');
@@ -208,6 +211,9 @@ function setPhase(next, message) {
   primary.textContent = next === 'pair' ? 'Fit frame' : 'Confirm';
   primary.setAttribute('aria-label', next === 'pair' ? 'Confirm both lenses and fit frame' : 'Confirm lens');
   photoLabel.hidden = !cameraPhase;
+  scanNowButton.hidden = next !== 'live';
+  liveGuide.hidden = next !== 'live' && next !== 'remove';
+  if (next === 'live' || next === 'remove') liveGuide.textContent = 'Finding four sheet dots…';
   $('camera-retry').hidden = next !== 'idle';
   $('empty').textContent = next === 'idle' ? 'Retry camera or use a photo.' : 'Opening camera…';
   secondary.hidden = !['markers', 'aim', 'result'].includes(next);
@@ -439,10 +445,11 @@ async function segmentPhotoAt(x, y) {
     const body = new FormData();
     body.append('image', photo.file, 'lens.jpg');
     body.append('box', JSON.stringify(box));
-    const response = await apiFetch('/api/live-segment', { method: 'POST', body });
-    const data = await response.json();
+    const data = await requestLensSegmentation(apiFetch, body, {
+      isCurrent: () => generation === captureGeneration,
+      onBusy: () => { status.textContent = 'Finishing the previous scan…'; },
+    });
     if (generation !== captureGeneration) return;
-    if (!response.ok) throw new Error(data.detail || 'Could not segment this photo');
     if (data.width !== photo.width || data.height !== photo.height)
       throw new Error('Photo size changed. Try again');
     if (data.presence?.detected !== true || data.edgeRefinement?.accepted !== true ||
@@ -479,6 +486,10 @@ controller = createLiveSegmentSession({
     else if (phase === 'live' && waiting) setPhase('remove');
   },
   onTorchChange(state) { torchState = state; renderTorch(); },
+  onPreview({ sheetReady }) {
+    if (phase !== 'live' && phase !== 'remove') return;
+    liveGuide.textContent = sheetReady ? 'Four dots in view · capture lens' : 'Show all four sheet dots';
+  },
   onServiceFailure(detail) { setPhase('idle', `${detail} Retry camera or use a photo.`); },
   viewSweep: new URLSearchParams(location.search || '').get('capture') === 'sweep',
   calibrateFrame(imageData, contour) {
@@ -529,6 +540,25 @@ secondary.addEventListener('click', () => retryLens());
 $('retry-left').addEventListener('click', () => retryLens('left'));
 $('retry-right').addEventListener('click', () => retryLens('right'));
 $('camera-retry').addEventListener('click', () => { enableSound(); void startCamera(); });
+scanNowButton.addEventListener('click', async () => {
+  if (phase !== 'live' || !video.videoWidth || !video.videoHeight) return;
+  enableSound();
+  scanNowButton.disabled = true;
+  try {
+    const scale = Math.min(1, 1600 / Math.max(video.videoWidth, video.videoHeight));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+    canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+    stopCamera(); // Release the live request before submitting the final still.
+    setPhase('processing', 'Scanning captured lens…');
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', .95));
+    if (!blob) throw new Error('Could not capture the camera frame');
+    await selectPhoto(new File([blob], `${side}-lens.jpg`, { type: 'image/jpeg' }));
+  } catch (error) {
+    setPhase('idle', `${error.message}. Retry camera or use a photo.`);
+  } finally { scanNowButton.disabled = false; }
+});
 $('remove-confirm').addEventListener('click', () => {
   if (phase !== 'remove' || side !== 'right' || !awaitingRemoval) return;
   if (!controller.confirmLensChanged()) {

@@ -46,6 +46,7 @@ export function createLiveSegmentSession({
   onRemovalChange = () => {},
   onTorchChange = () => {},
   onServiceFailure = () => {},
+  onPreview = () => {},
 }) {
   if (!video || !overlay || !status || !captureButton || typeof onCapture !== 'function')
     throw new TypeError('Live segmentation needs video, overlay, status, captureButton and onCapture');
@@ -76,6 +77,7 @@ export function createLiveSegmentSession({
   let lastLocateAt = -Infinity;
   let busyRetryMs = 0, busyFailures = 0;
   let frameId = 0;
+  let liveMarkers = null;
   let refinementRetryAt = 0, refinementHint = '';
   const sweepMode = autoCapture && viewSweep;
   const sweep = createViewSweep();
@@ -113,6 +115,20 @@ export function createLiveSegmentSession({
   function draw() {
     if (!overlay.width || !overlay.height) return;
     context.clearRect(0, 0, overlay.width, overlay.height);
+    if (liveMarkers?.length === 4) {
+      context.save();
+      context.beginPath();
+      liveMarkers.forEach(([x, y], index) => index ? context.lineTo(x, y) : context.moveTo(x, y));
+      context.closePath();
+      context.strokeStyle = '#f2f6fbcc';
+      context.lineWidth = 1.5;
+      context.stroke();
+      for (const [x, y] of liveMarkers) {
+        context.beginPath(); context.arc(x, y, 5, 0, Math.PI * 2);
+        context.fillStyle = '#f2f6fb'; context.fill();
+      }
+      context.restore();
+    }
     if (target) {
       const x = target[0] * overlay.width;
       const y = target[1] * overlay.height;
@@ -214,9 +230,8 @@ export function createLiveSegmentSession({
     return { gray, width, height };
   }
   function trackSheetPlane() {
-    if (!latest) return;
-    latest.displayContour = null;
-    if (!trackingContext || !calibrateFrame || !latest.sheetContour?.length || !video.videoWidth || !video.videoHeight) return;
+    if (latest) latest.displayContour = null;
+    if (!trackingContext || !calibrateFrame || !video.videoWidth || !video.videoHeight) return;
     try {
       // A half-resolution tracking image can erase the white centres of small
       // markers that were detected successfully in the segmentation frame.
@@ -225,7 +240,14 @@ export function createLiveSegmentSession({
       trackingCanvas.width = width; trackingCanvas.height = height;
       trackingContext.drawImage(video, 0, 0, width, height);
       const current = calibrateFrame(trackingContext.getImageData(0, 0, width, height), []);
-      if (!Array.isArray(current?.markers) || current.markers.length !== 4) return;
+      if (!Array.isArray(current?.markers) || current.markers.length !== 4) {
+        liveMarkers = null;
+        onPreview({ sheetReady: false });
+        return;
+      }
+      liveMarkers = current.markers.map(([x, y]) => [x * overlay.width / width, y * overlay.height / height]);
+      onPreview({ sheetReady: true });
+      if (!latest?.sheetContour?.length) return;
       const homography = sheetHomography(current.markers);
       latest.displayContour = latest.sheetContour.map(point => {
         const [x, y] = unproject(point, homography);
@@ -235,18 +257,21 @@ export function createLiveSegmentSession({
     } catch {
       // Missing dots or invalid perspective hide the proposal until the sheet
       // can be located again. Do not fall back to translation or a stale pose.
-      latest.displayContour = null;
+      if (latest) latest.displayContour = null;
+      liveMarkers = null;
+      onPreview({ sheetReady: false });
     }
   }
   function trackOnce() {
     if (!stream || capturePending) return;
     animation = requestAnimationFrame(trackOnce);
-    if (!latest || !video.videoWidth || (!autoCapture && !trackingBase)) return;
+    if (!video.videoWidth || (!autoCapture && !trackingBase)) return;
     if (performance.now() - lastTrackAt < (autoCapture ? 200 : 90)) return;
     lastTrackAt = performance.now();
     if (autoCapture) {
       trackSheetPlane();
       draw();
+      if (!latest) return;
       if (!latest.displayContour?.length) {
         autoGate.invalidate();
         captureButton.disabled = true;
@@ -717,6 +742,7 @@ export function createLiveSegmentSession({
     video.srcObject = null;
     latest = null;
     best = null;
+    liveMarkers = null;
     target = null;
     previousUpdateAt = null;
     cadenceHz = null;
