@@ -1,5 +1,5 @@
 import { createAutoCaptureGate } from './auto-capture.js?v=23';
-import { createCaptureGuidance, frameBrightness, optimizeCameraTrack } from './capture-guidance.js?v=37';
+import { createCaptureGuidance, frameBrightness, optimizeCameraTrack } from './capture-guidance.js?v=38';
 import { captureSharpFrame } from './sharp-frame.js?v=22';
 import { fuseContours } from './contour-fusion.js?v=22';
 import { sheetHomography, project, unproject } from './calibration.js?v=22';
@@ -42,6 +42,7 @@ export function createLiveSegmentSession({
   locateTarget = null, minimalStatus = false,
   autoCapture = false, calibrateFrame = null,
   stillCapture = true, captureFrame = captureSharpFrame, viewSweep = false,
+  removalLabel = 'first',
   onRemovalChange = () => {},
   onTorchChange = () => {},
 }) {
@@ -72,6 +73,7 @@ export function createLiveSegmentSession({
   let startupAbort = null;
   let manualTarget = false;
   let lastLocateAt = -Infinity;
+  let busyRetryMs = 0;
   let frameId = 0;
   let refinementRetryAt = 0, refinementHint = '';
   const sweepMode = autoCapture && viewSweep;
@@ -80,7 +82,7 @@ export function createLiveSegmentSession({
   // Preview agreement only triggers a new still; it is never exported as measurement evidence.
   const autoGate = createAutoCaptureGate({ maxAgeMs: maxResultAgeMs,
     ...(sweepMode ? {durationMs:0,minFrames:1} : sharpStill ? {durationMs: 350, minFrames: 2, toleranceMm: 1.5} : {}) });
-  const guidance = createCaptureGuidance();
+  const guidance = createCaptureGuidance({ removalLabel });
   let autoState = 'searching';
   function setAutoState(next) {
     const changed = (autoState === 'remove') !== (next === 'remove');
@@ -288,7 +290,7 @@ export function createLiveSegmentSession({
 
   function schedule(token) {
     if (token === generation && stream)
-      timer = setTimeout(() => { void sample(token); }, intervalMs);
+      timer = setTimeout(() => { void sample(token); }, Math.max(intervalMs, busyRetryMs));
   }
   async function canvasBlob(canvas, quality = .86) {
     const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', quality));
@@ -332,7 +334,11 @@ export function createLiveSegmentSession({
     }
     const data = response.headers?.get('content-type')?.includes('json') === false
       ? { detail: await response.text() } : await response.json();
-    if (!response.ok) throw new Error(data.detail || 'Live edge proposal failed');
+    if (!response.ok) {
+      const error = new Error(data.detail || 'Live edge proposal failed');
+      error.busy = response.status === 503 && /busy|warming|unavailable/i.test(error.message);
+      throw error;
+    }
     if (!legacyApi) return data;
     const sam = data.candidates?.find(candidate =>
       candidate.method === 'sam2.1-hiera-small-cuda' && candidate.contour?.length >= 3);
@@ -376,6 +382,7 @@ export function createLiveSegmentSession({
       body.append('box', JSON.stringify(prompt));
       const data = await boundedStartup(segmentFrame(body, job.abort.signal, frame, prompt),
         requestTimeoutMs, job.abort.signal, 'Connection is slow. Retrying…');
+      busyRetryMs = 0;
       if (token !== generation || promptVersion !== boxVersion) return;
       const sampledId = Number.isFinite(mediaTime) ? mediaTime : ++frameId;
       let calibration = null;
@@ -452,7 +459,7 @@ export function createLiveSegmentSession({
           now: updatedAt, id: sampledId, dragging: Boolean(target) });
         setAutoState(decision.state);
         if (sweepMode) {
-          if (decision.state==='remove') {sweep.reset();message('Remove the first lens');return;}
+          if (decision.state==='remove') {sweep.reset();message(`Remove the ${removalLabel} lens`);return;}
           if (!calibration?.markers?.length || decision.reason==='calibration') {
             sweep.reset();message('Show all four dots');return;
           }
@@ -469,7 +476,7 @@ export function createLiveSegmentSession({
         }
         const blocker = {stale:'Connection is slow. Retrying…', calibration:'Show all four dots',
           blur:'Let the camera focus', quality:'Edge unclear. Adjust the light', outline:'Keep one lens inside the dots'}[decision.reason];
-        message(decision.state === 'remove' ? 'Remove the first lens' : !advice.ready ? advice.message
+        message(decision.state === 'remove' ? `Remove the ${removalLabel} lens` : !advice.ready ? advice.message
           : blocker || (decision.state === 'steady' ? 'Hold steady' : advice.message));
         if (decision.capture) {
           if (sharpStill) await captureStill(token, job.abort.signal);
@@ -478,9 +485,10 @@ export function createLiveSegmentSession({
       } else message('Lens found. Hold steady and capture.', true);
     } catch (error) {
       if (token === generation && error.name !== 'AbortError') {
+        busyRetryMs = error.busy ? Math.min(3000, Math.max(1000, busyRetryMs * 1.5)) : 0;
         if (sweepMode) sweep.reset();
         clearResult();
-        message(performance.now()<refinementRetryAt ? refinementHint : `No lens edge yet. ${error.message}`);
+        message(error.busy ? 'Waiting for scanner…' : performance.now()<refinementRetryAt ? refinementHint : `No lens edge yet. ${error.message}`);
       }
     } finally {
       job.abort.abort();
@@ -669,6 +677,7 @@ export function createLiveSegmentSession({
     }
   }
   function stop() {
+    busyRetryMs = 0;
     torch.attach(null);
     lightingPending=false;lightingReadyAt=0;
     sweep.reset();

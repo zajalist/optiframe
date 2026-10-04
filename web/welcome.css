@@ -82,3 +82,23 @@ button,a{-webkit-tap-highlight-color:transparent;touch-action:manipulation}butto
   .home .hero-actions{margin-top:22px}
   .home .hero-object{max-height:400px;right:0;width:64%}
 }
+
+.home .site-footer{display:block;padding:46px 0 24px;border-top-color:#ffffff27}
+.footer-top{display:flex;align-items:start;justify-content:space-between;gap:36px;padding-bottom:42px}
+.footer-brand{display:grid;justify-items:start;gap:8px}
+.home .footer-brand p{max-width:none;color:#c9cdd4;font-size:13px;line-height:1.55}
+.footer-links{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px 26px;max-width:540px;padding-top:9px}
+.footer-links a{display:inline-flex;align-items:center;min-height:44px;color:#e3e6eb;font-size:13px;font-weight:600;text-decoration-color:transparent;text-underline-offset:6px;transition:color .18s ease,text-decoration-color .18s ease}
+.footer-links a:hover,.footer-links a:focus-visible{color:#fff;text-decoration:underline;text-decoration-color:#dce6f4}
+.footer-bottom{border-top:1px solid #ffffff20;padding-top:20px;display:flex;justify-content:space-between;gap:12px 32px;flex-wrap:wrap;color:#acb3bc;font-size:11px;line-height:1.5}
+@media(max-width:700px){.home .site-footer{padding-top:36px}.footer-top{display:block;padding-bottom:30px}.footer-links{justify-content:flex-start;gap:0 22px;max-width:none;margin-top:18px;padding-top:0}.footer-bottom{display:grid;gap:5px}}
+@media(prefers-reduced-motion:reduce){.footer-links a{transition:none}}
+
+/* An assembled product image stays physically coherent while light moves across it. */
+.home .hero-object{right:0;mask-image:linear-gradient(to right,transparent 0%,#000 7%,#000 94%,transparent 100%);-webkit-mask-image:linear-gradient(to right,transparent 0%,#000 7%,#000 94%,transparent 100%)}
+.home .hero-object img{filter:none;mask-image:linear-gradient(to bottom,transparent 0%,#000 13%,#000 86%,transparent 100%);-webkit-mask-image:linear-gradient(to bottom,transparent 0%,#000 13%,#000 86%,transparent 100%)}
+.home .hero-motion{filter:none}
+.home .hero-object::after{content:"";position:absolute;inset:10% 3% 12% 18%;pointer-events:none;opacity:0;mix-blend-mode:screen;background:linear-gradient(118deg,transparent 29%,#658bcb00 37%,#668cd833 43%,#e2eaf021 47%,#ffb1a82b 51%,#c49bf026 54%,transparent 62%);filter:blur(26px);transform:translateX(-30%) skewX(-9deg);mask-image:linear-gradient(to right,transparent,#000 22%,#000 82%,transparent);-webkit-mask-image:linear-gradient(to right,transparent,#000 22%,#000 82%,transparent)}
+@media(prefers-reduced-motion:no-preference){.home:not(.motion-still) .hero-object.is-ready img{animation:assembled-breathe 9s ease-in-out infinite alternate}.home:not(.motion-still) .hero-object.is-ready::after{animation:prism-pass 9s cubic-bezier(.45,0,.2,1) infinite}}
+@keyframes assembled-breathe{0%,100%{transform:translate3d(0,0,0) scale(1)}50%{transform:translate3d(-.6%,.25%,0) scale(1.018)}}
+@keyframes prism-pass{0%,12%{opacity:0;transform:translateX(-36%) skewX(-9deg)}38%,57%{opacity:.7}78%,100%{opacity:0;transform:translateX(38%) skewX(-9deg)}}

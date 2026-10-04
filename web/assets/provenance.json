@@ -1,11 +1,10 @@
 {
   "hero": {
-    "path": "hero-source.js (embedded WebP)",
+    "path": "hero-assembled.webp and hero-loop-v45.mp4",
     "provider": "Higgsfield",
-    "model": "gpt_image_2_5",
-    "job_id": "1bb65066-4a0d-4548-8018-a268b9743bfb",
-    "purpose": "Illustrative asymmetric eyewear concept; not a photograph of the generated STL or a certified product",
-    "prompt": "A high-end industrial-design product photograph for OptiFrame, a concept demonstration of recycling two mismatched eyeglass lenses into an asymmetric custom 3D-printed eyeglass frame. Wide cinematic 16:9 image with matte charcoal-black seamless background #101112 and generous uninterrupted dark negative space across the left 35 percent and upper left. On the right two thirds, a beautifully composed exploded assembly of matte black thin-rim eyewear: left rim is softly rounded teardrop, right rim rounded rectangular, distinctly asymmetric but plausible. Two separate clear optical lenses, matching their respective shapes exactly, float just in front of their corresponding rims; delicate clear edges catch restrained ivory studio rim light, realistic soft reflections, no glowing holograms. Two detached matte black temple arms subtly separated behind, tiny real steel screws only near hinge attachments. A tactile fine additive layer texture in the polymer. Three-quarter front angle, lens openings readable, physically restrained product still life, one elegant long soft shadow on charcoal surface, precise Swiss industrial catalog art direction, premium optics lab. No text, no typography, no logos, no labels, no diagram lines, no measuring grid, no people, no colorful gradients, no neon. This is an illustrative concept, not a claim of a certified manufactured device."
+    "model": "Marketing Studio Sunburst image, 4K; local motion composition",
+    "purpose": "Illustrative assembled asymmetric eyewear concept; not a photograph of the generated STL or a certified product",
+    "prompt": "Edit this exact OptiFrame eyewear concept into a physically assembled luxury product photograph. Preserve its distinct asymmetry: the lens on the image left is rounded and softly teardrop-shaped; the lens on the image right is wider and rectangular. Keep each original lens shape and size relationship. Seat both clear lenses inside their respective black frame openings, with no floating lens, misaligned glass, detached temple, or loose screw. Both temples attach cleanly to hinges and recede behind the frame. One tiny subtle OptiFrame mark may appear on only one temple. Make bevels crisp and professional, the black polymer smooth, the glass realistically transparent with restrained optical reflections. Premium cinematic studio lighting: fine silver edge highlights, one delicate spectral refraction and soft god ray, deep charcoal backdrop and floor. Frame occupies the right two thirds, with generous clean dark negative space on the left for website text. No typography, watermark, people, extra lens, extra frame, diagram, grid, or invented component."
   },
   "font": {
     "family": "Manrope",

@@ -2,7 +2,7 @@
 .fit-shell[data-step="7"] .fit-body{gap:10px}
 .fit-shell[data-step="7"] #viewer{border-radius:24px;background:#e7ebf0;box-shadow:inset 0 1px 0 #ffffffba}
 .fit-shell[data-step="7"] .frame-views button{border-radius:999px}
-.catalog-caption{margin:0 0 -4px;padding:0 2px;color:#bcc5d1;font-size:11px;line-height:1.4}
+.catalog-caption{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 .frame-catalog{gap:10px}
 .fit-flow .frame-style{position:relative;overflow:hidden;display:grid;grid-template-columns:1fr auto;grid-template-rows:minmax(0,1fr) auto;gap:0;text-align:left;align-items:center;padding:0 10px 10px;min-height:102px;border:1px solid #ffffff30!important;border-radius:20px!important;color:#d5dce5;background:#242830;background-image:linear-gradient(155deg,#ffffff12,#fff0 65%,#ffffff06);box-shadow:inset 0 1px 1px #ffffff24;isolation:isolate;-webkit-tap-highlight-color:transparent}
 .fit-flow .frame-style[aria-pressed="true"]{color:#fff;background-color:#3a424e;border-color:#bbc9db!important;box-shadow:inset 0 0 0 1px #bbc9db,inset 0 1px 1px #ffffff36}
@@ -34,3 +34,17 @@
 @media(prefers-reduced-transparency:reduce){.fit-flow .frame-style,.fit-flow .catalog-tryon{background:#292f38;backdrop-filter:none;-webkit-backdrop-filter:none}.fit-flow .frame-style[aria-pressed="true"]{background:#3a424e}}
 @media(max-height:600px){.fit-shell[data-step="7"] .fit-body{gap:7px}.fit-flow .frame-style{min-height:78px;padding:0 8px 6px;border-radius:16px!important}.frame-style-art{width:calc(100% + 16px);margin:0 -8px;aspect-ratio:2.5}.frame-style-photo{height:auto;top:50%;transform:translateY(-50%)}.frame-style-name{font-size:12px}.catalog-caption{font-size:10px}.fit-flow .catalog-tryon{min-height:44px;padding:8px 18px}}
 @media(max-height:440px){.fit-shell[data-step="7"] .fit-body{display:grid;grid-template-columns:minmax(0,1fr) minmax(170px,.9fr);grid-template-rows:minmax(0,1fr) auto;gap:6px 12px}.fit-shell[data-step="7"] #viewer{grid-column:1;grid-row:1/3;height:100%;min-height:60px}.catalog-caption{display:none}.frame-catalog{grid-column:2;grid-row:1;gap:5px;align-items:center}.fit-flow .frame-style{min-height:64px;padding-bottom:4px}.frame-style-name{font-size:10px}.frame-style svg.frame-style-check{width:12px;height:12px}.catalog-actions{grid-column:2;grid-row:2}.fit-shell[data-step="7"] #design-status:not(:empty){grid-column:1/-1;max-height:35px;font-size:11px}}
+
+/* The retaining mechanism is the label until selected. */
+.catalog-retention-panel{display:flex;align-items:center;justify-content:center;gap:12px;min-width:0}
+.catalog-retention-label{font-size:11px;color:#aeb9c6;white-space:nowrap}
+.catalog-retention{width:min(100%,300px);max-width:300px;flex:1 1 230px;border-radius:16px!important;background:#ffffff09;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
+.fit-flow .catalog-retention button{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;min-height:57px;padding:5px 4px 3px;border-radius:13px;font-size:10px;line-height:1.1}
+.catalog-retention button span{visibility:hidden;white-space:nowrap}
+.catalog-retention button[aria-pressed="true"] span{visibility:visible}
+.retention-visual{display:block;width:50px;height:32px;max-width:100%;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;overflow:visible}
+.retention-rim{stroke:#8e99a7;stroke-width:3}.retention-lens{stroke:#d7e5f3;stroke-width:2;fill:#bcd4e314}.retention-edge{stroke:#ffffff8c;stroke-width:1}
+.catalog-retention button[aria-pressed="true"] .retention-rim{stroke:#d7e1ed}
+.catalog-retention button[aria-pressed="true"] .retention-moving{stroke:#fff}
+@media(prefers-reduced-motion:no-preference){.retention-moving{transition:transform .36s cubic-bezier(.16,1,.3,1)}.catalog-retention button[data-retention="screw"] .retention-moving{transform:translateX(7px)}.catalog-retention button[data-retention="snap"] .retention-moving{transform:translateY(-6px)}.catalog-retention button[data-retention="clip"] .retention-moving{transform:translateX(5px)}.catalog-retention button[aria-pressed="true"] .retention-moving{transform:translate(0,0)}}
+@media(max-width:370px){.catalog-retention-panel{gap:7px}.catalog-retention-label{font-size:10px}}

@@ -115,24 +115,41 @@ test('backgrounding an enabled or changing flashlight stops the camera in normal
 test('second lens proceeds automatically after an empty sheet without an extra placement button', async () => {
   const app=harness(); await tick();
   await app.accept(app.payload); app.click('primary'); await tick();
-  assert.equal(app.body.dataset.phase,'live');
+  assert.equal(app.body.dataset.phase,'remove');
+  assert.equal(app.$('headline').textContent,'Remove left lens');
+  assert.equal(app.$('remove-overlay').hidden,false);
+  assert.equal(app.$('photo-label').hidden,false,'photo import remains available for the right lens');
   assert.equal(app.startOptions[1].requireRemoval,true);
   // Live segmentation handles the empty-sheet transition without UI intervention.
   app.controllerOptions.onRemovalChange?.(false);
+  assert.equal(app.body.dataset.phase,'live');
+  assert.equal(app.$('headline').textContent,'Right lens');
+  assert.equal(app.$('remove-overlay').hidden,true);
   assert.equal(app.replacements,0); assert.equal(app.starts,2);
   await app.accept(app.payload); app.click('primary');
   assert.equal(app.body.dataset.phase,'pair');
 });
 
-test('scanner has no redundant second-lens placement control or binding', async () => {
+test('stalled empty-sheet detection has an explicit fallback without bypassing right-lens checks', async () => {
+  const app=harness(); await tick();
+  await app.accept(app.payload); app.click('primary'); await tick();
+  assert.equal(app.body.dataset.phase,'remove');
+  app.click('remove-confirm');
+  assert.equal(app.replacements,1);
+  assert.equal(app.body.dataset.phase,'live');
+  assert.equal(app.$('headline').textContent,'Right lens');
+  assert.equal(app.$('remove-overlay').hidden,true);
+  app.click('remove-confirm');
+  assert.equal(app.replacements,1,'the fallback only runs during removal');
   const markup=await readFile(new URL('./index.html',import.meta.url),'utf8');
+  assert.match(markup,/id="remove-confirm"/);
   assert.doesNotMatch(markup,/lens-placed|Second lens placed/);
-  assert.doesNotMatch(source,/lens-placed|confirmLensChanged/);
 });
 
 async function confirmPair(app) {
   await tick();
   await app.accept(app.payload); app.click('primary'); await tick();
+  app.controllerOptions.onRemovalChange?.(false);
   await app.accept(app.payload); app.click('primary');
 }
 
@@ -195,6 +212,7 @@ test('guided capture requires both confirmations, displays both contours, and re
   const app = harness();
   await tick();
   assert.equal(app.body.dataset.phase, 'live');
+  assert.equal(app.$('headline').textContent, 'Left lens');
   assert.equal(app.$('primary').hidden, true);
   assert.equal(app.$('photo-label').hidden, false);
   app.click('photo-label'); // Unlock optional sound with a real user gesture.
@@ -217,10 +235,13 @@ test('guided capture requires both confirmations, displays both contours, and re
   app.click('primary');
   await tick();
   assert.equal(app.starts, 2);
-  assert.equal(app.body.dataset.phase, 'live');
-  assert.equal(app.$('headline').textContent, 'Second lens');
+  assert.equal(app.body.dataset.phase, 'remove');
+  assert.equal(app.$('headline').textContent, 'Remove left lens');
   assert.equal(app.startOptions[1].requireRemoval, true);
   assert.equal(app.$('primary').hidden, true);
+  app.controllerOptions.onRemovalChange?.(false);
+  assert.equal(app.body.dataset.phase, 'live');
+  assert.equal(app.$('headline').textContent, 'Right lens');
   await app.accept(app.payload);
   await tick();
   assert.equal(app.body.dataset.phase, 'result');
@@ -239,7 +260,7 @@ test('guided capture requires both confirmations, displays both contours, and re
   assert.equal(app.$('status').textContent, '');
   app.click('retry-left');
   await tick();
-  assert.equal(app.$('headline').textContent, 'First lens');
+  assert.equal(app.$('headline').textContent, 'Left lens');
   await app.accept(app.payload);
   await tick();
   app.click('primary');

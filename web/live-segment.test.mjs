@@ -56,6 +56,24 @@ const result = { width: 640, height: 480, contour: [[10, 10], [100, 10], [100, 1
   quality: { score: 0.7 }, method: 'sam2.1-hiera-small-cuda' };
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+test('busy GPU responses back off and recover without hammering the service', async () => {
+  let calls = 0;
+  const fixture = setup(async () => {
+    calls++;
+    return calls === 1
+      ? {status:503,ok:false,json:async()=>({detail:'Service busy. Retrying…'})}
+      : {status:200,ok:true,json:async()=>result};
+  });
+  try {
+    await fixture.session.start();
+    await pause(150);
+    assert.equal(calls,1);
+    assert.equal(fixture.status.textContent,'Waiting for scanner…');
+    await pause(1000);
+    assert.ok(calls>=2,'a later sample resumes after the busy response');
+  } finally {fixture.session.stop();}
+});
+
 test('changing lighting invalidates the old outline and waits for exposure before sampling',async()=>{
   let enabled=false,calls=0,stopped=false;
   const track={getCapabilities:()=>({torch:true}),getSettings:()=>({torch:enabled}),

@@ -32,8 +32,11 @@ heroImage.addEventListener('load', async () => {
   heroImage.hidden = false;
   heroImage.closest('.hero-object').classList.add('is-ready');
 }, { once: true });
-heroImage.src = heroSource;
-mountHeroMotion({container:heroImage.closest('.hero-object'),button:document.getElementById('hero-motion-toggle')});
+// The 4K assembled concept keeps each lens seated and both hinges attached.
+// The bundled image remains a fallback if the generation CDN is unavailable.
+heroImage.onerror = () => { heroImage.onerror = null; heroImage.src = heroSource; };
+heroImage.src = '/assets/hero-assembled.webp?v=45';
+mountHeroMotion({container:heroImage.closest('.hero-object'),button:document.getElementById('hero-motion-toggle'),configUrl:'/assets/hero-motion.json?v=45'});
 
 /* Keep a shared session's access fragment when moving into the capture app. */
 (() => {

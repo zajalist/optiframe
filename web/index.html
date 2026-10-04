@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#101112">
   <title>OptiFrame — lens capture</title>
-  <link rel="stylesheet" href="/simple.css?v=48">
+  <link rel="stylesheet" href="/simple.css?v=50">
   <link rel="stylesheet" href="/tutorial.css?v=46">
   <link rel="stylesheet" href="/glass.css?v=33">
 </head>
@@ -14,12 +14,13 @@
     <header class="header"><a class="brand" href="/welcome.html" data-preserve-access aria-label="About OptiFrame">OptiFrame</a><div class="header-actions"><a class="sheet-link" href="/calibration-sheet.svg" target="_blank" rel="noopener">Print sheet</a><button class="help-button" type="button" data-tutorial="capture">Help</button></div></header>
     <main class="capture">
       <div class="heading">
-        <div class="heading-row"><h1 id="headline">First lens</h1><span id="step-label" aria-label="Capture progress">1 of 2</span></div>
+        <div class="heading-row"><h1 id="headline">Left lens</h1><span id="step-label" aria-label="Capture progress">1 of 2</span></div>
         <p id="instruction"></p>
       </div>
       <div class="stage" id="stage">
         <div class="empty" id="empty">Opening camera…</div>
         <div class="camera-frame" id="camera-frame" hidden><video id="camera" playsinline muted autoplay aria-label="Live lens camera"></video><canvas id="camera-overlay" aria-label="Live lens outline"></canvas></div>
+        <div id="remove-overlay" class="remove-overlay" hidden><svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="29" width="46" height="27" rx="3"/><path d="M14 34h36M14 41h36M14 48h36" opacity=".4"/><path d="M25 22c0-7 14-7 14 0s-14 7-14 0Z"/><path d="M32 18V7m0 0-5 5m5-5 5 5"/></svg><strong>Remove the left lens</strong><span>Show the empty sheet to the camera</span><button id="remove-confirm" type="button">Sheet is empty</button></div>
         <canvas id="review-canvas" aria-label="Captured lens. Press and drag for precise adjustment." hidden></canvas>
         <svg id="result-svg" viewBox="0 0 320 220" role="img" aria-label="Measured lens outline" hidden><path id="result-path" d=""></path><g id="result-dimensions"></g></svg>
         <canvas id="result-photo" aria-label="Original captured lens with detected outline" hidden></canvas>
@@ -40,8 +41,8 @@
     </main>
   </div>
   <button id="controller-capture" type="button" hidden disabled></button>
-  <script type="module" src="/simple.js?v=43"></script>
-  <script src="/tutorial.js?v=49" defer></script>
+  <script type="module" src="/simple.js?v=46"></script>
+  <script src="/tutorial.js?v=50" defer></script>
   <script src="/navigation.js?v=12" defer></script>
 </body>
 </html>

@@ -4,7 +4,11 @@ const panels = [...document.querySelectorAll('.lens-panel')];
 const accessKey = new URLSearchParams(location.hash.slice(1)).get('access');
 if (accessKey) document.querySelectorAll('a[href="/android-ar.html"]').forEach(link => { link.hash = location.hash; });
 const responseData = response => response.headers.get('content-type')?.includes('json')
-  ? response.json() : response.text().then(detail => ({ detail }));
+  ? response.json() : response.text().then(body => ({
+    detail: /<\s*(?:!doctype|html|head|body)\b/i.test(body)
+      ? 'The frame service is unavailable. Try again shortly.'
+      : body.trim().slice(0, 240) || 'The frame service is unavailable. Try again shortly.',
+  }));
 
 import {distance,polygonArea,measure,sheetHomography,project,benchmark,pixelResolution,contourRepeatability,normalizeLensOrientation,outlineProofSVG} from './calibration.js';
 import {createLiveSegmentSession} from './live-segment.js';

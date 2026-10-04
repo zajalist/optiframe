@@ -9,7 +9,7 @@ export function frameBrightness(image) {
   return values[Math.floor(values.length * .8)];
 }
 
-export function createCaptureGuidance() {
+export function createCaptureGuidance({ removalLabel = 'first' } = {}) {
   let pending = '', pendingSince = 0, current = '', slowCount = 0, nearEdge = false;
   return {
     reset() { pending = ''; pendingSince = 0; current = ''; slowCount = 0; nearEdge = false; },
@@ -17,7 +17,7 @@ export function createCaptureGuidance() {
       let message = '', ready = true;
       const markers = calibration?.markers;
       slowCount = latencyMs > 700 ? slowCount + 1 : 0;
-      if (state === 'remove') message = 'Remove the first lens';
+      if (state === 'remove') message = `Remove the ${removalLabel} lens`;
       else if (Number.isFinite(brightness) && brightness < 45) { message = 'Add soft light'; ready = false; }
       else if (markers?.length === 4) {
         nearEdge = markers.some(([x, y]) => x < width * .025 || x > width * .975 || y < height * .025 || y > height * .975);

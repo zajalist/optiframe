@@ -35,7 +35,7 @@
         ['Print at 100%', 'Turn off “fit to page”. Check that the printed bar measures 50 mm.', 'sheet', 'Print sheet'],
         ['Place one lens', 'Flatten the sheet on a matte surface. Keep the lens inside all four dots.', 'place'],
         ['Keep the rim clear', 'Use soft, even light. Move closer with all four dots visible and reflections off the edge.', 'light'],
-        ['Capture each lens', 'Hold still, check the outline, then confirm. Replace the first lens with the second.', 'confirm'],
+        ['Capture each lens', 'Confirm the left lens, remove it, show the empty sheet, then place the right lens.', 'confirm'],
         ['Verify the size', 'Compare width and height with a ruler or calipers. Check a separate capture before printing.', 'measure'],
       ],
     },

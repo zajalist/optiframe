@@ -1,5 +1,6 @@
 Saved/
 node_modules/
+.venv/
 dist/
 .env*
 ios/*.xcodeproj/
@@ -9,4 +10,5 @@ __pycache__/
 *.pyc
 
 .vercel
-.env*
+*.log
+*.zip

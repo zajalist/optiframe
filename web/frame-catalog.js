@@ -6,10 +6,20 @@ const styles = [
   {id:'brow', name:'Brow', rim:10.6},
 ];
 
+// Section through a lens edge and its retainer; the selected part moves in.
+function retentionVisual(id) {
+  const mechanisms={
+    screw:'<g class="retention-moving"><path d="M65 25h-18"/><circle cx="68" cy="25" r="4"/><path d="m66 23 4 4m0-4-4 4"/></g>',
+    snap:'<g class="retention-moving"><path d="M63 16v18"/><path d="M59 20h8M59 30h8"/><path d="m60 16 3-4 3 4"/></g>',
+    clip:'<g class="retention-moving"><path d="M51 13q14-2 14 9v9q0 7-9 7"/><path d="m51 13 3 5m2 20-5-4"/></g>'
+  };
+  return `<svg class="retention-visual" viewBox="0 0 80 50" aria-hidden="true" focusable="false"><path class="retention-rim" d="M12 10v30h43M12 10h43"/><path class="retention-lens" d="M24 15h24v20H24z"/><path class="retention-edge" d="M24 16h24M24 34h24"/>${mechanisms[id]}</svg>`;
+}
+
 export function mountFrameCatalog({body, viewer, status, panels, getStyle, setStyle, getRetention, setRetention, getAssembly, rebuild, onUpdate, leftPd, rightPd, visualTryOn}) {
   let alive = true, busy = false, building = false, closeTryOn = null;
   if (!document.querySelector('link[data-frame-catalog]')) {
-    const css=document.createElement('link');css.rel='stylesheet';css.href=new URL('./frame-catalog.css?v=49',import.meta.url).href;
+    const css=document.createElement('link');css.rel='stylesheet';css.href=new URL('./frame-catalog.css?v=50',import.meta.url).href;
     css.dataset.frameCatalog='';document.head.append(css);
   }
   const choices = document.createElement('div'); choices.className='frame-catalog';
@@ -51,9 +61,12 @@ export function mountFrameCatalog({body, viewer, status, panels, getStyle, setSt
     });
   }
   const actions=document.createElement('div');actions.className='catalog-actions';
+  const retentionPanel=document.createElement('div');retentionPanel.className='catalog-retention-panel';
+  const retentionLabel=document.createElement('span');retentionLabel.className='catalog-retention-label';retentionLabel.textContent='Lens hold';
   const retention=document.createElement('div');retention.className='catalog-retention';retention.setAttribute('role','group');retention.setAttribute('aria-label','Lens retention');
   for(const [id,name] of [['screw','Screw'],['snap','Push pins'],['clip','Clip-in']]){
-    const choice=document.createElement('button');choice.type='button';choice.dataset.retention=id;choice.textContent=name;
+    const choice=document.createElement('button');choice.type='button';choice.dataset.retention=id;
+    choice.innerHTML=`${retentionVisual(id)}<span>${name}</span>`;
     choice.setAttribute('aria-label',id==='screw'?'Screw retention':`${name} retention, experimental`);
     choice.addEventListener('click',async()=>{
       if(building||getRetention()===id)return;
@@ -76,7 +89,8 @@ export function mountFrameCatalog({body, viewer, status, panels, getStyle, setSt
     } catch(error) {if(alive)status.textContent=error.message||'Try-on unavailable. Please retry.';}
     finally {busy=false;if(alive)refresh();}
   });
-  actions.append(retention,tryOn,retry);body.append(viewer,caption,choices,actions,status);
+  retentionPanel.append(retentionLabel,retention);
+  actions.append(tryOn,retry);body.append(viewer,caption,choices,retentionPanel,actions,status);
   async function build(){
     if(building || !alive)return;
     building=true;refresh();

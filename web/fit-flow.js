@@ -1,11 +1,12 @@
-import { leftPanel, rightPanel, capturesReady, getImportedCaptures, getRestoredMeasurementSource, makeFrame, project, getFrameStyle, setFrameStyle, getRetentionStyle, setRetentionStyle, getFrameAssembly, applyFaceMeasurements, useManualMeasurements, getMeasurementSource, getLensAdjustments, setLensAdjustments, getAdjustedLensOutlines } from './app.js?v=49';
+import { leftPanel, rightPanel, capturesReady, getImportedCaptures, getRestoredMeasurementSource, makeFrame, project, getFrameStyle, setFrameStyle, getRetentionStyle, setRetentionStyle, getFrameAssembly, applyFaceMeasurements, useManualMeasurements, getMeasurementSource, getLensAdjustments, setLensAdjustments, getAdjustedLensOutlines } from './app.js?v=50';
 import { openFaceScan } from './face-scan.js?v=47';
 import { loadConfirmedFace, saveConfirmedFace } from './face-confirmation.js?v=39';
 import { validateFaceFit, lensReady, marksReady } from './fit-validation.js';
 import { mountPupilMeasurements } from './pupil-measurements.js?v=27';
-import { mountFrameCatalog } from './frame-catalog.js?v=49';
+import { mountFrameCatalog } from './frame-catalog.js?v=50';
 import { mountThicknessMeasurements } from './thickness-measurements.js?v=35';
 import { mountLensAdjustments } from './lens-adjustment-controls.js?v=47';
+import { initializeMark, moveMark, mountNumericFeedback } from './fit-accessibility.js';
 
 if (new URLSearchParams(location.search).get('advanced') !== '1') void startFitFlow();
 
@@ -30,10 +31,13 @@ async function startFitFlow() {
   let cleanupStep = () => {};
   let captureBackup = null;
   try { captureBackup = JSON.parse(sessionStorage.getItem('optiframe-captures') || 'null'); } catch { /* Recovery remains available via Scanner. */ }
-  const titles = ['Your lenses','Fit measurements','Pupil distances','Lens thickness','Left lens marks','Right lens marks','Frame fit','Your frame','Print test kit'];
+  const titles = ['Your lenses','Measurement source','Pupil distances','Lens thickness','Left lens marks','Right lens marks','Fit measurements','Your frame','Print test kit'];
   panels.forEach(p => { p.guidedWizard = true; p.guidedCapture = false; });
   document.querySelector('.site-header .header-link').hidden = true;
+  document.querySelector('.site-header .tutorial-trigger').hidden = true;
   const home = document.querySelector('.site-header .brand');
+  for(const node of [...home.childNodes])if(node.nodeType===Node.TEXT_NODE)node.remove();
+  home.setAttribute('aria-label','OptiFrame home');
   home.hash = location.hash;
   function button(text, action, className = '') {
     const b = document.createElement('button'); b.type = 'button'; b.textContent = text; b.className = className; b.addEventListener('click', action); return b;
@@ -193,13 +197,28 @@ async function startFitFlow() {
     const zoom=()=>{if(!panel.points.length)return;const xs=panel.points.map(p=>p[0]),ys=panel.points.map(p=>p[1]);const x=Math.min(...xs),y=Math.min(...ys),w=Math.max(...xs)-x,h=Math.max(...ys)-y;const bounds=wrap.getBoundingClientRect();const scale=Math.min(bounds.width/(w*1.3),bounds.height/(h*1.3));if(!Number.isFinite(scale)||scale<=0)return;Object.assign(panel.canvas.style,{width:`${panel.canvas.width*scale}px`,height:`${panel.canvas.height*scale}px`,left:`${bounds.width/2-(x+w/2)*scale}px`,top:`${bounds.height/2-(y+h/2)*scale}px`});};
     const observer=new ResizeObserver(zoom);observer.observe(wrap);zoom();
     cleanupStep=()=>{observer.disconnect();wrap.classList.remove('fit-zoom-photo');oldStyle===null?panel.canvas.removeAttribute('style'):panel.canvas.setAttribute('style',oldStyle);};
-    const details=document.createElement('details');details.className='fit-fine-adjust';const heading=document.createElement('summary');heading.textContent='Fine adjust';details.append(heading);
-    const nudges=document.createElement('div');nudges.className='fit-nudges';nudges.setAttribute('aria-label','Fine adjustment, one image pixel');
-    for(const [label,dx,dy] of [['Left',-1,0],['Up',0,-1],['Down',0,1],['Right',1,0]])nudges.append(button(label,()=>{
-      const key=markMode==='optical'?'opticalCentre':'topMark';if(!panel[key])return;
-      panel[key]=[Math.max(0,Math.min(panel.canvas.width,panel[key][0]+dx)),Math.max(0,Math.min(panel.canvas.height,panel[key][1]+dy))];panel.render();update();
-    }));
-    details.append(nudges);body.append(details);
+    const details=document.createElement('details');details.className='fit-fine-adjust';
+    details.innerHTML='<summary><span>Fine adjust</span><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4"/></svg></summary>';
+    const controls=document.createElement('div');controls.className='fit-mark-controls';
+    const nudges=document.createElement('div');nudges.className='fit-nudges';nudges.setAttribute('role','group');nudges.setAttribute('aria-label','Move mark with arrow keys; Shift moves five image pixels');
+    const settings=document.createElement('div');settings.className='fit-mark-settings';
+    const position=document.createElement('p');position.className='fit-mark-position';position.setAttribute('role','status');
+    let increment=1;
+    const announce=()=>{const point=panel[markMode==='optical'?'opticalCentre':'topMark'];position.textContent=point?`X ${point[0].toFixed(0)} · Y ${point[1].toFixed(0)} px`:'No point placed';place.hidden=Boolean(point);for(const b of nudges.querySelectorAll('button'))b.disabled=!point;};
+    const place=button('Place starting point',()=>{initializeMark(panel,markMode);panel.render();update();announce();nudges.querySelector('button').focus();},'fit-mark-place');
+    const move=(dx,dy,step=increment)=>{if(moveMark(panel,markMode,dx,dy,step)){panel.render();update();announce();}};
+    for(const [label,dx,dy,path] of [['Left',-1,0,'M15 5l-7 7 7 7'],['Up',0,-1,'m5 15 7-7 7 7'],['Down',0,1,'m5 9 7 7 7-7'],['Right',1,0,'m9 5 7 7-7 7']]) {
+      const control=button('',()=>move(dx,dy));control.dataset.direction=label.toLowerCase();control.setAttribute('aria-label',`Move mark ${label.toLowerCase()}`);
+      control.innerHTML=`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"/></svg>`;nudges.append(control);
+    }
+    const centre=document.createElement('span');centre.className='fit-pad-centre';centre.setAttribute('aria-hidden','true');centre.innerHTML='<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 3v4m0 10v4M3 12h4m10 0h4"/></svg>';nudges.append(centre);
+    nudges.addEventListener('keydown',event=>{const delta={ArrowLeft:[-1,0],ArrowUp:[0,-1],ArrowDown:[0,1],ArrowRight:[1,0]}[event.key];if(delta){event.preventDefault();move(...delta,event.shiftKey?5:increment);}});
+    const steps=document.createElement('div');steps.className='fit-mark-steps';steps.setAttribute('role','group');steps.setAttribute('aria-label','Movement in image pixels');
+    for(const size of [1,5]){const choice=button(`${size} px`,()=>{increment=size;for(const b of steps.children)b.setAttribute('aria-pressed',String(b===choice));});choice.setAttribute('aria-pressed',String(size===increment));steps.append(choice);}
+    const hint=document.createElement('p');hint.className='fit-mark-hint';hint.textContent='Match the provider’s mark, then confirm below.';
+    settings.append(steps,position,place,hint);controls.append(nudges,settings);details.append(controls);body.append(details);announce();
+    panel.canvas.addEventListener('pointerup',announce);
+    const cleanPhoto=cleanupStep;cleanupStep=()=>{panel.canvas.removeEventListener('pointerup',announce);cleanPhoto();};
     body.append(button('Skip for prototype',()=>{
       for(const p of panels){if(marksReady(p)&&!p.illustrativeAlignment)continue;const xs=p.points.map(a=>a[0]),ys=p.points.map(a=>a[1]);const cx=(Math.min(...xs)+Math.max(...xs))/2;p.opticalCentre=[cx,(Math.min(...ys)+Math.max(...ys))/2];p.topMark=[cx,Math.min(...ys)];p.illustrativeAlignment=true;p.markReview={};p.render();}
       step=6;render(true);
@@ -213,7 +232,7 @@ async function startFitFlow() {
     if(step===0)summary();
     if(step===1)methodScreen();
     if(step===2) {cleanupStep = mountPupilMeasurements(body, fields('left-pd'), fields('right-pd'));if(getMeasurementSource()!=='manual')note('Face scan estimate · verify before printing.');}
-    if(step===3)cleanupStep=mountThicknessMeasurements(body,fields('left-edge-thickness'),fields('right-edge-thickness'));
+    if(step===3){const thicknessCleanup=mountThicknessMeasurements(body,fields('left-edge-thickness'),fields('right-edge-thickness'));const feedbackCleanup=mountNumericFeedback(['left-edge-thickness','right-edge-thickness'].map(fields));cleanupStep=()=>{feedbackCleanup();thicknessCleanup();};}
     if(step===4||step===5)markScreen(step===4?left:right);
     if(step===6){
       cleanupStep=mountLensAdjustments({body,getState:getLensAdjustments,getOutlines:getAdjustedLensOutlines,
@@ -221,8 +240,8 @@ async function startFitFlow() {
         leftOffset:fields('left-vertical-offset'),rightOffset:fields('right-vertical-offset')});
       const group=document.createElement('div');group.className='fit-fields design-inputs fit-placement-fields';
       for(const [id,name,path] of [
-        ['right-vertical-offset','Right lens height','M12 3v18M8 7l4-4 4 4M8 17l4 4 4-4M3 12h3m12 0h3'],
-        ['left-vertical-offset','Left lens height','M12 3v18M8 7l4-4 4 4M8 17l4 4 4-4M3 12h3m12 0h3'],
+        ['left-vertical-offset','Left centre height','M12 3v18M8 7l4-4 4 4M8 17l4 4 4-4M3 12h3m12 0h3'],
+        ['right-vertical-offset','Right centre height','M12 3v18M8 7l4-4 4 4M8 17l4 4 4-4M3 12h3m12 0h3'],
         ['temple-length','Arm length','M3 17V9a2 2 0 0 1 2-2h14M3 17h3M9 12h12m-3-3 3 3-3 3']
       ]) {
         const input=fields(id),label=input.closest('label');
@@ -234,7 +253,8 @@ async function startFitFlow() {
         input.setAttribute('aria-label',name+' in millimetres');value.append(input,unit);label.replaceChildren(heading,value);group.append(label);
       }
       body.insertBefore(group,body.querySelector('.lens-adjustments'));
-      const hint=note('Preview placement · verify fit before printing.');hint.classList.add('fit-placement-hint');
+      const hint=note('Positive = up · Verify with your provider before printing.');hint.classList.add('fit-placement-hint');
+      const adjustmentCleanup=cleanupStep,feedbackCleanup=mountNumericFeedback(['left-vertical-offset','right-vertical-offset','temple-length'].map(fields));cleanupStep=()=>{feedbackCleanup();adjustmentCleanup();};
     }
     if(step===7)cleanupStep=mountFrameCatalog({body,viewer,status:designStatus,panels,getStyle:getFrameStyle,setStyle:setFrameStyle,getRetention:getRetentionStyle,setRetention:setRetentionStyle,getAssembly:getFrameAssembly,rebuild:()=>makeFrame(true),onUpdate:update,leftPd:()=>Number(fields('left-pd').value),rightPd:()=>Number(fields('right-pd').value),visualTryOn});
     if(step===8){inputs(['bed-width','bed-depth']);note(panels.some(p=>p.illustrativeAlignment)?'Prototype alignment · unverified fit-test STL only.':'Unverified fit-test STL kit. Slice at 100% in millimetres.');body.append(designStatus);const a=document.createElement('a');a.className='fit-link';a.href='?advanced=1'+location.hash;a.textContent='Physical checks';a.addEventListener('click',event=>{
@@ -242,6 +262,7 @@ async function startFitFlow() {
         saveCurrentCaptures();
       } catch(error){event.preventDefault();message.textContent=error.message;}
     });body.append(a);}
+    if(step===8)cleanupStep=mountNumericFeedback(['bed-width','bed-depth'].map(fields));
     update();if(focus)title.focus({preventScroll:true});
   }
   back.addEventListener('click',()=>{if(step===0){location.href='/index.html'+location.hash;return;}if((step===4||step===5)&&markMode==='top'){markMode='optical';render(true);return;}step--;markMode='optical';render(true);});

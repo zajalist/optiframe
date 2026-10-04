@@ -14,7 +14,8 @@ function harness(visualTryOn){
   vm.runInContext(source,context);
   const cleanup=context.mountFrameCatalog({body,viewer,status,panels:[],getStyle:()=>selected,setStyle(value){selected=value;assembly=null;viewer.dataset.stale='true';},getRetention:()=>retention,setRetention(value){retention=value;assembly=null;viewer.dataset.stale='true';},getAssembly:()=>assembly,rebuild(){calls.push(selected+'/'+retention);return new Promise((resolve,reject)=>pending.push({resolve:()=>{assembly={style:selected,retentionStyle:retention};viewer.dataset.stale='false';resolve();},reject}));},onUpdate(){updates++;},leftPd:()=>32,rightPd:()=>32,visualTryOn});
   const choices=body.children.find(el=>el.className==='frame-catalog'),actions=body.children.find(el=>el.className==='catalog-actions');
-  return {head,choices,actions,retention:actions.children[0],tryOn:actions.children[1],retry:actions.children[2],status,pending,calls,cleanup,get selected(){return selected;},get updates(){return updates;},get disconnected(){return disconnected;}};
+  const retentionControl=body.children.find(el=>el.className==='catalog-retention-panel').children[1];
+  return {head,choices,actions,retention:retentionControl,tryOn:actions.children[0],retry:actions.children[1],status,pending,calls,cleanup,get selected(){return selected;},get updates(){return updates;},get disconnected(){return disconnected;}};
 }
 
 test('catalog uses a single local stylesheet and shows three named styles with honest concept context',async()=>{
@@ -59,7 +60,7 @@ test('invalid print measurements do not block independent visual try-on',async()
 });
 test('switching retention rebuilds the actual assembly and invalidates try-on until ready',async()=>{
  const h=harness();h.pending.shift().resolve();await tick();
- assert.deepEqual(h.retention.children.map(button=>[button.dataset.retention,button.textContent]),[['screw','Screw'],['snap','Push pins'],['clip','Clip-in']]);
+ assert.deepEqual(h.retention.children.map(button=>[button.dataset.retention,button.innerHTML.includes('<span>Screw</span>'),button.innerHTML.includes('<span>Push pins</span>'),button.innerHTML.includes('<span>Clip-in</span>')]),[['screw',true,false,false],['snap',false,true,false],['clip',false,false,true]]);
  const pending=h.retention.children[1].handlers.click();assert.equal(h.tryOn.disabled,true);
  assert.equal(h.retention.children[1].attrs['aria-pressed'],'true');
  assert.deepEqual(h.calls,['classic/screw','classic/snap']);

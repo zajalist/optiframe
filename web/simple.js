@@ -1,4 +1,4 @@
-import { createLiveSegmentSession } from './live-segment.js?v=37';
+import { createLiveSegmentSession } from './live-segment.js?v=39';
 import { sheetHomography, project, measure } from './calibration.js';
 import { detectSheetMarkers } from './marker-detect.js?v=9';
 import { photoReviewLayout } from './photo-review.js?v=23';
@@ -27,10 +27,11 @@ let pendingPhoto = null;
 let targetPointer = null;
 let audioContext = null;
 let resultView = 'photo';
+let awaitingRemoval = false;
 let torchState = {supported:false,enabled:false,busy:false,error:''};
 function renderTorch() {
   const button = $('torch-toggle');
-  button.hidden = phase !== 'live';
+  button.hidden = phase !== 'live' && phase !== 'remove';
   button.disabled = !torchState.supported || torchState.busy;
   button.setAttribute('aria-pressed', String(torchState.enabled));
   button.setAttribute('aria-label', !torchState.supported ? 'Flashlight unavailable in this browser' : torchState.enabled ? 'Turn off flashlight' : 'Turn on flashlight');
@@ -168,20 +169,24 @@ function setPhase(next, message) {
     ? `${side === 'left' ? 'Left' : 'Right'} lens`
     : next === 'markers' ? 'Set the scale'
     : next === 'aim' || next === 'processing' ? 'Locate the lens'
-    : side === 'left' ? 'First lens' : 'Second lens';
+    : next === 'remove' ? 'Remove left lens'
+    : side === 'left' ? 'Left lens' : 'Right lens';
   $('instruction').textContent = next === 'aim' ? 'Touch, drag to center the lens, then lift.'
     : next === 'processing' ? ''
     : next === 'markers'
     ? `Touch and drag to white dot ${capture.markers.length + 1} of 4. Lift to set.`
+    : next === 'remove' ? 'Keep all four dots in view.'
+    : next === 'live' && side === 'right' ? 'Place the right lens after the sheet is empty.'
     : '';
   if (next === 'idle' || next === 'starting') setStage('empty');
-  if (next === 'live') setStage('camera');
+  if (next === 'live' || next === 'remove') setStage('camera');
   if (next === 'markers' || next === 'aim' || next === 'processing') setStage('review');
   if (next === 'result') setStage('result');
   if (next === 'pair') setStage('pair');
   if (next !== 'aim' && next !== 'markers') targetPointer = null;
+  $('remove-overlay').hidden = next !== 'remove';
   requestAnimationFrame(syncAimOverlay);
-  const cameraPhase = ['idle', 'starting', 'live'].includes(next);
+  const cameraPhase = ['idle', 'starting', 'live', 'remove'].includes(next);
   primary.hidden = !['result', 'pair'].includes(next);
   primary.disabled = false;
   primary.textContent = next === 'pair' ? 'Fit frame' : 'Confirm';
@@ -201,16 +206,17 @@ function stopCamera() {
 }
 
 async function startCamera(requireRemoval = false) {
+  setPhase('starting');
   stopCamera();
+  awaitingRemoval = requireRemoval;
   resultView = 'photo';
   $('result-photo').width = 1; // Release the previous image before another capture.
   $('result-photo').height = 1;
   const generation = captureGeneration;
-  setPhase('starting');
   try {
     await controller.start({ requireRemoval });
     if (generation !== captureGeneration) return;
-    setPhase('live');
+    setPhase(awaitingRemoval ? 'remove' : 'live');
     fitCamera();
   } catch (error) {
     if (generation !== captureGeneration) return;
@@ -447,8 +453,14 @@ async function segmentPhotoAt(x, y) {
 
 controller = createLiveSegmentSession({
   video, overlay: $('camera-overlay'), status, captureButton: controllerButton,
-  apiFetch, side: 'lens', onCapture: acceptCapture, minimalStatus: true,
+  apiFetch, side: 'lens', removalLabel: 'left', onCapture: acceptCapture, minimalStatus: true,
   autoCapture: true,
+  onRemovalChange(waiting) {
+    if (side !== 'right' || !captures.left?.confirmed) return;
+    awaitingRemoval = waiting;
+    if (phase === 'remove' && !waiting) setPhase('live', 'Place the right lens on the sheet.');
+    else if (phase === 'live' && waiting) setPhase('remove');
+  },
   onTorchChange(state) { torchState = state; renderTorch(); },
   viewSweep: new URLSearchParams(location.search || '').get('capture') === 'sweep',
   calibrateFrame(imageData, contour) {
@@ -499,8 +511,14 @@ secondary.addEventListener('click', () => retryLens());
 $('retry-left').addEventListener('click', () => retryLens('left'));
 $('retry-right').addEventListener('click', () => retryLens('right'));
 $('camera-retry').addEventListener('click', () => { enableSound(); void startCamera(); });
+$('remove-confirm').addEventListener('click', () => {
+  if (phase !== 'remove' || side !== 'right' || !awaitingRemoval) return;
+  if (!controller.confirmLensChanged()) {
+    status.textContent = 'Keep the empty sheet in view, then try again.';
+  }
+});
 $('torch-toggle').addEventListener('click', () => {
-  if (phase === 'live' && torchState.supported && !torchState.busy) void controller.setTorch(!torchState.enabled);
+  if ((phase === 'live' || phase === 'remove') && torchState.supported && !torchState.busy) void controller.setTorch(!torchState.enabled);
 });
 $('review-photo').addEventListener('click', () => selectResultView('photo'));
 $('review-outline').addEventListener('click', () => selectResultView('outline'));
