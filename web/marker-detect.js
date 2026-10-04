@@ -58,14 +58,20 @@ export function detectSheetMarkers(imageData) {
     for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
       centreBright = Math.max(centreBright, sample(nativeX + ox * centreRadius, nativeY + oy * centreRadius));
     }
-    if (centreBright < 125) continue;
+    // Phone exposure can render the printed white centre around 100 while
+    // its black square remains much darker. Require local contrast instead
+    // of an absolute bright-white pixel.
+    if (centreBright < 90) continue;
     let ringDark = 0;
+    let ringBrightness = 0;
     const radius = Math.max(1.5, side * step * 0.23);
     for (let n = 0; n < 8; n++) {
       const angle = n * Math.PI / 4;
-      if (sample(nativeX + radius * Math.cos(angle), nativeY + radius * Math.sin(angle)) < 125) ringDark++;
+      const brightness = sample(nativeX + radius * Math.cos(angle), nativeY + radius * Math.sin(angle));
+      ringBrightness += brightness;
+      if (brightness < 125) ringDark++;
     }
-    if (ringDark < 5) continue;
+    if (ringDark < 5 || centreBright - ringBrightness / 8 < 30) continue;
     candidates.push({ x: cx, y: cy, side, fill, ringDark });
   }
   if (candidates.length < 4) return null;

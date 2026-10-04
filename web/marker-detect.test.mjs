@@ -71,6 +71,21 @@ test('finds markers connected to printed grid lines with dim white centres', () 
   result.forEach((p, i) => near(p, points[i]));
 });
 
+test('finds markers whose centres are dim under phone exposure while rejecting solid squares', () => {
+  const img = image(700, 560);
+  const points = [[120, 120], [520, 120], [520, 400], [120, 400]];
+  for (const [x, y] of points) {
+    drawMarker(img, x, y);
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+      const i = ((y + dy) * img.width + x + dx) * 4;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = 101;
+    }
+  }
+  const result = detectSheetMarkers(img);
+  assert.ok(result);
+  result.forEach((point, index) => near(point, points[index]));
+});
+
 test('rejects incomplete sheet and solid dark distractors', () => {
   const img = image();
   [[120, 120], [520, 120], [520, 400]].forEach(([x, y]) => drawMarker(img, x, y));

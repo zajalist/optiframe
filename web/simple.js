@@ -1,6 +1,6 @@
 import { createLiveSegmentSession } from './live-segment.js?v=43';
 import { sheetHomography, project, measure } from './calibration.js';
-import { detectSheetMarkers } from './marker-detect.js?v=9';
+import { detectSheetMarkers } from './marker-detect.js?v=10';
 import { photoReviewLayout } from './photo-review.js?v=23';
 import { requestLensSegmentation } from './segment-request.js?v=1';
 import {apiFetch,requireAppAccess} from './api-fetch.js?v=43';
