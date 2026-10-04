@@ -45,6 +45,7 @@ export function createLiveSegmentSession({
   removalLabel = 'first',
   onRemovalChange = () => {},
   onTorchChange = () => {},
+  onServiceFailure = () => {},
 }) {
   if (!video || !overlay || !status || !captureButton || typeof onCapture !== 'function')
     throw new TypeError('Live segmentation needs video, overlay, status, captureButton and onCapture');
@@ -492,6 +493,12 @@ export function createLiveSegmentSession({
         clearResult();
         message(error.busy ? busyFailures < 2 ? 'Waiting for scanner…' : error.message
           : performance.now()<refinementRetryAt ? refinementHint : `No lens edge yet. ${error.message}`);
+        if (busyFailures >= 3) {
+          const detail = error.message;
+          stop();
+          onServiceFailure(detail);
+          return;
+        }
       }
     } finally {
       job.abort.abort();

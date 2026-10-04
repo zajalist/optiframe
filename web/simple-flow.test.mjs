@@ -100,6 +100,15 @@ test('slow GPU scanner accepts a delayed proposal and refines one fresh still', 
   assert.equal(still.frames,undefined,'the slow single-GPU path must avoid a timed-out burst');
 });
 
+test('persistent scanner failure reveals retry and photo import', () => {
+  const app=harness();
+  app.controllerOptions.onServiceFailure('Service busy. Retrying…');
+  assert.equal(app.body.dataset.phase,'idle');
+  assert.equal(app.$('camera-retry').hidden,false);
+  assert.equal(app.$('photo-label').hidden,false);
+  assert.match(app.$('status').textContent,/Service busy/);
+});
+
 test('flashlight control is shown in every live camera session and reflects supported, busy, and unavailable states',async()=>{
   const app=harness();await tick();
   assert.equal(app.$('torch-toggle').hidden,false);assert.equal(app.$('torch-toggle').disabled,true);

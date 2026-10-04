@@ -47,7 +47,7 @@ function setup(fetcher, onCapture = async () => {}, options = {}) {
     startupTimeoutMs: options.startupTimeoutMs ?? 12000, locateTarget: options.locateTarget,
     requestTimeoutMs: options.requestTimeoutMs ?? 8000, maxResultAgeMs: options.maxResultAgeMs ?? 2000,
     autoCapture: options.autoCapture, calibrateFrame: options.calibrateFrame,
-    onRemovalChange: options.onRemovalChange,
+    onRemovalChange: options.onRemovalChange, onServiceFailure: options.onServiceFailure,
     stillCapture: options.stillCapture ?? false, captureFrame: options.captureFrame });
   return { session, video, overlay, status, captureButton, get stopped() { return stopped; } };
 }
@@ -83,6 +83,20 @@ test('repeated service failures reveal the server reason instead of waiting fore
     await pause(1100);
     assert.equal(fixture.status.textContent,'Account verification unavailable');
   } finally {fixture.session.stop();}
+});
+
+test('three busy replies stop streaming and expose a retryable failure', async () => {
+  let calls=0, detail='';
+  const fixture=setup(async()=>{calls++;return {status:503,ok:false,
+    json:async()=>({detail:'Service busy. Retrying…'})};},async()=>{},
+  {onServiceFailure:value=>{detail=value;}});
+  await fixture.session.start();
+  await pause(2800);
+  assert.equal(calls,3);
+  assert.equal(detail,'Service busy. Retrying…');
+  assert.ok(fixture.stopped>0,'camera stream was released');
+  await pause(150);
+  assert.equal(calls,3,'automatic retries have stopped');
 });
 
 test('changing lighting invalidates the old outline and waits for exposure before sampling',async()=>{

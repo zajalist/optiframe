@@ -1,4 +1,4 @@
-import { createLiveSegmentSession } from './live-segment.js?v=41';
+import { createLiveSegmentSession } from './live-segment.js?v=42';
 import { sheetHomography, project, measure } from './calibration.js';
 import { detectSheetMarkers } from './marker-detect.js?v=9';
 import { photoReviewLayout } from './photo-review.js?v=23';
@@ -209,7 +209,7 @@ function setPhase(next, message) {
   primary.setAttribute('aria-label', next === 'pair' ? 'Confirm both lenses and fit frame' : 'Confirm lens');
   photoLabel.hidden = !cameraPhase;
   $('camera-retry').hidden = next !== 'idle';
-  $('empty').textContent = next === 'idle' ? 'Camera unavailable. Retry or use a photo.' : 'Opening camera…';
+  $('empty').textContent = next === 'idle' ? 'Retry camera or use a photo.' : 'Opening camera…';
   secondary.hidden = !['markers', 'aim', 'result'].includes(next);
   secondary.textContent = 'Retry';
   status.textContent = message || '';
@@ -479,6 +479,7 @@ controller = createLiveSegmentSession({
     else if (phase === 'live' && waiting) setPhase('remove');
   },
   onTorchChange(state) { torchState = state; renderTorch(); },
+  onServiceFailure(detail) { setPhase('idle', `${detail} Retry camera or use a photo.`); },
   viewSweep: new URLSearchParams(location.search || '').get('capture') === 'sweep',
   calibrateFrame(imageData, contour) {
     const markers = detectSheetMarkers(imageData);
