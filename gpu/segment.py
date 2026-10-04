@@ -7,28 +7,41 @@ import logging
 import threading
 import time
 from time import monotonic
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 import base64
-import hmac
 import os
 import math
 import tempfile
 from io import BytesIO
+from functools import wraps
 from pathlib import Path
 from zipfile import BadZipFile, ZipFile
 
 import cv2
 import numpy as np
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import Response
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
-from starlette.formparsers import MultiPartException
 from preprocess import isolate_lens, restore_best_lens_mask
 from presence import lens_presence, absent
 from edge_refine import refine_lens_edge
+from runtime_guard import CaptureBodyLimit, RuntimeGuard, RuntimeState, production_mode
 
-app = FastAPI(title="OptiFrame contour proposals")
+runtime = RuntimeState(production=production_mode())
+
+
+@asynccontextmanager
+async def lifespan(app):
+    if runtime.production and os.environ.get("OPTIFRAME_ACCESS_TOKEN"):
+        runtime.start_warmup(_warm_predictor)
+    try:
+        yield
+    finally:
+        runtime.close()
+
+
+app = FastAPI(title="OptiFrame contour proposals", lifespan=lifespan)
 _model = None
 _processor = None
 _model_lock = threading.Lock()
@@ -55,66 +68,33 @@ def model_slot():
         _model_lock.release()
 
 
-class CaptureBodyLimit:
-    """Bound multipart bytes before Starlette spools phone uploads."""
-
-    def __init__(self, app):
-        self.app = app
-
-    async def __call__(self, scope, receive, send):
-        limits = {"/api/video-frames": VIDEO_MAX_BYTES,
-                  "/api/import": 100_000_000,
-                  "/api/segment": 48_000_000,
-                  "/api/live-segment": 8_000_000,
-                  "/api/segment-burst": 20_000_000}
-        if scope["type"] != "http" or scope["path"] not in limits:
-            return await self.app(scope, receive, send)
-        limit = limits[scope["path"]] + 64_000  # Multipart headers and boundaries.
-        detail = ("Video request exceeds 100 MB" if scope["path"] == "/api/video-frames"
-                  else "Capture request exceeds upload limit")
-        headers = dict(scope.get("headers", []))
-        try:
-            length = int(headers.get(b"content-length", b"0"))
-        except ValueError:
-            length = 0
-        rejection = Response(detail, status_code=413)
-        if length > limit:
-            return await rejection(scope, receive, send)
-        total = 0
-        exceeded = False
-
-        async def bounded_receive():
-            nonlocal total, exceeded
-            message = await receive()
-            total += len(message.get("body", b""))
-            if total > limit:
-                exceeded = True
-                # Starlette closes partial upload files only for parser errors.
-                # bounded_send restores 413 after its parser error becomes a 400.
-                raise MultiPartException(detail)
-            return message
-
-        async def bounded_send(message):
-            if exceeded:
-                if message["type"] == "http.response.start":
-                    message = {**message, "status": 413}
-            await send(message)
-
-        await self.app(scope, bounded_receive, bounded_send)
+app.add_middleware(CaptureBodyLimit, video_limit=lambda: VIDEO_MAX_BYTES)
+app.add_middleware(RuntimeGuard, runtime=runtime)
 
 
-app.add_middleware(CaptureBodyLimit)
+@app.get("/healthz")
+async def healthz():
+    healthy = runtime.healthy
+    return JSONResponse({"status": "ok" if healthy else "unhealthy"},
+                        status_code=200 if healthy else 503)
 
 
-@app.middleware("http")
-async def protect_phone_api(request: Request, call_next):
-    """A short-lived bearer key protects GPU work through a demo tunnel."""
-    required = os.environ.get("OPTIFRAME_ACCESS_TOKEN")
-    if required and request.url.path.startswith("/api/"):
-        supplied = request.headers.get("x-optiframe-key", "")
-        if not hmac.compare_digest(supplied, required):
-            return Response("Phone test key missing or incorrect", status_code=401)
-    return await call_next(request)
+@app.get("/readyz")
+async def readyz():
+    ready = runtime.healthy and (not runtime.production or
+                                 (bool(os.environ.get("OPTIFRAME_ACCESS_TOKEN")) and runtime.ready))
+    return JSONResponse({"status": "ready" if ready else "not_ready"},
+                        status_code=200 if ready else 503,
+                        headers={} if ready else {"Retry-After": "1"})
+
+
+def tracked_work(function):
+    """Worker bookkeeping survives a disconnected/cancelled HTTP request."""
+    @wraps(function)
+    def run(*args, **kwargs):
+        with runtime.worker():
+            return function(*args, **kwargs)
+    return run
 
 
 def decode(data: bytes) -> np.ndarray:
@@ -225,20 +205,39 @@ def live_quality(image: np.ndarray, contour: list[list[int]],
             "clippedFraction": round(clipped, 5), "coverage": round(coverage, 4)}
 
 
-def sam_mask(image: np.ndarray, box: tuple[int, int, int, int]) -> np.ndarray:
+def _load_predictor():
+    """Caller holds model_slot; warm-up and requests share these globals."""
     import torch
-
-    crop = isolate_lens(image, box)
     global _model, _processor
-    with model_slot():
-        if not torch.cuda.is_available():
-            raise RuntimeError("CUDA is unavailable")
-        if _model is None:
-            from transformers import Sam2Model, Sam2Processor
+    if not torch.cuda.is_available():
+        raise RuntimeError("CUDA is unavailable")
+    if _model is None:
+        from transformers import Sam2Model, Sam2Processor
+        name = "facebook/sam2.1-hiera-small"
+        processor = Sam2Processor.from_pretrained(name, local_files_only=runtime.production)
+        model = Sam2Model.from_pretrained(name, local_files_only=runtime.production).to("cuda").eval()
+        _processor, _model = processor, model
+    return torch
 
-            name = "facebook/sam2.1-hiera-small"
-            _processor = Sam2Processor.from_pretrained(name)
-            _model = Sam2Model.from_pretrained(name).to("cuda").eval()
+
+def _warm_predictor():
+    """Complete one synthetic inference in the existing process, without images on disk."""
+    with model_slot():
+        torch = _load_predictor()
+        image = Image.new("RGB", (256, 256), (180, 180, 180))
+        inputs = _processor(images=image, input_boxes=[[[48, 48, 208, 208]]],
+                            return_tensors="pt").to("cuda")
+        with torch.inference_mode():
+            result = _model(**inputs)
+        # Postprocessing and synchronization verify readiness beyond loading weights.
+        _processor.post_process_masks(result.pred_masks.cpu(), inputs["original_sizes"])
+        torch.cuda.synchronize()
+
+
+def sam_mask(image: np.ndarray, box: tuple[int, int, int, int]) -> np.ndarray:
+    crop = isolate_lens(image, box)
+    with model_slot():
+        torch = _load_predictor()
         for attempt in range(2):
             rgb = cv2.cvtColor(crop.image, cv2.COLOR_BGR2RGB)
             inputs = _processor(images=Image.fromarray(rgb), input_boxes=[[list(crop.box)]],
@@ -316,6 +315,7 @@ def health() -> dict:
 
 
 @app.post("/api/import")
+@tracked_work
 def import_capture(capture: UploadFile = File(...)) -> dict:
     data = capture.file.read(100_000_001)
     if len(data) > 100_000_000:
@@ -375,6 +375,7 @@ def extract_video_frames(path: str) -> dict:
 
 
 @app.post("/api/video-frames")
+@tracked_work
 def video_frames(video: UploadFile = File(...)) -> dict:
     # OpenCV needs a path. The upload copy is deleted on success and every error.
     try:
@@ -393,6 +394,7 @@ def video_frames(video: UploadFile = File(...)) -> dict:
 
 
 @app.post("/api/segment")
+@tracked_work
 def segment(image: UploadFile = File(...), empty: UploadFile | None = File(None),
             box: str | None = Form(None), use_gpu: bool = Form(True)) -> dict:
     try:
@@ -482,6 +484,7 @@ def segment_live_photo(photo: np.ndarray, parsed: tuple[int, int, int, int], *, 
 
 
 @app.post("/api/live-segment")
+@tracked_work
 def live_segment(image: UploadFile = File(...), box: str = Form(...)) -> dict:
     """Segment one bounded camera frame with the shared SAM2 image predictor."""
     raw = image.file.read(6_000_001)
@@ -514,6 +517,7 @@ def live_segment(image: UploadFile = File(...), box: str = Form(...)) -> dict:
 
 
 @app.post("/api/segment-burst")
+@tracked_work
 def segment_burst(images: list[UploadFile] = File(...), boxes: str = Form(...)) -> dict:
     """Segment 3–5 originals serially on the existing predictor in one upload.
 
@@ -569,6 +573,7 @@ def segment_burst(images: list[UploadFile] = File(...), boxes: str = Form(...)) 
 
 
 @app.post("/api/frame")
+@tracked_work
 def frame(payload: dict) -> Response:
     from frame import Settings, generate
 
@@ -586,6 +591,7 @@ def frame(payload: dict) -> Response:
 
 
 @app.post("/api/frame-preview")
+@tracked_work
 def frame_preview(payload: dict) -> dict:
     from frame import Settings, preview
 

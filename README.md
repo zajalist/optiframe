@@ -28,6 +28,8 @@ The core proof is **verified lenses + wearer measurements -> two independent len
 
 ## Run the prototype
 
+For the supervised desktop GPU deployment, recovery commands and permanent-domain setup, see [Production backend operations](docs/production-backend.md). The desktop runtime versions are recorded in [requirements-desktop.txt](gpu/requirements-desktop.txt).
+
 ```powershell
 python -m pip install -r gpu/requirements.txt
 python -m uvicorn segment:app --app-dir gpu --host 127.0.0.1 --port 8765

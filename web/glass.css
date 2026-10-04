@@ -125,3 +125,33 @@ body[data-surface="studio"] .site-header .tutorial-trigger {
   .button:active, .nav-scan:active { transform: none; }
   .hero-object img, .button::after, .nav-scan::after, .hero-actions .text-action::after { animation: none; }
 }
+
+/* Thin optical edge, with a clear centre. Restricted to controls: image pixels
+   and the measurement canvas never receive a filter or displacement. */
+.button-primary,.nav-scan,.button-outline,.hero-actions .text-action,
+.photo-import,.help-button,.secondary,.lens-caption button {
+  isolation:isolate;overflow:hidden;
+  background-color:#c9d3e116;
+  background-image:radial-gradient(ellipse at 12% 0%,#ffffff42,transparent 55%),linear-gradient(125deg,#ffffff12 20%,#ffffff03 48%,#ffffff1c 100%);
+  border:1px solid #ffffff36;
+  box-shadow:inset 0 1px 0 #ffffff7a,inset 1px 0 0 #ffffff2b,inset -1px -1px 0 #080d175c,0 5px 15px #00000024;
+}
+.button-primary::before,.nav-scan::before,.button-outline::before,.hero-actions .text-action::before,
+.photo-import::before,.help-button::before,.secondary::before,.lens-caption button::before {
+  content:"";position:absolute;inset:2px;border-radius:inherit;pointer-events:none;
+  border-top:1px solid #ffffff27;border-bottom:1px solid #ffffff12;
+}
+/* Floating camera controls own their absolute positioning in simple.css. */
+.help-button,.secondary,.lens-caption button { position:relative; }
+@supports ((backdrop-filter:blur(12px)) or (-webkit-backdrop-filter:blur(12px))) {
+  .button-primary,.nav-scan,.button-outline,.hero-actions .text-action,
+  .photo-import,.help-button,.secondary,.lens-caption button {
+    backdrop-filter:blur(12px) saturate(125%);-webkit-backdrop-filter:blur(12px) saturate(125%);
+  }
+}
+@media(prefers-reduced-transparency:reduce){
+  .button-primary,.nav-scan,.button-outline,.hero-actions .text-action,
+  .photo-import,.help-button,.secondary,.lens-caption button {
+    background:#303741;backdrop-filter:none;-webkit-backdrop-filter:none;
+  }
+}

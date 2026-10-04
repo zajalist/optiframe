@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#eceef1">
+  <title>OptiFrame — Model review</title>
+  <link rel="stylesheet" href="/model-review.css?v=34">
+  <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"}}</script>
+</head>
+<body>
+  <main class="review">
+    <header><a id="home" href="/welcome.html">OptiFrame</a><span>Model review</span></header>
+    <section class="model" aria-label="Frame model">
+      <div class="model-heading"><h1 id="model-name">Classic</h1><p>Saved lens pair · Example fit</p></div>
+      <div id="viewer" aria-label="Interactive 3D frame assembly"></div>
+      <p class="status" id="status" role="status">Building model…</p>
+    </section>
+    <footer>
+      <div class="options">
+        <div class="segments styles" role="group" aria-label="Frame style">
+          <button type="button" data-style="classic" aria-pressed="true">Classic</button>
+          <button type="button" data-style="bold" aria-pressed="false">Bold</button>
+          <button type="button" data-style="brow" aria-pressed="false">Brow</button>
+        </div>
+        <div class="segments retention" role="group" aria-label="Lens retention">
+          <button type="button" data-retention="screw" aria-pressed="true">Screw</button>
+          <button type="button" data-retention="snap" aria-pressed="false">Snap</button>
+        </div>
+      </div>
+      <div class="export"><button id="rebuild" type="button" hidden>Retry</button><span id="fit-note">Experimental fit · Verify before wear</span><button id="download" type="button" disabled>Download STL kit</button></div>
+    </footer>
+  </main>
+  <script type="module" src="/model-review.js?v=34"></script>
+</body>
+</html>

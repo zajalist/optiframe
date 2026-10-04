@@ -25,12 +25,14 @@ function harness({ cameraError = null, storageError = null, deferReads = false, 
     };
   }
   const $ = id => { if (!nodes.has(id)) nodes.set(id, element()); return nodes.get(id); };
-  let starts = 0, sounds = 0, replacements = 0, callbacks;
+  let starts = 0, sounds = 0, replacements = 0, stops = 0, callbacks;
+  const torchRequests = [], windowListeners = new Map();
   const startOptions = [];
   const ellipse = Array.from({ length: 80 }, (_, i) => [500 + 250 * Math.cos(i * Math.PI / 40), 350 + 200 * Math.sin(i * Math.PI / 40)]);
   const payload = { file: { name: 'lens.jpg' }, contour: ellipse, width: 1000, height: 700 };
   const controller = { async start(options) { starts++; startOptions.push(options); if (cameraError) throw new Error(cameraError); callbacks.onRemovalChange?.(Boolean(options.requireRemoval)); $('controller-capture').disabled = false; },
-    stop() { callbacks.onRemovalChange?.(false); },
+    stop() { stops++; callbacks.onRemovalChange?.(false); },
+    async setTorch(enabled) { torchRequests.push(enabled); },
     confirmLensChanged() { replacements++; callbacks.onRemovalChange(false); return true; },
     async capture() { return callbacks.onCapture(payload); } };
   class AudioContext {
@@ -50,7 +52,7 @@ function harness({ cameraError = null, storageError = null, deferReads = false, 
   }
   const context = vm.createContext({
     document: { getElementById: $, createElement: element, body },
-    window: { addEventListener() {}, AudioContext }, location, FileReader,
+    window: { addEventListener(name,callback) { windowListeners.set(name,callback); }, AudioContext }, location, FileReader,
     URLSearchParams, Blob, File, FormData, sheetHomography, project, measure, photoReviewLayout,
     detectSheetMarkers: () => [[0, 0], [1000, 0], [1000, 700], [0, 700]],
     createLiveSegmentSession(options) { callbacks = options; return controller; },
@@ -59,7 +61,7 @@ function harness({ cameraError = null, storageError = null, deferReads = false, 
     requestAnimationFrame: callback => callback(), fetch() {}, sessionStorage: { setItem(key,value) { if(storageError) throw new Error(storageError); storage.set(key,value); } },
   });
   vm.runInContext(source, context);
-  return { $, body, payload, context, storage, location, pendingReads, startOptions, imageDraws, encodings, get replacements() { return replacements; }, get controllerOptions() { return callbacks; }, get starts() { return starts; }, get sounds() { return sounds; },
+  return { $, body, payload, context, storage, location, pendingReads, startOptions, imageDraws, encodings, torchRequests, windowListeners, get stops() {return stops;}, get replacements() { return replacements; }, get controllerOptions() { return callbacks; }, get starts() { return starts; }, get sounds() { return sounds; },
     accept: value => callbacks.onCapture(value), click: id => $(id).handlers.click?.({ preventDefault() {} }) };
 }
 
@@ -81,17 +83,28 @@ test('guided sweep is explicitly selected by the test link', () => {
   assert.equal(harness({search:'?capture=sweep&v=24'}).controllerOptions.viewSweep, true);
 });
 
-test('flashlight control is internal only and reflects supported, busy, and unavailable states',async()=>{
-  const normal=harness();await tick();assert.equal(normal.$('torch-toggle').hidden,true);
-  const app=harness({search:'?test=lighting'});await tick();
+test('flashlight control is shown in every live camera session and reflects supported, busy, and unavailable states',async()=>{
+  const app=harness();await tick();
   assert.equal(app.$('torch-toggle').hidden,false);assert.equal(app.$('torch-toggle').disabled,true);
+  assert.equal(app.$('torch-label').textContent,'No flash');
+  app.click('torch-toggle');assert.deepEqual(app.torchRequests,[]);
   app.controllerOptions.onTorchChange({supported:true,enabled:true,busy:false,error:''});
   assert.equal(app.$('torch-label').textContent,'Flash on');
   assert.equal(app.$('torch-toggle').attributes['aria-pressed'],'true');
   assert.equal(app.$('torch-note').hidden,true);
+  app.click('torch-toggle');assert.deepEqual(app.torchRequests,[false]);
   app.controllerOptions.onTorchChange({supported:true,enabled:true,busy:true,error:''});
   assert.equal(app.$('torch-toggle').disabled,true);
+  app.click('torch-toggle');assert.deepEqual(app.torchRequests,[false]);
   await app.accept(app.payload);assert.equal(app.$('torch-toggle').hidden,true);
+});
+
+test('backgrounding an enabled or changing flashlight stops the camera in normal mode',async()=>{
+  for(const state of [{enabled:true,busy:false},{enabled:false,busy:true}]){
+    const app=harness();await tick();app.controllerOptions.onTorchChange({supported:true,error:'',...state});
+    const before=app.stops;app.context.document.hidden=true;app.windowListeners.get('visibilitychange')();
+    assert.equal(app.stops,before+1);assert.equal(app.body.dataset.phase,'idle');assert.equal(app.$('torch-toggle').hidden,true);
+  }
 });
 
 test('second lens can be acknowledged without discarding the confirmed first lens', async () => {

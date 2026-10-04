@@ -60,6 +60,7 @@ class Settings:
     right_vertical_offset: float = 0
     frame_style: str = "classic"
     retention_style: str = "screw"
+    alignment_source: str = "unspecified"
 
     def edge_thicknesses(self) -> tuple[float, float]:
         return (self.edge_thickness if self.left_edge_thickness is None else self.left_edge_thickness,
@@ -249,6 +250,8 @@ def _build_plate(parts: dict[str, trimesh.Trimesh], width: float,
 
 
 def build_parts(left: list[list[float]], right: list[list[float]], settings: Settings):
+    if settings.alignment_source not in ("unspecified", "provider-marked", "illustrative"):
+        raise ValueError("Unknown lens alignment source")
     """Build printable solids in their shared assembly coordinates."""
     if settings.frame_style not in FRAME_STYLES:
         raise ValueError("Frame style must be classic, bold or brow")
@@ -392,6 +395,10 @@ def build_parts(left: list[list[float]], right: list[list[float]], settings: Set
             "supports": "Plate places pins head-down. PETG is a starting material for coupons only: thin split legs, barb overhangs and layer adhesion require slicer review and destructive retention tests. Review temple and hinge supports too.",
             "warning": "Experimental snap mechanism, not a validated wearable product. First print one pin plus a same-thickness bore coupon and test insertion, pullout and fatigue without a lens. Do not rely on these dimensions for brittle resin or PLA. Lens power and optical centres still require an eye care professional.",
         })
+    notes["alignment_source"] = settings.alignment_source
+    notes["alignment_warning"] = ("Approximate geometric alignment for a prototype only; optical centres and orientation must be marked and verified before wearer fitting."
+        if settings.alignment_source != "provider-marked" else
+        "Provider marks supplied by the operator; their accuracy has not been independently verified.")
     return parts, lenses, notes
 
 
@@ -409,6 +416,7 @@ def preview(left: list[list[float]], right: list[list[float]], settings: Setting
     return {"schemaVersion": 1, "units": "millimetres", "meshes": meshes,
             "frameStyle": settings.frame_style,
             "retentionStyle": settings.retention_style,
+            "alignmentSource": settings.alignment_source,
             "opticalCentres": [[-settings.left_pd, settings.left_vertical_offset, 2.15],
                                [settings.right_pd, settings.right_vertical_offset, 2.15]],
             "lensRepresentation": "Flat outlines with measured edge thickness; optical curvature is not measured",

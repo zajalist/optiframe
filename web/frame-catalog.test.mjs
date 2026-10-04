@@ -18,7 +18,7 @@ function harness(){
 }
 
 test('catalog uses a single local stylesheet and shows three named styles with honest concept context',async()=>{
-  const h=harness();assert.equal(h.head.children.length,1);assert.match(h.head.children[0].href,/frame-catalog\.css\?v=30$/);
+  const h=harness();assert.equal(h.head.children.length,1);assert.match(h.head.children[0].href,/frame-catalog\.css\?v=31$/);
   assert.deepEqual(h.choices.children.map(x=>x.dataset.style),['classic','bold','brow']);
   assert.equal(h.choices.attrs['aria-describedby'],'catalog-concepts-label');
   assert.equal(h.choices.attrs['aria-busy'],'true');

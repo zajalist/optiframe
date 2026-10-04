@@ -278,6 +278,8 @@ class LensPanel {
       this.markerPoints = [];
       this.homography = null;
       this.opticalCentre = null;
+      this.illustrativeAlignment = false;
+      this.markReview = {};
       this.topMark = null;
       this.mmPerPixel = null;
       this.el.querySelector('.evidence-confirmed').checked=false;
@@ -364,12 +366,14 @@ class LensPanel {
     } else if (this.mode === 'optical') {
       if (this.topMark && distance(point, this.topMark) < 2) { this.message('Optical centre and top mark must be separate points.'); return; }
       this.opticalCentre = point;
+      if (this.illustrativeAlignment) { this.markReview ||= {}; this.markReview.optical = true; if (this.markReview.top) this.illustrativeAlignment = false; }
       this.centreStatus.textContent = 'Optical centre set — verify this mark with the lens provider';
       this.render();
       if (this.guidedCapture) this.setMode('top');
     } else if (this.mode === 'top') {
       if (this.opticalCentre && distance(point, this.opticalCentre) < 2) { this.message('Top mark and optical centre must be separate points.'); return; }
       this.topMark = point;
+      if (this.illustrativeAlignment) { this.markReview ||= {}; this.markReview.top = true; if (this.markReview.optical) this.illustrativeAlignment = false; }
       this.topStatus.textContent = 'Top marked — verify the physical mark on the lens';
       this.render();
       if (this.guidedCapture) { this.setMode(null); this.message('Centre and top set. Enter the patient measurements below.'); }
@@ -631,6 +635,7 @@ async function importSimpleCaptures() {
       const sx = panel.canvas.width / item.width, sy = panel.canvas.height / item.height;
       panel.points = item.contour.map(([x,y]) => [x * sx, y * sy]);
       panel.captureRefinement = item.refinement || null;
+      panel.illustrativeAlignment = item.illustrativeAlignment === true;
       panel.markerPoints = item.markers.map(([x,y]) => [x * sx, y * sy]);
       panel.homography = sheetHomography(panel.markerPoints);
       if (Array.isArray(item.opticalCentre) && item.opticalCentre.length === 2 && item.opticalCentre.every(Number.isFinite)) panel.opticalCentre = [item.opticalCentre[0] * sx, item.opticalCentre[1] * sy];
@@ -721,6 +726,7 @@ function framePayload() {
   const leftThickness = number('left-edge-thickness');
   const rightThickness = number('right-edge-thickness');
   return { left, right, settings: {
+    alignment_source: [leftPanel,rightPanel].some(panel=>panel.illustrativeAlignment) ? 'illustrative' : 'provider-marked',
     frame_style: frameStyle,
     retention_style: retentionStyle,
     left_pd: number('left-pd'), right_pd: number('right-pd'),
@@ -735,6 +741,8 @@ async function makeFrame(preview, experimental = false) {
   automaticPreview?.cancel();
   const request = makeFrame.sequence = (makeFrame.sequence || 0) + 1;
   try {
+    if (!preview && !experimental && [leftPanel,rightPanel].some(panel=>panel.illustrativeAlignment))
+      throw new Error('Checked export needs both provider optical-centre and top marks. Use the unverified prototype kit for approximate alignment.');
     if ([leftPanel, rightPanel].some(panel => panel.photoLoading))
       throw new Error('Wait for both selected photos to finish loading before previewing or exporting.');
     if(!preview&&!experimental&&[leftPanel,rightPanel].some(p=>!p.homography||!p.opticalCentre||!p.topMark||!p.caliperCheck?.pass||!p.repeatCheck?.pass||!p.edgeRepeatCheck?.pass||!p.el.querySelector('.evidence-confirmed').checked))

@@ -9,7 +9,7 @@ const styles = [
 export function mountFrameCatalog({body, viewer, status, panels, getStyle, setStyle, getRetention, setRetention, getAssembly, rebuild, onUpdate, leftPd, rightPd}) {
   let alive = true, busy = false, building = false, closeTryOn = null;
   if (!document.querySelector('link[data-frame-catalog]')) {
-    const css=document.createElement('link');css.rel='stylesheet';css.href=new URL('./frame-catalog.css?v=30',import.meta.url).href;
+    const css=document.createElement('link');css.rel='stylesheet';css.href=new URL('./frame-catalog.css?v=31',import.meta.url).href;
     css.dataset.frameCatalog='';document.head.append(css);
   }
   const choices = document.createElement('div'); choices.className='frame-catalog';

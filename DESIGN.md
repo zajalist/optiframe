@@ -211,6 +211,8 @@ Tutorial lens silhouettes are the two distinct captured contours from `gpu/fixtu
 
 ### Welcome actions and navigation
 
+The opening header and hero occupy at least one dynamic viewport; the light collection becomes visible only after scrolling. Style concepts sit on an open product shelf with glass selection pills. The process overview is a compact row of three clickable Scan, Fit and Print diagrams; detailed instructions stay in the guides. Glass highlights and refraction-like edges belong on controls, never on camera pixels or measured outlines.
+
 The translucent primary glass pill uses a plain text label and directs users into the scanner. Secondary document and scanner navigation actions have frosted fills; the hero guide trigger is also a pill. Other inline guide links retain their text treatment. Primary hover brightens its translucent fill and reflective gradient; pill presses scale slightly. Keyboard focus uses a visible accent outline, with a darker blue outline on the neutral white section. The wordmark and scanner link stay available on mobile. Same-site scanner and home links preserve a session access fragment.
 
 ### Scanner stage and controls

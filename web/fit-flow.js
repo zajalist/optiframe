@@ -1,7 +1,8 @@
-import { leftPanel, rightPanel, capturesReady, makeFrame, project, getFrameStyle, setFrameStyle, getRetentionStyle, setRetentionStyle, getFrameAssembly } from './app.js?v=30';
+import { leftPanel, rightPanel, capturesReady, makeFrame, project, getFrameStyle, setFrameStyle, getRetentionStyle, setRetentionStyle, getFrameAssembly } from './app.js?v=35';
 import { validateFaceFit, lensReady, marksReady } from './fit-validation.js';
 import { mountPupilMeasurements } from './pupil-measurements.js?v=27';
-import { mountFrameCatalog } from './frame-catalog.js?v=30';
+import { mountFrameCatalog } from './frame-catalog.js?v=31';
+import { mountThicknessMeasurements } from './thickness-measurements.js?v=35';
 
 if (new URLSearchParams(location.search).get('advanced') !== '1') void startFitFlow();
 
@@ -54,7 +55,7 @@ async function startFitFlow() {
     if (step === 3) enabled &&= valid(['left-edge-thickness','right-edge-thickness']);
     if (step === 4 || step === 5) {
       const panel = step === 4 ? left : right;
-      enabled &&= marksReady(panel);
+      enabled &&= markMode==='optical' ? Boolean(panel.opticalCentre) : marksReady(panel);
       message.textContent = panel.opticalCentre && panel.topMark && !marksReady(panel) ? 'Place the top mark at least 5 mm from the optical centre.' : '';
     }
     if (step === 6) enabled &&= valid(['left-vertical-offset','right-vertical-offset','temple-length']);
@@ -65,16 +66,40 @@ async function startFitFlow() {
   }
   function summary() {
     const pair = document.createElement('div'); pair.className = 'fit-pair';
+    // Use one physical scale for the pair; separate SVG view boxes must not make
+    // a small lens look the same size as a large one.
+    const outlines = panels.map(p => {
+      if (!lensReady(p)) return null;
+      const points = p.points.map(point => project(point, p.homography));
+      const xs = points.map(point => point[0]), ys = points.map(point => point[1]);
+      const x = Math.min(...xs), y = Math.min(...ys);
+      return {points, x, y, w:Math.max(...xs)-x, h:Math.max(...ys)-y};
+    });
+    const commonWidth = Math.max(1,...outlines.filter(Boolean).map(o => o.w)) + 10;
+    const commonHeight = Math.max(1,...outlines.filter(Boolean).map(o => o.h)) + 10;
     for (const p of panels) {
       const item = document.createElement('figure'); const label = document.createElement('figcaption'); label.textContent = `${p.side === 'left' ? 'Left' : 'Right'} lens`; item.append(label);
-      if (lensReady(p)) {
-        const points = p.points.map(point => project(point, p.homography));
-        const xs = points.map(p => p[0]), ys = points.map(p => p[1]);
-        const x = Math.min(...xs), y = Math.min(...ys), w = Math.max(...xs)-x, h = Math.max(...ys)-y;
+      const outline = outlines[panels.indexOf(p)];
+      if (outline) {
+        const {points,x,y,w,h} = outline;
         const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
-        svg.setAttribute('viewBox',`${x-7} ${y-7} ${w+14} ${h+14}`); svg.setAttribute('role','img'); svg.setAttribute('aria-label',`${p.side} lens, ${w.toFixed(1)} by ${h.toFixed(1)} millimetres`);
-        const path = document.createElementNS(svg.namespaceURI,'path'); path.setAttribute('d',points.map((p,i)=>`${i?'L':'M'}${p[0]} ${p[1]}`).join(' ')+'Z'); svg.append(path);
-        const text = document.createElementNS(svg.namespaceURI,'text'); text.setAttribute('x',x+w/2); text.setAttribute('y',y+h/2); text.textContent = `${w.toFixed(1)} × ${h.toFixed(1)} mm`; svg.append(text); item.append(svg);
+        svg.setAttribute('viewBox',`${x+w/2-commonWidth/2} ${y+h/2-commonHeight/2} ${commonWidth} ${commonHeight}`); svg.setAttribute('role','img'); svg.setAttribute('aria-label',`${p.side} lens, ${w.toFixed(1)} by ${h.toFixed(1)} millimetres`);
+        const id = `fit-lens-${p.side}`, d = points.map((point,i)=>`${i?'L':'M'}${point[0]} ${point[1]}`).join(' ')+'Z';
+        const node = (tag, attrs, parent=svg) => { const el=document.createElementNS(svg.namespaceURI,tag);for(const [key,value] of Object.entries(attrs))el.setAttribute(key,String(value));parent.append(el);return el; };
+        const defs = node('defs',{});
+        const fill = node('linearGradient',{id:`${id}-fill`,x1:0,y1:0,x2:1,y2:1},defs);
+        for(const [offset,color] of [['0%','#59616c'],['38%','#30363e'],['72%','#20262e'],['100%','#414a55']]) node('stop',{offset,'stop-color':color},fill);
+        const edge = node('linearGradient',{id:`${id}-edge`,x1:0,y1:0,x2:1,y2:1},defs);
+        for(const [offset,color] of [['0%','#ffffff'],['26%','#a2adb9'],['70%','#66717f'],['100%','#eef2f6']]) node('stop',{offset,'stop-color':color},edge);
+        const sheen = node('linearGradient',{id:`${id}-sheen`,x1:0,y1:0,x2:1,y2:1},defs);
+        for(const [offset,opacity] of [['0%','.72'],['32%','.06'],['55%','0'],['78%','.15'],['100%','0']]) node('stop',{offset,'stop-color':'#fff','stop-opacity':opacity},sheen);
+        const clip = node('clipPath',{id:`${id}-clip`},defs);node('path',{d},clip);
+        node('path',{d,class:'fit-lens-surface',fill:`url(#${id}-fill)`,stroke:'#788491'});
+        node('path',{d,class:'fit-lens-edge',fill:'none',stroke:`url(#${id}-edge)`});
+        node('rect',{x,y,width:w,height:h,fill:`url(#${id}-sheen)`,'clip-path':`url(#${id}-clip)`,class:'fit-lens-reflection'});
+        const text = node('text',{x:x+w/2,y:y+h/2-1.5,class:'fit-lens-dimensions'});text.textContent=`${w.toFixed(1)} × ${h.toFixed(1)}`;
+        const unit = node('text',{x:x+w/2,y:y+h/2+4,class:'fit-lens-unit'});unit.textContent='mm';
+        item.append(svg);
       }
       pair.append(item);
     }
@@ -113,19 +138,28 @@ async function startFitFlow() {
   }
   function markScreen(panel) {
     panel.guidedCapture=false; panel.guidedWizard=true;
+    if(panel.illustrativeAlignment===true && markMode==='optical'){panel.opticalCentre=null;panel.topMark=null;panel.markReview={};panel.illustrativeAlignment='marking';}
     panel.setMode(markMode);
-    note('Place the crosshair on the provider’s mark. Drag to refine.');
-    const modes=document.createElement('div');modes.className='fit-mark-modes';
-    for(const [mode,label] of [['optical','Optical centre'],['top','Lens top']]) {
-      const b=button(label,()=>{markMode=mode;render();}); b.setAttribute('aria-pressed',String(mode===markMode));modes.append(b);
-    }
-    body.append(modes,panel.el);
+    title.textContent=`${panel.side==='left'?'Left':'Right'} ${markMode==='optical'?'optical centre':'lens top'}`;
+    next.textContent=markMode==='optical'?'Set centre':'Set top';
+    note(markMode==='optical'?'Aligns the lens with the pupil. Drag to the provider’s centre mark.':'Keeps the lens oriented correctly. Drag to its top mark.');
+    body.append(panel.el);
+    const wrap=panel.canvas.closest('.canvas-wrap'),oldStyle=panel.canvas.getAttribute('style');
+    wrap.classList.add('fit-zoom-photo');
+    const zoom=()=>{if(!panel.points.length)return;const xs=panel.points.map(p=>p[0]),ys=panel.points.map(p=>p[1]);const x=Math.min(...xs),y=Math.min(...ys),w=Math.max(...xs)-x,h=Math.max(...ys)-y;const bounds=wrap.getBoundingClientRect();const scale=Math.min(bounds.width/(w*1.3),bounds.height/(h*1.3));if(!Number.isFinite(scale)||scale<=0)return;Object.assign(panel.canvas.style,{width:`${panel.canvas.width*scale}px`,height:`${panel.canvas.height*scale}px`,left:`${bounds.width/2-(x+w/2)*scale}px`,top:`${bounds.height/2-(y+h/2)*scale}px`});};
+    const observer=new ResizeObserver(zoom);observer.observe(wrap);zoom();
+    cleanupStep=()=>{observer.disconnect();wrap.classList.remove('fit-zoom-photo');oldStyle===null?panel.canvas.removeAttribute('style'):panel.canvas.setAttribute('style',oldStyle);};
+    const details=document.createElement('details');details.className='fit-fine-adjust';const heading=document.createElement('summary');heading.textContent='Fine adjust';details.append(heading);
     const nudges=document.createElement('div');nudges.className='fit-nudges';nudges.setAttribute('aria-label','Fine adjustment, one image pixel');
     for(const [label,dx,dy] of [['Left',-1,0],['Up',0,-1],['Down',0,1],['Right',1,0]])nudges.append(button(label,()=>{
       const key=markMode==='optical'?'opticalCentre':'topMark';if(!panel[key])return;
       panel[key]=[Math.max(0,Math.min(panel.canvas.width,panel[key][0]+dx)),Math.max(0,Math.min(panel.canvas.height,panel[key][1]+dy))];panel.render();update();
     }));
-    body.append(nudges);
+    details.append(nudges);body.append(details);
+    body.append(button('Skip for prototype',()=>{
+      for(const p of panels){if(marksReady(p)&&!p.illustrativeAlignment)continue;const xs=p.points.map(a=>a[0]),ys=p.points.map(a=>a[1]);const cx=(Math.min(...xs)+Math.max(...xs))/2;p.opticalCentre=[cx,(Math.min(...ys)+Math.max(...ys))/2];p.topMark=[cx,Math.min(...ys)];p.illustrativeAlignment=true;p.markReview={};p.render();}
+      step=6;render(true);
+    },'fit-link fit-preview-only'));
   }
   function render(focus=false) {
     cleanupStep(); cleanupStep = () => {};
@@ -135,14 +169,14 @@ async function startFitFlow() {
     if(step===0)summary();
     if(step===1)methodScreen();
     if(step===2) cleanupStep = mountPupilMeasurements(body, fields('left-pd'), fields('right-pd'));
-    if(step===3){note('Measure each lens edge with calipers, in millimetres.');inputs(['left-edge-thickness','right-edge-thickness']);}
+    if(step===3)cleanupStep=mountThicknessMeasurements(body,fields('left-edge-thickness'),fields('right-edge-thickness'));
     if(step===4||step===5)markScreen(step===4?left:right);
     if(step===6){inputs(['left-vertical-offset','right-vertical-offset','temple-length']);note('Zero offsets and 130 mm temples are starting settings. Adjust for the wearer.');}
     if(step===7)cleanupStep=mountFrameCatalog({body,viewer,status:designStatus,panels,getStyle:getFrameStyle,setStyle:setFrameStyle,getRetention:getRetentionStyle,setRetention:setRetentionStyle,getAssembly:getFrameAssembly,rebuild:()=>makeFrame(true),onUpdate:update,leftPd:()=>Number(fields('left-pd').value),rightPd:()=>Number(fields('right-pd').value)});
-    if(step===8){inputs(['bed-width','bed-depth']);note('Unverified fit-test STL kit. Slice at 100% in millimetres.');body.append(designStatus);const a=document.createElement('a');a.className='fit-link';a.href='?advanced=1'+location.hash;a.textContent='Physical checks';a.addEventListener('click',event=>{
+    if(step===8){inputs(['bed-width','bed-depth']);note(panels.some(p=>p.illustrativeAlignment)?'Prototype alignment · unverified fit-test STL only.':'Unverified fit-test STL kit. Slice at 100% in millimetres.');body.append(designStatus);const a=document.createElement('a');a.className='fit-link';a.href='?advanced=1'+location.hash;a.textContent='Physical checks';a.addEventListener('click',event=>{
       try {
         if(!Array.isArray(captureBackup))throw new Error('Return to Scanner to transfer both captures again.');
-        const captures=captureBackup.map(item=>{const p=item.side==='left'?left:right;const sx=item.width/p.canvas.width,sy=item.height/p.canvas.height;return {...item,opticalCentre:p.opticalCentre?.map((v,i)=>v*(i?sy:sx)),topMark:p.topMark?.map((v,i)=>v*(i?sy:sx))};});
+        const captures=captureBackup.map(item=>{const p=item.side==='left'?left:right;const sx=item.width/p.canvas.width,sy=item.height/p.canvas.height;return {...item,illustrativeAlignment:Boolean(p.illustrativeAlignment),opticalCentre:p.opticalCentre?.map((v,i)=>v*(i?sy:sx)),topMark:p.topMark?.map((v,i)=>v*(i?sy:sx))};});
         sessionStorage.setItem('optiframe-captures',JSON.stringify(captures));
         const ids=['left-pd','right-pd','left-edge-thickness','right-edge-thickness','left-vertical-offset','right-vertical-offset','temple-length','bed-width','bed-depth'];
         sessionStorage.setItem('optiframe-fit-inputs',JSON.stringify(Object.fromEntries(ids.map(id=>[id,fields(id).value]))));
@@ -150,9 +184,10 @@ async function startFitFlow() {
     });body.append(a);}
     update();if(focus)title.focus({preventScroll:true});
   }
-  back.addEventListener('click',()=>{if(step===0){location.href='/'+location.hash;return;}step--;markMode='optical';render(true);});
+  back.addEventListener('click',()=>{if(step===0){location.href='/'+location.hash;return;}if((step===4||step===5)&&markMode==='top'){markMode='optical';render(true);return;}step--;markMode='optical';render(true);});
   next.addEventListener('click',async()=>{
     update();if(next.disabled)return;
+    if(step===4||step===5){const p=step===4?left:right;p.markReview||={};if(markMode==='optical'){p.markReview.optical=true;markMode='top';if(p.illustrativeAlignment)p.illustrativeAlignment='marking';render(true);return;}p.markReview.top=true;if(p.markReview.optical&&p.markReview.top)p.illustrativeAlignment=false;}
     if(step===8){exporting=true;update();await makeFrame(false,true);exporting=false;update();return;}
     if(step===1&&method==='native'&&faceReviewed){fields('left-pd').value=face.left.toFixed(1);fields('right-pd').value=face.right.toFixed(1);for(const id of ['left-pd','right-pd'])fields(id).dispatchEvent(new Event('input',{bubbles:true}));}
     step++;markMode='optical';render(true);

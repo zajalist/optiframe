@@ -6,7 +6,7 @@
 .fit-flow .frame-style{position:relative;overflow:hidden;display:grid;grid-template-columns:1fr auto;grid-template-rows:minmax(0,1fr) auto;gap:0;text-align:left;align-items:center;padding:0 10px 10px;min-height:102px;border:1px solid #ffffffc7!important;border-radius:20px!important;color:#4b525d;background:#e7eaef;background-image:linear-gradient(155deg,#ffffffb8,#ffffff1a 65%,#ffffff73);box-shadow:inset 0 1px 1px #fff,0 3px 12px #242b350a;isolation:isolate;-webkit-tap-highlight-color:transparent}
 .fit-flow .frame-style[aria-pressed="true"]{color:#20242a;background-color:#f7f9fc;border-color:#8f99a9!important;box-shadow:inset 0 0 0 1px #8f99a9,inset 0 1px 1px #fff,0 4px 14px #242b3512}
 .frame-style-art{position:relative;display:block;grid-column:1/-1;width:calc(100% + 20px);margin:0 -10px;aspect-ratio:1.84;overflow:hidden;mix-blend-mode:multiply;pointer-events:none}
-.frame-style-photo{position:absolute;left:calc(var(--style-index) * -100%);top:0;width:300%!important;max-width:none!important;height:100%;object-fit:fill;display:block}
+.frame-style-photo{position:absolute;left:calc(var(--style-index) * -100%);top:0;width:300%!important;max-width:none!important;height:100%;object-fit:fill;display:block;filter:brightness(1.28) contrast(1.06)}
 .frame-style-name{font-size:13px;font-weight:550;line-height:20px;letter-spacing:-.01em;min-width:0}
 .frame-style svg.frame-style-check{width:18px;height:18px;opacity:0;background:#303843;border-radius:50%;padding:1px;overflow:visible}
 .frame-style .frame-style-check path{stroke:#fff;stroke-width:1.6;fill:none;stroke-linecap:round;stroke-linejoin:round}
