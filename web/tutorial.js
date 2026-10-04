@@ -35,7 +35,7 @@
         ['Print at 100%', 'Turn off “fit to page”. Check that the printed bar measures 50 mm.', 'sheet', 'Print sheet'],
         ['Place one lens', 'Flatten the sheet on a matte surface. Keep the lens inside all four dots.', 'place'],
         ['Keep the rim clear', 'Use soft, even light. Move closer with all four dots visible and reflections off the edge.', 'light'],
-        ['Capture each lens', 'Hold still, check the outline, then confirm. Swap lenses; tap “Second lens placed” if asked.', 'confirm'],
+        ['Capture each lens', 'Hold still, check the outline, then confirm. Replace the first lens with the second.', 'confirm'],
         ['Verify the size', 'Compare width and height with a ruler or calipers. Check a separate capture before printing.', 'measure'],
       ],
     },
@@ -47,7 +47,7 @@
         ['Inspect the frame', 'Rotate the preview. Check seats, retainers and hinges; confirm lens orientation and wearer fit with the provider.', 'preview'],
         ['Download the parts', 'One front, two retainers and two temples. Download separate STLs or the arranged plate.', 'kit'],
         ['Print at actual size', 'Import in millimetres at 100%. Choose your printer and material profile; check orientation and supports.', 'slice'],
-        ['Assemble and check', 'Use eight M2 retainer fasteners, two M2 hinge screws and matching nuts. Check lengths, clearances and lens fit. Have the provider verify alignment before wear.', 'assembly'],
+        ['Assemble and check', 'Follow the hardware list in your selected Screw or Snap kit. Check clearances and lens fit. Have the provider verify alignment before wear.', 'assembly'],
       ],
     },
   };

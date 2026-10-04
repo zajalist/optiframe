@@ -1,6 +1,6 @@
 import { facePose, opticalAnchors, landmarkToView, frameRenderLayer } from './face-tryon-geometry.js?v=37';
 import { createFrameGeometry, createFrameMaterial, configureFrameRenderer } from './frame-appearance.js?v=42';
-import { faceScanDeadline } from './face-scan.js?v=45';
+import { faceScanDeadline } from './face-scan.js?v=47';
 
 const VISION_VERSION = '0.10.32';
 const VISION_ROOT = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${VISION_VERSION}`;

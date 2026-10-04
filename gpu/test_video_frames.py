@@ -137,11 +137,14 @@ const oldBitmap = deferred(), proposal = deferred();
 const closed = [];
 const bitmap = id => ({width:80,height:60,close(){closed.push(id);},id});
 const context = {document:{querySelectorAll:()=>[]},location:{hash:''},URLSearchParams,
-  FormData, fetch:()=>proposal.promise, createImageBitmap:async file=>file==='old'?oldBitmap.promise:bitmap(file)};
+  FormData, fetch:()=>proposal.promise, apiFetch:()=>proposal.promise, createImageBitmap:async file=>file==='old'?oldBitmap.promise:bitmap(file)};
 vm.createContext(context);
 vm.runInContext(fs.readFileSync('web/calibration.js','utf8').replace(/^export .*;$/m, ''), context);
+vm.runInContext(fs.readFileSync('web/lens-adjustments.js','utf8').replace(/\bexport /g, ''), context);
 context.invalidateFrameResult = () => {};
-vm.runInContext(fs.readFileSync('web/app.js','utf8').replace(/^import .*;$/gm, '').split('const [leftPanel, rightPanel]')[0]+';globalThis.Panel=LensPanel', context);
+// This fixture tests photo races after approval; app-access-order.test.mjs
+// independently verifies that the real entry awaits the access gate.
+vm.runInContext(fs.readFileSync('web/app.js','utf8').replace(/^import .*;$/gm, '').replace('await requireAppAccess();','').split('const [leftPanel, rightPanel]')[0]+';globalThis.Panel=LensPanel', context);
 const panel = Object.create(context.Panel.prototype);
 Object.assign(panel,{photoVersion:0,proposalRequest:0,photoLoading:false,canvas:{},select:{replaceChildren(){}},
   placeholder:{},scaleStatus:{},markerStatus:{},centreStatus:{},topStatus:{},status:{},el:{querySelector:()=>({checked:false})},render(){}});

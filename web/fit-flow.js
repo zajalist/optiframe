@@ -1,10 +1,11 @@
-import { leftPanel, rightPanel, capturesReady, makeFrame, project, getFrameStyle, setFrameStyle, getRetentionStyle, setRetentionStyle, getFrameAssembly, applyFaceMeasurements, useManualMeasurements, getMeasurementSource } from './app.js?v=43';
-import { openFaceScan } from './face-scan.js?v=45';
+import { leftPanel, rightPanel, capturesReady, getImportedCaptures, getRestoredMeasurementSource, makeFrame, project, getFrameStyle, setFrameStyle, getRetentionStyle, setRetentionStyle, getFrameAssembly, applyFaceMeasurements, useManualMeasurements, getMeasurementSource, getLensAdjustments, setLensAdjustments, getAdjustedLensOutlines } from './app.js?v=47';
+import { openFaceScan } from './face-scan.js?v=47';
 import { loadConfirmedFace, saveConfirmedFace } from './face-confirmation.js?v=39';
 import { validateFaceFit, lensReady, marksReady } from './fit-validation.js';
 import { mountPupilMeasurements } from './pupil-measurements.js?v=27';
 import { mountFrameCatalog } from './frame-catalog.js?v=45';
 import { mountThicknessMeasurements } from './thickness-measurements.js?v=35';
+import { mountLensAdjustments } from './lens-adjustment-controls.js?v=47';
 
 if (new URLSearchParams(location.search).get('advanced') !== '1') void startFitFlow();
 
@@ -23,6 +24,7 @@ async function startFitFlow() {
   const panels = [left, right];
   const viewer = fields('viewer'), designStatus = fields('design-status');
   let step = 0, face = loadConfirmedFace(), method = face?.source==='browser-iris-estimate'?'camera':'native', faceReviewed = Boolean(face), loading = true, exporting = false;
+  if(getRestoredMeasurementSource()==='manual'){method='manual';face=null;faceReviewed=false;}
   if(new URLSearchParams(location.search).get('measure')==='manual'){method='manual';face=null;faceReviewed=false;useManualMeasurements();}
   let markMode = 'optical';
   let cleanupStep = () => {};
@@ -37,13 +39,34 @@ async function startFitFlow() {
     const b = document.createElement('button'); b.type = 'button'; b.textContent = text; b.className = className; b.addEventListener('click', action); return b;
   }
   function note(text) { const p = document.createElement('p'); p.className = 'fit-note'; p.textContent = text; body.append(p); return p; }
+  function saveCurrentCaptures() {
+    captureBackup=getImportedCaptures()||captureBackup;
+    if(!Array.isArray(captureBackup))throw new Error('Return to Scanner to transfer both captures again.');
+    const captures=captureBackup.map(item=>{
+      const p=item.side==='left'?left:right,sx=item.width/p.canvas.width,sy=item.height/p.canvas.height;
+      const originalPoint=point=>point?.map((value,index)=>value*(index?sy:sx));
+      return {...item,captureIdentity:p.captureIdentity,contour:p.points.map(originalPoint),markers:p.markerPoints.map(originalPoint),
+        illustrativeAlignment:Boolean(p.illustrativeAlignment),opticalCentre:originalPoint(p.opticalCentre),topMark:originalPoint(p.topMark)};
+    });
+    sessionStorage.setItem('optiframe-captures',JSON.stringify(captures));
+    const ids=['left-pd','right-pd','left-edge-thickness','right-edge-thickness','left-vertical-offset','right-vertical-offset','temple-length','bed-width','bed-depth'];
+    sessionStorage.setItem('optiframe-fit-inputs',JSON.stringify({
+      values:Object.fromEntries(ids.map(id=>[id,fields(id).value])),measurementSource:getMeasurementSource()
+    }));
+  }
   function visualTryOn() {
     try {
       if(!panels.every(lensReady))throw new Error('Scan both lenses first.');
-      const outlines=panels.map(p=>p.points.map(point=>project(point,p.homography)));
+      let outlines;
+      try {const corrected=getAdjustedLensOutlines();outlines=[corrected.left,corrected.right];}
+      catch(error) {
+        const state=getLensAdjustments();
+        if(state.swapped||state.left.rotation||state.right.rotation||state.left.mirror||state.right.mirror)throw error;
+        outlines=panels.map(p=>p.points.map(point=>project(point,p.homography)));
+      }
       sessionStorage.setItem('optiframe-visual-outlines',JSON.stringify(outlines));
       // Keep the fitting flow recoverable when returning from visual try-on.
-      if(captureBackup)sessionStorage.setItem('optiframe-captures',JSON.stringify(captureBackup));
+      if(getImportedCaptures()||captureBackup)saveCurrentCaptures();
       location.href='/try-on.html?v=42'+location.hash;
     } catch(error){message.textContent=error.message;}
   }
@@ -192,15 +215,31 @@ async function startFitFlow() {
     if(step===2) {cleanupStep = mountPupilMeasurements(body, fields('left-pd'), fields('right-pd'));if(getMeasurementSource()!=='manual')note('Face scan estimate · verify before printing.');}
     if(step===3)cleanupStep=mountThicknessMeasurements(body,fields('left-edge-thickness'),fields('right-edge-thickness'));
     if(step===4||step===5)markScreen(step===4?left:right);
-    if(step===6){inputs(['left-vertical-offset','right-vertical-offset','temple-length']);note('Zero offsets and 130 mm temples are starting settings. Adjust for the wearer.');}
+    if(step===6){
+      cleanupStep=mountLensAdjustments({body,getState:getLensAdjustments,getOutlines:getAdjustedLensOutlines,
+        onChange:value=>{setLensAdjustments(value);update();},leftPd:fields('left-pd'),rightPd:fields('right-pd'),
+        leftOffset:fields('left-vertical-offset'),rightOffset:fields('right-vertical-offset')});
+      const group=document.createElement('div');group.className='fit-fields design-inputs fit-placement-fields';
+      for(const [id,name,path] of [
+        ['right-vertical-offset','Right lens height','M12 3v18M8 7l4-4 4 4M8 17l4 4 4-4M3 12h3m12 0h3'],
+        ['left-vertical-offset','Left lens height','M12 3v18M8 7l4-4 4 4M8 17l4 4 4-4M3 12h3m12 0h3'],
+        ['temple-length','Arm length','M3 17V9a2 2 0 0 1 2-2h14M3 17h3M9 12h12m-3-3 3 3-3 3']
+      ]) {
+        const input=fields(id),label=input.closest('label');
+        const heading=document.createElement('span');heading.className='fit-placement-label';
+        heading.innerHTML=`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"/></svg>`;
+        heading.append(document.createTextNode(name));
+        const value=document.createElement('span');value.className='fit-placement-value';
+        const unit=document.createElement('span');unit.textContent='mm';unit.setAttribute('aria-hidden','true');
+        input.setAttribute('aria-label',name+' in millimetres');value.append(input,unit);label.replaceChildren(heading,value);group.append(label);
+      }
+      body.insertBefore(group,body.querySelector('.lens-adjustments'));
+      const hint=note('Preview placement · verify fit before printing.');hint.classList.add('fit-placement-hint');
+    }
     if(step===7)cleanupStep=mountFrameCatalog({body,viewer,status:designStatus,panels,getStyle:getFrameStyle,setStyle:setFrameStyle,getRetention:getRetentionStyle,setRetention:setRetentionStyle,getAssembly:getFrameAssembly,rebuild:()=>makeFrame(true),onUpdate:update,leftPd:()=>Number(fields('left-pd').value),rightPd:()=>Number(fields('right-pd').value),visualTryOn});
     if(step===8){inputs(['bed-width','bed-depth']);note(panels.some(p=>p.illustrativeAlignment)?'Prototype alignment · unverified fit-test STL only.':'Unverified fit-test STL kit. Slice at 100% in millimetres.');body.append(designStatus);const a=document.createElement('a');a.className='fit-link';a.href='?advanced=1'+location.hash;a.textContent='Physical checks';a.addEventListener('click',event=>{
       try {
-        if(!Array.isArray(captureBackup))throw new Error('Return to Scanner to transfer both captures again.');
-        const captures=captureBackup.map(item=>{const p=item.side==='left'?left:right;const sx=item.width/p.canvas.width,sy=item.height/p.canvas.height;return {...item,illustrativeAlignment:Boolean(p.illustrativeAlignment),opticalCentre:p.opticalCentre?.map((v,i)=>v*(i?sy:sx)),topMark:p.topMark?.map((v,i)=>v*(i?sy:sx))};});
-        sessionStorage.setItem('optiframe-captures',JSON.stringify(captures));
-        const ids=['left-pd','right-pd','left-edge-thickness','right-edge-thickness','left-vertical-offset','right-vertical-offset','temple-length','bed-width','bed-depth'];
-        sessionStorage.setItem('optiframe-fit-inputs',JSON.stringify(Object.fromEntries(ids.map(id=>[id,fields(id).value]))));
+        saveCurrentCaptures();
       } catch(error){event.preventDefault();message.textContent=error.message;}
     });body.append(a);}
     update();if(focus)title.focus({preventScroll:true});

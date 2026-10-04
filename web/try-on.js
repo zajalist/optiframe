@@ -63,6 +63,9 @@ async function build(){
     if(request!==sequence)return;
     const {showSTL}=await import('./viewer.js?v=42');if(request!==sequence)return;
     showSTL(new TextEncoder().encode(JSON.stringify(result)).buffer,$('viewer'));
+    // Preserve the original viewer controls inside the secondary disclosure.
+    const viewControls=$('viewer').querySelector('.frame-views');
+    if(viewControls)$('view-options').replaceChildren(viewControls);
     assembly=nativeTryOnFile(result);$('viewer').dataset.stale='false';$('status').textContent='';ready(true);
   }catch(error){if(request!==sequence)return;$('status').textContent=error.name==='AbortError'?'Preview timed out. Retry.':error.message;$('retry').hidden=false;$('sample').hidden=false;}
   finally{clearTimeout(timer);}
@@ -79,9 +82,18 @@ $('try').addEventListener('click',async()=>{
 $('scan-face').addEventListener('click',async()=>{
   if(opening)return;opening=true;$('scan-face').disabled=true;
   try{
-    closeTryOn?.();const {openFaceScan}=await import('./face-scan.js?v=45');
+    closeTryOn?.();const {openFaceScan}=await import('./face-scan.js?v=47');
     closeScan=openFaceScan({onConfirm:values=>{
-      try{saveConfirmedFace(values);renderFace();}
+      try{
+        const confirmed=saveConfirmedFace(values);
+        const saved=JSON.parse(sessionStorage.getItem('optiframe-fit-inputs')||'null');
+        if(saved&&typeof saved==='object'&&!Array.isArray(saved)){
+          const inputs=saved.values??saved;
+          sessionStorage.setItem('optiframe-fit-inputs',JSON.stringify({values:{...inputs,
+            'left-pd':confirmed.left.toFixed(1),'right-pd':confirmed.right.toFixed(1)},measurementSource:confirmed.source}));
+        }
+        renderFace();
+      }
       catch(error){$('status').textContent=error.message||'Could not save your confirmed estimates.';}
     },onManual:()=>{
       if(usableCaptures())location.href='/studio.html?v=43&measure=manual'+location.hash;

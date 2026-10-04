@@ -1,3 +1,45 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#101112"><title>OptiFrame — Try on</title><link rel="stylesheet" href="/try-on.css?v=43"><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"}}</script></head>
-<body><main><header><a id="home" href="/welcome.html">OptiFrame</a><span>Visual try-on</span></header><section class="model"><h1>Find your frame.</h1><p id="source">No measurements needed.</p><div id="viewer" aria-label="Frame preview"></div><p id="status" role="status">Preparing frame…</p></section><footer><div class="styles" role="group" aria-label="Frame style"><button data-style="classic" aria-pressed="true">Classic</button><button data-style="bold" aria-pressed="false">Bold</button><button data-style="brow" aria-pressed="false">Brow</button></div><div class="main-actions"><button id="try" class="primary" disabled>Try on</button><button id="scan-face" class="scan-action">Scan face</button></div><section id="face-result" aria-label="Confirmed face estimates" hidden><p id="face-values"></p><span>Confirmed camera estimates</span></section><a id="continue-fitting" class="continue-fitting" href="/index.html" hidden>Scan lenses</a><div class="secondary"><button id="retry" hidden>Retry</button><button id="sample" hidden>Use sample frames</button><button id="native" disabled>iPhone app file</button></div><p id="native-note" hidden>Import this file in OptiFrame’s signed iPhone app to try on.</p><p class="note">Visual preview · Face estimates require verification</p></footer></main><script type="module" src="/try-on.js?v=45"></script></body></html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#101112">
+  <title>OptiFrame — Try on</title>
+  <link rel="stylesheet" href="/try-on.css?v=48">
+  <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"}}</script>
+</head>
+<body>
+  <main>
+    <header class="page-header"><a id="home" href="/welcome.html">OptiFrame</a><span>Visual try-on</span></header>
+    <section class="model" aria-labelledby="model-title">
+      <div class="model-heading"><h1 id="model-title">Find your frame.</h1><p id="source">No measurements needed.</p></div>
+      <div id="viewer" aria-label="Frame preview"></div>
+      <p id="status" role="status">Preparing frame…</p>
+    </section>
+    <footer>
+      <div class="styles" role="group" aria-label="Frame style">
+        <button data-style="classic" aria-pressed="true">Classic</button>
+        <button data-style="bold" aria-pressed="false">Bold</button>
+        <button data-style="brow" aria-pressed="false">Brow</button>
+      </div>
+      <div class="main-actions"><button id="try" class="primary" disabled>Try on</button></div>
+      <div class="secondary-actions">
+        <button id="scan-face" class="scan-action">Scan face</button>
+        <details class="options">
+          <summary>Options<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m5 6 3 3 3-3"/></svg></summary>
+          <div class="options-content">
+            <div id="view-options" aria-label="Frame views"></div>
+            <button id="native" disabled>Download iPhone app file</button>
+            <p id="native-note" hidden>Import this file in OptiFrame’s signed iPhone app to try on.</p>
+          </div>
+        </details>
+      </div>
+      <section id="face-result" aria-label="Confirmed face estimates" hidden><p id="face-values"></p><span>Confirmed camera estimates</span></section>
+      <a id="continue-fitting" class="continue-fitting" href="/index.html" hidden>Scan lenses</a>
+      <div class="recovery"><button id="retry" hidden>Retry</button><button id="sample" hidden>Use sample frames</button></div>
+      <p class="note">Face estimates require verification</p>
+    </footer>
+  </main>
+  <script type="module" src="/try-on.js?v=47"></script>
+</body>
+</html>

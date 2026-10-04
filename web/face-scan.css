@@ -2,4 +2,7 @@
 @media(max-height:650px){.face-scan-header{padding-top:8px;padding-bottom:6px}.face-scan-review{padding:4px 20px}.face-scan-diagram{height:70px}.face-scan h3{font-size:21px;margin:4px 0 15px}.face-scan-footer{padding:12px 20px max(10px,env(safe-area-inset-bottom));gap:8px}.face-scan-estimate-note{margin-top:10px}.face-scan-total{margin:10px 0}}
 @media(max-height:470px){.face-scan-diagram{display:none}.face-scan h3{margin:0 0 8px;font-size:18px}.face-scan-fields label>div{padding:3px 10px;margin-top:5px}.face-scan input{font-size:22px}.face-scan-estimate-note{font-size:11px;line-height:1.25;margin-top:7px}.face-scan-header{padding-top:5px;padding-bottom:4px}.face-scan-footer{padding-top:5px;gap:5px}}
 .face-scan-fields label>div:focus-within{outline:2px solid #e4e8f0;outline-offset:3px}.face-scan input:focus-visible{outline:none}
+.face-scan-review{max-height:100%;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#657184 transparent;scroll-padding-block:12px}
+.face-scan-actions{flex-wrap:wrap}.face-scan-actions button{min-width:0}
+@media(max-width:350px){.face-scan-review{padding-inline:16px}.face-scan-fields{gap:10px}.face-scan-footer{padding-inline:16px}.face-scan-actions button{padding-inline:15px}}
 @media(prefers-reduced-transparency:reduce){.face-scan button,.face-scan-fields label>div{background:#292c32;backdrop-filter:none;-webkit-backdrop-filter:none}}

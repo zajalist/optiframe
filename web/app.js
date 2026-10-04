@@ -10,11 +10,24 @@ import {distance,polygonArea,measure,sheetHomography,project,benchmark,pixelReso
 import {createLiveSegmentSession} from './live-segment.js';
 import {createPreviewScheduler} from './preview-scheduler.js';
 import {loadConfirmedFace} from './face-confirmation.js?v=39';
+import {adjustLensPair,createLensAdjustmentStore,hasLensAdjustments,validCaptureIdentity} from './lens-adjustments.js?v=47';
 
 let activeLivePanel = null;
 let automaticPreview = null;
 let frameStyle = 'classic', retentionStyle = 'screw', frameAssembly = null;
 let measurementSource = 'manual';
+const lensAdjustmentStore=createLensAdjustmentStore();
+function syncLensAdjustmentPair(){lensAdjustmentStore.bindPair([leftPanel,rightPanel].map(p=>p.captureIdentity||p.photo));}
+function getLensAdjustments(){syncLensAdjustmentPair();return lensAdjustmentStore.get();}
+function saveLensAdjustments(){try{const record=lensAdjustmentStore.record();if(record)sessionStorage.setItem('optiframe-lens-adjustments',JSON.stringify(record));}catch{}}
+function setLensAdjustments(value){syncLensAdjustmentPair();if(lensAdjustmentStore.set(value)){saveLensAdjustments();invalidateFrameResult();}return lensAdjustmentStore.get();}
+function resetLensAdjustments(){syncLensAdjustmentPair();if(lensAdjustmentStore.reset()){saveLensAdjustments();invalidateFrameResult();}return lensAdjustmentStore.get();}
+function getAdjustedLensOutlines(){
+  if([leftPanel,rightPanel].some(panel=>panel.photoLoading))throw new Error('Wait for both lens photos to load.');
+  const source=Object.fromEntries([leftPanel,rightPanel].map(p=>{const value=document.getElementById(`${p.side}-edge-thickness`)?.value;return[p.side,{outline:p.millimetreOutline(),thickness:value?.trim()&&Number.isFinite(Number(value))?Number(value):null}];}));
+  if(!source.left.outline||!source.right.outline)throw new Error('Both normalized lens outlines are required.');
+  return adjustLensPair(source,getLensAdjustments());
+}
 function getMeasurementSource() { return measurementSource; }
 function applyFaceMeasurements(value) {
   if (!['browser-iris-estimate','arkit-eye-transform-estimate'].includes(value?.source) ||
@@ -281,6 +294,7 @@ class LensPanel {
       const bitmap = await createImageBitmap(file);
       if (version !== this.photoVersion) { bitmap.close(); return false; }
       this.photo = file;
+      this.captureIdentity = globalThis.crypto?.randomUUID?.() || null;
       this.loadedPhotoVersion = version;
       this.bitmap?.close();
       this.bitmap = bitmap;
@@ -634,6 +648,8 @@ class LensPanel {
 }
 
 const [leftPanel, rightPanel] = panels.map(panel => new LensPanel(panel));
+let importedCaptures=null;
+function getImportedCaptures(){return importedCaptures;}
 async function importSimpleCaptures() {
   if (typeof sessionStorage === 'undefined') return;
   let raw;
@@ -647,6 +663,7 @@ async function importSimpleCaptures() {
       if (!panel || !Array.isArray(item.contour) || !Array.isArray(item.markers)) throw new Error('Invalid capture transfer');
       const photo = await fetch(item.image).then(response => response.blob());
       if (!await panel.loadPhoto(photo)) throw new Error('Transferred photo could not be opened');
+      if(validCaptureIdentity(item.captureIdentity))panel.captureIdentity=item.captureIdentity;
       const sx = panel.canvas.width / item.width, sy = panel.canvas.height / item.height;
       panel.points = item.contour.map(([x,y]) => [x * sx, y * sy]);
       panel.captureRefinement = item.refinement || null;
@@ -661,21 +678,30 @@ async function importSimpleCaptures() {
       panel.setMode('optical');
     }
     document.body.classList.add('guided-fit');
+    importedCaptures=saved;
     document.getElementById('page-title').textContent = 'Fit frame';
+    syncLensAdjustmentPair();
+    try{lensAdjustmentStore.restore(JSON.parse(sessionStorage.getItem('optiframe-lens-adjustments')||'null'));}catch{}
     sessionStorage.removeItem('optiframe-captures');
   } catch (error) { document.querySelector('#design-status').textContent = `Capture transfer failed: ${error.message}`; }
 }
 const capturesReady = importSimpleCaptures();
+let restoredMeasurementSource=null;
+function getRestoredMeasurementSource(){return restoredMeasurementSource;}
 try {
   const savedFit = JSON.parse(sessionStorage.getItem('optiframe-fit-inputs') || 'null');
   sessionStorage.removeItem('optiframe-fit-inputs');
-  if (savedFit && typeof savedFit === 'object') for (const [id, value] of Object.entries(savedFit)) {
+  const values=savedFit?.values??savedFit;
+  if (values && typeof values === 'object' && !Array.isArray(values)) for (const [id, value] of Object.entries(values)) {
     const input = document.getElementById(id);
     if (input?.matches('.design-inputs input') && typeof value === 'string') input.value = value;
   }
+  if(savedFit?.values && ['manual','browser-iris-estimate','arkit-eye-transform-estimate'].includes(savedFit.measurementSource))
+    restoredMeasurementSource=savedFit.measurementSource;
 } catch { /* Missing or blocked session storage leaves manual fields available. */ }
 const confirmedFace=loadConfirmedFace();
-if(confirmedFace) {
+if(restoredMeasurementSource)measurementSource=restoredMeasurementSource;
+else if(confirmedFace) {
   measurementSource=confirmedFace.source;
   for(const [side,value] of [['left',confirmedFace.left],['right',confirmedFace.right]]) {
     const input=document.getElementById(`${side}-pd`);if(!input.value.trim())input.value=value.toFixed(1);
@@ -747,13 +773,14 @@ function framePayload() {
     throw new Error('Mark the physical top of both lenses to set their orientation.');
   const leftThickness = number('left-edge-thickness');
   const rightThickness = number('right-edge-thickness');
-  return { left, right, settings: {
-    alignment_source: [leftPanel,rightPanel].some(panel=>panel.illustrativeAlignment) ? 'illustrative' : 'provider-marked',
+  const adjusted=adjustLensPair({left:{outline:left,thickness:leftThickness},right:{outline:right,thickness:rightThickness}},getLensAdjustments());
+  return { left:adjusted.left, right:adjusted.right, settings: {
+    alignment_source: adjusted.modified||[leftPanel,rightPanel].some(panel=>panel.illustrativeAlignment) ? 'illustrative' : 'provider-marked',
     measurement_source: measurementSource,
     frame_style: frameStyle,
     retention_style: retentionStyle,
     left_pd: number('left-pd'), right_pd: number('right-pd'),
-    edge_thickness: leftThickness, left_edge_thickness: leftThickness, right_edge_thickness: rightThickness,
+    edge_thickness: adjusted.leftThickness, left_edge_thickness: adjusted.leftThickness, right_edge_thickness: adjusted.rightThickness,
     left_vertical_offset: number('left-vertical-offset'), right_vertical_offset: number('right-vertical-offset'),
     temple_length: number('temple-length'),
     bed_width: number('bed-width'), bed_depth: number('bed-depth'),
@@ -764,6 +791,8 @@ async function makeFrame(preview, experimental = false) {
   automaticPreview?.cancel();
   const request = makeFrame.sequence = (makeFrame.sequence || 0) + 1;
   try {
+    if (!preview && !experimental && hasLensAdjustments(getLensAdjustments()))
+      throw new Error('Adjusted lens orientation or assignment is prototype only. Reset adjustments for a checked export.');
     if (!preview && !experimental && [leftPanel,rightPanel].some(panel=>panel.illustrativeAlignment))
       throw new Error('Checked export needs both provider optical-centre and top marks. Use the unverified prototype kit for approximate alignment.');
     if (!preview && !experimental && measurementSource !== 'manual')
@@ -822,4 +851,4 @@ automaticPreview = createPreviewScheduler({
   shouldRender: () => !document.body.classList.contains('fit-flow') || document.getElementById('viewer').offsetParent !== null,
   render: () => makeFrame(true),
 });
-export { distance, polygonArea, measure, sheetHomography, project, leftPanel, rightPanel, capturesReady, framePayload, makeFrame, getFrameStyle, setFrameStyle, getRetentionStyle, setRetentionStyle, getFrameAssembly, applyFaceMeasurements, useManualMeasurements, getMeasurementSource };
+export { distance, polygonArea, measure, sheetHomography, project, leftPanel, rightPanel, capturesReady, getImportedCaptures, getRestoredMeasurementSource, framePayload, makeFrame, getFrameStyle, setFrameStyle, getRetentionStyle, setRetentionStyle, getFrameAssembly, applyFaceMeasurements, useManualMeasurements, getMeasurementSource, getLensAdjustments, setLensAdjustments, resetLensAdjustments, getAdjustedLensOutlines };

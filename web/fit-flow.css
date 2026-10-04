@@ -8,7 +8,7 @@
 .fit-heading{display:flex;align-items:center;justify-content:space-between;gap:16px}
 .fit-heading h1{font:650 clamp(24px,5vw,30px)/1.15 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:-.025em;margin:0}
 .fit-progress{font-size:13px;color:#59616d;white-space:nowrap;font-variant-numeric:tabular-nums}
-.fit-body{min-height:0;display:flex;flex-direction:column;justify-content:center;gap:20px;overflow:hidden}
+.fit-body{min-height:0;display:flex;flex-direction:column;justify-content:safe center;gap:20px;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#596576 transparent;scroll-padding-block:12px}
 .fit-note{color:#505965;font-size:14px;line-height:1.45;margin:0;max-width:50ch}
 .fit-message{color:#703c35;font-size:13px;line-height:1.35;margin:0;max-height:70px;overflow:auto}
 .fit-message:empty{display:none}
@@ -57,7 +57,7 @@
 .fit-flow #design-status:empty{display:none}
 .fit-flow .viewer-empty{font-size:14px;max-width:30ch}
 .fit-shell[data-step="6"] .fit-fields{gap:12px}
-.fit-shell.is-keyboard .fit-fields label:not(:focus-within),.fit-shell.is-keyboard .fit-note{display:none}
+.fit-shell.is-keyboard .fit-note{display:none}
 .fit-shell.is-keyboard .fit-body{justify-content:start;gap:8px}
 .fit-shell.is-keyboard .fit-fields{gap:8px}
 @media(max-height:720px){.fit-shell{gap:8px;padding:12px 18px max(10px,env(safe-area-inset-bottom))}.fit-body{gap:12px}.fit-fields{gap:14px}.fit-fields input{min-height:50px;font-size:22px}.fit-heading h1{font-size:24px}.fit-navigation button{min-height:48px}.fit-note{font-size:13px}}
@@ -170,3 +170,56 @@
 .fit-shell.is-compact .thickness-guide{display:none}
 @media(max-height:500px){.thickness-lens svg{max-height:100px}.thickness-lens .fit-fields input{min-height:44px}.thickness-lens .fit-fields label span{bottom:14px}.fit-shell[data-step="3"] .fit-body{gap:6px}.fit-preview-only{min-height:44px}}
 @media(prefers-reduced-transparency:reduce){.fit-flow>.site-header{background:#16181c}.fit-pair{background:#1b1e23}}
+
+/* Keep the measurement surface aligned, with unmistakable keyboard focus. */
+.fit-shell[data-step="6"] .fit-body{justify-content:flex-start;gap:14px;overflow-y:auto;overscroll-behavior:contain}
+.fit-placement-fields{display:grid;grid-template-columns:1fr 1fr;gap:0 20px;flex-shrink:0}
+.fit-placement-fields label{display:flex;flex-direction:column;gap:7px;padding:12px 0;border-bottom:1px solid #ffffff16;min-width:0}
+.fit-placement-fields label:last-child{grid-column:1/-1;flex-direction:row;align-items:center;justify-content:space-between;padding-block:14px}
+.fit-placement-label{display:flex;align-items:center;gap:7px;font-size:12px!important;color:#c8d1dd!important}
+.fit-placement-label svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+.fit-placement-value{display:flex;align-items:center;gap:5px;min-width:0}
+.fit-flow .fit-placement-fields input{min-height:44px;width:100%;min-width:0;padding:6px 10px;font-size:22px;font-weight:500;border-radius:10px;background:#ffffff06;border-color:transparent;font-variant-numeric:tabular-nums}
+.fit-placement-value>span{font-size:12px!important;color:#aebccb!important;padding:0!important}
+.fit-placement-fields label:last-child .fit-placement-value{width:115px}
+.fit-placement-fields label:focus-within .fit-placement-label{color:#fff!important}
+.fit-placement-hint{font-size:12px;line-height:1.4;text-align:center;margin:0}
+@media(min-width:1000px) and (min-height:650px){
+  .fit-shell[data-step="6"]{width:min(100%,1040px)}
+  .fit-shell[data-step="6"] .fit-body{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);grid-template-rows:auto auto auto;column-gap:40px;align-content:center;align-items:start}
+  .fit-shell[data-step="6"] .lens-adjustment-preview{grid-column:1;grid-row:1/4;align-self:center}
+  .fit-shell[data-step="6"] .fit-placement-fields,.fit-shell[data-step="6"] .lens-adjustments,.fit-shell[data-step="6"] .fit-placement-hint{grid-column:2}
+  .fit-shell[data-step="6"] .fit-navigation{justify-self:end;width:calc((100% - 40px)/2.25)}
+}
+@media(max-height:600px){.fit-shell[data-step="6"] .fit-body{gap:8px}.fit-placement-fields label{padding-block:6px}.fit-placement-fields label:last-child{padding-block:8px}}
+.fit-flow>.site-header{padding-inline:max(20px,calc((100% - 632px)/2))}
+.fit-flow .site-header .brand{font-weight:650}
+.fit-heading h1{font-weight:600;line-height:1.2;text-wrap:balance}
+.fit-flow ::selection{background:#d6e0ed;color:#171b22}
+.fit-shell .pupil-fields{width:min(100%,480px);align-self:center}
+.fit-shell .pupil-fields label{background:linear-gradient(145deg,#ffffff0b,transparent 70%),#24282f;box-shadow:inset 0 1px #ffffff19}
+.fit-shell .pupil-fields label:has(input:focus-visible),.fit-flow .fit-navigation button:focus-visible,.fit-pair~.fit-link:focus-visible{outline:2px solid #e1e6ef;outline-offset:3px}
+.fit-shell .pupil-fields input[aria-invalid="true"]{color:#ffb4a9}
+.pupil-measure text{stroke-width:3px}
+.fit-methods label:has(input:checked){background:linear-gradient(145deg,#ffffff10,transparent 75%),#303640;border-color:#bfccdc73}
+.fit-methods label:focus-within{outline:2px solid #e1e6ef;outline-offset:3px}
+.fit-file input{width:100%;min-width:0;max-width:100%;color:#c5ccd7}
+.fit-file input::file-selector-button{min-height:40px;margin-right:10px;border:1px solid #ffffff2a;border-radius:14px;background:#303640;color:#f3f5f8;padding:8px 14px;font:inherit;cursor:pointer}
+@media(max-height:500px){
+  .fit-shell[data-step="1"] .fit-body{gap:8px}
+  .fit-shell[data-step="1"] .fit-methods{grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+  .fit-shell[data-step="1"] .fit-methods label{flex-direction:column;justify-content:center;text-align:center;gap:4px;padding:8px 5px;min-height:64px;font-size:12px;line-height:1.2}
+  .fit-shell[data-step="1"] .fit-note,.fit-shell[data-step="1"] .fit-file{font-size:12px;line-height:1.35}
+  .fit-shell[data-step="1"] .fit-file{gap:4px}
+  .fit-shell[data-step="1"] .fit-body>.catalog-tryon{align-self:center;min-height:40px;padding:8px 18px}
+}
+
+/* Keep focus/error content reachable when a phone keyboard reduces the viewport. */
+.fit-shell[data-step="2"] .fit-body,
+.fit-shell.is-keyboard[data-step="2"] .fit-body{justify-content:safe center}
+.fit-shell:not([data-step="6"]) .fit-fields,
+.fit-shell:not([data-step="6"]) .fit-file,
+.fit-shell:not([data-step="6"]) .fit-methods{flex-shrink:0}
+.fit-shell[data-step="1"] .fit-body>.catalog-tryon,
+.fit-shell[data-step="1"] .fit-file input::file-selector-button{min-height:44px}
+.fit-shell:not([data-step="6"]) .fit-body :is(input,button,summary){scroll-margin-block:12px}

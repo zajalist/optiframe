@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import {validCaptureIdentity,createLensAdjustmentStore} from './lens-adjustments.js';
 
 function harness() {
   const fields = new Map();
@@ -16,6 +17,7 @@ function harness() {
   context.apiFetch=(...args)=>context.fetch(...args);
   vm.createContext(context);
   vm.runInContext(fs.readFileSync(new URL('./calibration.js',import.meta.url),'utf8').replace(/^export .*;$/m,''),context);
+  vm.runInContext(fs.readFileSync(new URL('./lens-adjustments.js',import.meta.url),'utf8').replace(/\bexport /g,''),context);
   const app=fs.readFileSync(new URL('./app.js',import.meta.url),'utf8').replace(/^import .*;$/gm,'').replace(/^await requireAppAccess\(\);\r?$/m,'');
   vm.runInContext(app.split('const [leftPanel, rightPanel]')[0]+';globalThis.Panel=LensPanel',context);
   const panel=Object.create(context.Panel.prototype);
@@ -216,7 +218,9 @@ test('capture handoff preserves both independently sized contours through studio
     loadPhoto:async()=>true,render(){},setMode(mode){this.mode=mode;},millimetreOutline:shared.Panel.prototype.millimetreOutline});
   const left = makePanel(), right = makePanel();
   let removed = false;
-  const context = vm.createContext({leftPanel:left,rightPanel:right, sheetHomography:shared.sheetHomography,
+  const adjustmentStore=createLensAdjustmentStore();
+  const context = vm.createContext({leftPanel:left,rightPanel:right, sheetHomography:shared.sheetHomography,validCaptureIdentity,
+    lensAdjustmentStore:adjustmentStore,syncLensAdjustmentPair:()=>adjustmentStore.bindPair([left.captureIdentity||left.photo,right.captureIdentity||right.photo]),
     sessionStorage:{getItem:()=>JSON.stringify(transfer),removeItem(){removed=true;}},
     fetch:async()=>({blob:async()=>new Blob(['photo'])}),
     document:{body:{classList:{add(){}}},getElementById:()=>({}),querySelector:()=>({})}});

@@ -31,7 +31,7 @@ export function openFaceScan({ onConfirm, onManual }, runtime = {}) {
   const estimator = (runtime.createEstimator || createFaceEstimator)();
   if (!document.querySelector('link[data-face-scan]')) {
     const css = document.createElement('link'); css.rel = 'stylesheet';
-    css.href = '/face-scan.css?v=42'; css.dataset.faceScan = ''; document.head.appendChild(css);
+    css.href = '/face-scan.css?v=47'; css.dataset.faceScan = ''; document.head.appendChild(css);
   }
   const dialog = document.createElement('dialog');
   dialog.className = 'face-scan'; dialog.setAttribute('aria-labelledby', 'face-scan-title');
