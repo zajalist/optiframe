@@ -1,5 +1,7 @@
 # OptiFrame
 
+[Watch the narrated 4K OptiFrame film](https://github.com/zajalist/optiframe/releases/download/working-scan-2026-10-04-1042/OptiFrame-4K-Higgsfield-Devpost.mp4) · [Working scanner snapshot](https://github.com/zajalist/optiframe/releases/tag/working-scan-2026-10-04-1042)
+
 **Give existing lenses a new frame.** OptiFrame photographs the left and right lenses on a printed calibration sheet, proposes each edge, lets a person review the measurements, and builds an asymmetric, printable frame around those two outlines. This repository includes the browser workflow, Python GPU service, experimental iPhone ARKit companion, and Vercel/Supabase account flow.
 
 > **Prototype status:** the STL is a fit-test kit, not a medically verified spectacle frame. A photo cannot establish prescription, optical centre, lens thickness, bevel, or the exact curved surface. Check the printed scale, physical lenses, retention, and wearer alignment with an eye-care provider. The proposed 0.5 mm target is a validation gate, not a demonstrated accuracy claim.
