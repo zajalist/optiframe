@@ -1,6 +1,7 @@
-import { createLiveSegmentSession } from './live-segment.js?v=22';
+import { createLiveSegmentSession } from './live-segment.js?v=23';
 import { sheetHomography, project, measure } from './calibration.js';
 import { detectSheetMarkers } from './marker-detect.js?v=9';
+import { photoReviewLayout } from './photo-review.js?v=23';
 
 const $ = id => document.getElementById(id);
 const stage = $('stage');
@@ -27,6 +28,7 @@ let controller;
 let pendingPhoto = null;
 let targetPointer = null;
 let audioContext = null;
+let resultView = 'photo';
 
 // Unlock sound during a user gesture; camera startup never plays audio.
 function enableSound() {
@@ -137,7 +139,9 @@ function setStage(view) {
   frame.hidden = view !== 'camera';
   review.hidden = view !== 'review';
   // SVGElement.hidden is not reflected consistently in Safari/WebKit.
-  $('result-svg').toggleAttribute('hidden', view !== 'result');
+  $('result-svg').toggleAttribute('hidden', view !== 'result' || resultView !== 'outline');
+  $('result-photo').hidden = view !== 'result' || resultView !== 'photo';
+  $('review-switch').hidden = view !== 'result';
   $('pair-results').hidden = view !== 'pair';
   stage.classList.toggle('camera-on', view === 'camera');
   if (view === 'camera') fitCamera();
@@ -187,6 +191,9 @@ function stopCamera() {
 
 async function startCamera(requireRemoval = false) {
   stopCamera();
+  resultView = 'photo';
+  $('result-photo').width = 1; // Release the previous image before another capture.
+  $('result-photo').height = 1;
   const generation = captureGeneration;
   setPhase('starting');
   try {
@@ -249,6 +256,31 @@ function drawResult(capture, pathId = 'result-path') {
     `<text class="dimension-label" transform="translate(${verticalX + 14} ${centerY}) rotate(-90)" text-anchor="middle">${heightLabel}</text>`;
 }
 
+function drawPhotoResult(capture) {
+  const layout = photoReviewLayout(capture.contour, capture.width, capture.height);
+  const canvas = $('result-photo');
+  canvas.width = layout.width; canvas.height = layout.height;
+  const context = canvas.getContext('2d');
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.globalAlpha = .65;
+  context.drawImage(capture.bitmap, ...layout.crop, 0, 0, layout.width, layout.height);
+  context.globalAlpha = 1;
+  context.beginPath();
+  layout.contour.forEach(([x, y], index) => index ? context.lineTo(x, y) : context.moveTo(x, y));
+  context.closePath();
+  context.strokeStyle = '#e5eaf2';
+  context.lineWidth = Math.max(1.5, layout.width / 240);
+  context.lineJoin = 'round'; context.lineCap = 'round';
+  context.stroke();
+}
+
+function selectResultView(view) {
+  resultView = view;
+  $('review-photo').setAttribute('aria-pressed', String(view === 'photo'));
+  $('review-outline').setAttribute('aria-pressed', String(view === 'outline'));
+  if (phase === 'result') setStage('result');
+}
+
 function validateLensContour(points, result) {
   const invalid = reason => { const error = new Error(reason); error.code = 'INVALID_LENS_CONTOUR'; throw error; };
   if (points.length < 12 || !points.every(point => point.length === 2 && point.every(Number.isFinite)))
@@ -272,6 +304,8 @@ function completeMarkers(capture, automatic = false) {
     capture.measurement = measure(capture.rectifiedContour, 1);
     validateLensContour(capture.rectifiedContour, capture.measurement);
     drawResult(capture);
+    drawPhotoResult(capture);
+    selectResultView('photo');
     setPhase('result');
     validationSound();
   } catch (error) {
@@ -325,13 +359,13 @@ async function selectPhoto(file) {
   try {
     const bitmap = await createImageBitmap(file);
     if (generation !== captureGeneration) { bitmap.close(); return; }
-    const factor = Math.min(1, 1280 / Math.max(bitmap.width, bitmap.height));
+    const factor = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
     const canvas = document.createElement('canvas');
     canvas.width = Math.round(bitmap.width * factor);
     canvas.height = Math.round(bitmap.height * factor);
     canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
     bitmap.close();
-    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.86));
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.95));
     if (generation !== captureGeneration) return;
     if (!blob) throw new Error('Could not read that photo');
     const photoBitmap = await createImageBitmap(blob);
@@ -372,24 +406,31 @@ async function segmentPhotoAt(x, y) {
     const body = new FormData();
     body.append('image', photo.file, 'lens.jpg');
     body.append('box', JSON.stringify(box));
-    const response = await apiFetch('/api/segment', { method: 'POST', body });
+    const response = await apiFetch('/api/live-segment', { method: 'POST', body });
     const data = await response.json();
     if (generation !== captureGeneration) return;
     if (!response.ok) throw new Error(data.detail || 'Could not segment this photo');
-    const candidate = data.candidates?.find(item => item.method === 'sam2.1-hiera-small-cuda' && item.contour?.length >= 12);
-    if (!candidate) throw new Error('No lens edge found. Drag the target onto the lens or use softer light');
+    if (data.width !== photo.width || data.height !== photo.height)
+      throw new Error('Photo size changed. Try again');
+    if (data.presence?.detected !== true || data.edgeRefinement?.accepted !== true ||
+        !Array.isArray(data.contour) || data.contour.length < 12 ||
+        !data.contour.every(point => Array.isArray(point) && point.length === 2 && point.every((value, axis) =>
+          Number.isFinite(value) && value >= 0 && value <= (axis ? photo.height : photo.width))))
+      throw new Error('Edge unclear. Adjust the light');
     if (photo.markers?.length === 4) {
-      const xs = candidate.contour.map(point => point[0]);
-      const ys = candidate.contour.map(point => point[1]);
+      const xs = data.contour.map(point => point[0]);
+      const ys = data.contour.map(point => point[1]);
       const contourWidth = Math.max(...xs) - Math.min(...xs);
       const contourHeight = Math.max(...ys) - Math.min(...ys);
       if (contourWidth > markerWidth * 0.9 || contourHeight > markerHeight * 0.9)
         throw new Error('That edge is the sheet, not the lens');
     }
-    await acceptCapture({ file: photo.file, contour: candidate.contour, width: data.width, height: data.height });
+    await acceptCapture({ file: photo.file, contour: data.contour, width: data.width, height: data.height,
+      markers: photo.markers, refinement: {method: 'single-frame-image-edge', inputFrames: 1, acceptedFrames: 1,
+        rawReferenceContour: data.rawContour, edgeRefinement: data.edgeRefinement} });
     if (pendingPhoto === photo) { photo.bitmap.close(); pendingPhoto = null; }
   } catch (error) {
-    if (generation === captureGeneration) setPhase('aim', `${error.message}. Drag onto the lens and lift to retry.`);
+    if (generation === captureGeneration) setPhase('aim', error.message);
   }
 }
 
@@ -445,6 +486,8 @@ secondary.addEventListener('click', () => retryLens());
 $('retry-left').addEventListener('click', () => retryLens('left'));
 $('retry-right').addEventListener('click', () => retryLens('right'));
 $('camera-retry').addEventListener('click', () => { enableSound(); void startCamera(); });
+$('review-photo').addEventListener('click', () => selectResultView('photo'));
+$('review-outline').addEventListener('click', () => selectResultView('outline'));
 photoLabel.addEventListener('click', enableSound);
 photoLabel.addEventListener('keydown', event => {
   if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); enableSound(); $('photo-input').click(); }

@@ -3,13 +3,16 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import { sheetHomography, project, measure } from './calibration.js';
+import { photoReviewLayout } from './photo-review.js';
 
 const source = (await readFile(new URL('./simple.js', import.meta.url), 'utf8')).replace(/^import .*;\r?\n/gm, '');
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
 function harness({ cameraError = null, storageError = null, deferReads = false } = {}) {
   const nodes = new Map();
-  const drawing = new Proxy({}, { get: (object, key) => object[key] ?? (() => {}) });
+  const imageDraws = [];
+  const encodings = [];
+  const drawing = new Proxy({drawImage(...args) { imageDraws.push(args); }}, { get: (object, key) => object[key] ?? (() => {}) });
   function element() {
     return { hidden: false, disabled: false, textContent: '', innerHTML: '', style: {}, handlers: {}, attributes: {},
       width: 1000, height: 700, clientWidth: 360, clientHeight: 450,
@@ -18,6 +21,7 @@ function harness({ cameraError = null, storageError = null, deferReads = false }
       setAttribute(key, value) { this.attributes[key] = value; },
       toggleAttribute(key, value) { this.attributes[key] = value; if (key === 'hidden') this.hidden = value; },
       addEventListener(key, handler) { this.handlers[key] = handler; }, append() {}, setPointerCapture() {},
+      toBlob(callback, type, quality) { encodings.push({width: this.width, height: this.height, type, quality}); callback(new Blob(['photo'], {type})); },
     };
   }
   const $ = id => { if (!nodes.has(id)) nodes.set(id, element()); return nodes.get(id); };
@@ -45,7 +49,7 @@ function harness({ cameraError = null, storageError = null, deferReads = false }
   const context = vm.createContext({
     document: { getElementById: $, createElement: element, body },
     window: { addEventListener() {}, AudioContext }, location, FileReader,
-    URLSearchParams, sheetHomography, project, measure,
+    URLSearchParams, Blob, File, FormData, sheetHomography, project, measure, photoReviewLayout,
     detectSheetMarkers: () => [[0, 0], [1000, 0], [1000, 700], [0, 700]],
     createLiveSegmentSession(options) { callbacks = options; return controller; },
     createImageBitmap: async () => ({ width: 1000, height: 700, close() {} }),
@@ -53,7 +57,7 @@ function harness({ cameraError = null, storageError = null, deferReads = false }
     requestAnimationFrame: callback => callback(), fetch() {}, sessionStorage: { setItem(key,value) { if(storageError) throw new Error(storageError); storage.set(key,value); } },
   });
   vm.runInContext(source, context);
-  return { $, body, payload, context, storage, location, pendingReads, startOptions, get starts() { return starts; }, get sounds() { return sounds; },
+  return { $, body, payload, context, storage, location, pendingReads, startOptions, imageDraws, encodings, get starts() { return starts; }, get sounds() { return sounds; },
     accept: value => callbacks.onCapture(value), click: id => $(id).handlers.click?.({ preventDefault() {} }) };
 }
 
@@ -142,7 +146,12 @@ test('guided capture requires both confirmations, displays both contours, and re
   await tick();
   assert.equal(app.body.dataset.phase, 'result');
   assert.equal(app.sounds, 1);
+  assert.equal(app.$('result-photo').hidden, false);
+  assert.equal(app.$('result-svg').hidden, true);
+  assert.equal(app.$('review-switch').hidden, false);
+  app.click('review-outline');
   assert.equal(app.$('result-svg').hidden, false);
+  assert.equal(app.$('result-photo').hidden, true);
   assert.match(app.$('result-path').attributes.d, /^M.+ Z$/);
   assert.equal(app.$('headline').textContent, 'Left lens');
   assert.equal(app.$('instruction').textContent, '');
@@ -160,9 +169,13 @@ test('guided capture requires both confirmations, displays both contours, and re
   await tick();
   assert.equal(app.body.dataset.phase, 'result');
   assert.equal(app.$('pair-results').hidden, true);
+  assert.equal(app.$('result-photo').hidden, false);
+  assert.equal(app.$('result-svg').hidden, true);
+  assert.equal(app.$('review-photo').attributes['aria-pressed'], 'true');
   app.click('primary');
   assert.equal(app.body.dataset.phase, 'pair');
   assert.equal(app.$('pair-results').hidden, false);
+  assert.equal(app.$('review-switch').hidden, true);
   assert.match(app.$('left-path').attributes.d, /^M.+ Z$/);
   assert.match(app.$('right-path').attributes.d, /^M.+ Z$/);
   assert.match(app.$('left-dimensions').innerHTML, /50\.0 mm/);
@@ -190,4 +203,82 @@ test('an invalid sheet-sized contour cannot produce a measurement confirmation o
   // The displayed photo preserves its aspect and fits the stage so pointer coordinates stay exact.
   assert.equal(app.$('review-canvas').style.width, '360px');
   assert.equal(app.$('review-canvas').style.height, '252px');
+});
+
+test('retaking clears the photo preview and draws the new capture instead of stale pixels', async () => {
+  const app = harness();
+  await tick();
+  const first = {width: 1000, height: 700, close() {}}, second = {width: 1000, height: 700, close() {}};
+  app.context.createImageBitmap = async () => first;
+  await app.accept(app.payload);
+  assert.equal(app.imageDraws.filter(args => args.length === 9).at(-1)[0], first);
+  app.click('review-outline');
+  app.click('secondary');
+  await tick();
+  assert.equal(app.$('result-photo').width, 1);
+  assert.equal(app.$('result-photo').hidden, true);
+  app.context.createImageBitmap = async () => second;
+  await app.accept(app.payload);
+  assert.equal(app.imageDraws.filter(args => args.length === 9).at(-1)[0], second);
+  assert.equal(app.$('result-photo').hidden, false);
+  assert.equal(app.$('result-svg').hidden, true);
+});
+
+test('photo import uses the refined endpoint and preserves original-image edge evidence', async () => {
+  const app = harness(); await tick();
+  const requests = [], raw = app.payload.contour.map(([x, y]) => [x + 1, y]);
+  const diagnostics = {accepted: true, method: 'local-image-edge-dp', supportedSectors: 12};
+  app.context.fetch = async (url, options) => {
+    requests.push({url, options});
+    return {ok: true, async json() { return {width: 1000, height: 700, contour: app.payload.contour,
+      presence: {detected: true}, rawContour: raw, edgeRefinement: diagnostics}; }};
+  };
+  await app.context.selectPhoto(new File(['input'], 'original.jpg', {type: 'image/jpeg'}));
+  assert.equal(requests[0].url, '/api/live-segment');
+  assert.equal(requests[0].options.headers['X-OptiFrame-Key'], 'test-key');
+  assert.equal(app.encodings[0].quality, .95);
+  assert.equal(app.body.dataset.phase, 'result');
+  assert.equal(app.$('result-photo').hidden, false);
+  app.click('primary'); await tick();
+  await app.accept(app.payload); app.click('primary'); app.click('primary'); await tick();
+  const saved = JSON.parse(app.storage.get('optiframe-captures'))[0];
+  assert.deepEqual(saved.contour, app.payload.contour);
+  assert.deepEqual(saved.refinement.rawReferenceContour, raw);
+  assert.deepEqual(saved.refinement.edgeRefinement, diagnostics);
+  assert.equal(saved.refinement.acceptedFrames, 1);
+});
+
+test('photo import rejects absent, unrefined, malformed and mismatched results without raw fallback', async () => {
+  for (const problem of [
+    {presence: {detected: false}}, {edgeRefinement: {accepted: false}},
+    {contour: [[NaN, 3]]}, {width: 999},
+  ]) {
+    const app = harness(); await tick();
+    app.context.fetch = async () => ({ok: true, async json() { return {width: 1000, height: 700,
+      contour: app.payload.contour, rawContour: app.payload.contour,
+      candidates: [{method: 'sam2.1-hiera-small-cuda', contour: app.payload.contour}],
+      presence: {detected: true}, edgeRefinement: {accepted: true}, ...problem}; }});
+    await app.context.selectPhoto(new File(['input'], 'original.jpg', {type: 'image/jpeg'}));
+    assert.equal(app.body.dataset.phase, 'aim');
+    assert.equal(app.$('primary').hidden, true);
+    assert.equal(app.$('result-photo').hidden, true);
+  }
+});
+
+test('photo import retains up to 1600 pixels and submits the same encoded image it displays', async () => {
+  const app = harness(); await tick();
+  let decodes = 0, posted;
+  app.context.createImageBitmap = async () => (++decodes === 1
+    ? {width: 2400, height: 1680, close() {}}
+    : {width: 1600, height: 1120, close() {}});
+  app.context.fetch = async (url, options) => {
+    posted = options.body.get('image');
+    return {ok: true, async json() { return {width: 1600, height: 1120,
+      contour: app.payload.contour, rawContour: app.payload.contour,
+      presence: {detected: true}, edgeRefinement: {accepted: true}}; }};
+  };
+  await app.context.selectPhoto(new File(['original'], 'large.jpg', {type: 'image/jpeg'}));
+  assert.deepEqual(app.encodings[0], {width: 1600, height: 1120, type: 'image/jpeg', quality: .95});
+  assert.equal(await posted.text(), 'photo');
+  assert.equal(app.body.dataset.phase, 'result');
 });

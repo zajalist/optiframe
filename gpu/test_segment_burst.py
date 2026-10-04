@@ -53,8 +53,8 @@ class SegmentBurstTests(unittest.TestCase):
             single = self.client.post('/api/live-segment', headers=self.headers,
                 files={'image': ('frame.jpg', jpeg(), 'image/jpeg')},
                 data={'box': '[20,15,220,145]'}).json()
-        self.assertEqual(burst.pop('rawContour'), single['contour'])
-        self.assertTrue(burst.pop('edgeRefinement')['accepted'])
+        self.assertEqual(burst['rawContour'], single['rawContour'])
+        self.assertTrue(burst['edgeRefinement']['accepted'])
         self.assertEqual(burst, single)
 
     def test_unsupported_refinement_does_not_silently_fall_back_to_raw(self):

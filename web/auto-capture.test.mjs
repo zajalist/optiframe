@@ -86,3 +86,22 @@ test('blur or darkness is not evidence that the first lens was removed', () => {
     assert.equal(gate.update(sample(1600)).state,'remove');
   }
 });
+
+test('unsupported or ambiguous lens edges never count as first-lens removal', () => {
+  for (const reason of ['edge-refinement-unsupported', 'insufficient-edge-evidence', 'ambiguous', 'unknown-detector-state']) {
+    const gate=createAutoCaptureGate(); gate.reset({requireRemoval:true});
+    // Start a genuine absence span, then interrupt it with an uncertain result.
+    gate.update(sample(0,{presence:{detected:false,reason:'no-closed-edge'}}));
+    const states=span(gate,100,{presence:{detected:false,reason}});
+    assert.ok(states.every(value=>value.state==='remove'), reason);
+    assert.equal(gate.update(sample(1500,{presence:{detected:false,reason:'no-closed-edge'}})).state,'remove');
+    assert.equal(gate.update(sample(2000,{presence:{detected:false,reason:'no-closed-edge'}})).state,'searching');
+    assert.equal(span(gate,2200).at(-1).capture,true);
+  }
+});
+
+test('ordinary empty-sheet background results still permit sustained removal', () => {
+  const gate=createAutoCaptureGate();gate.reset({requireRemoval:true});
+  gate.update(sample(0,{presence:{detected:false,reason:'background-shape'}}));
+  assert.equal(gate.update(sample(500,{presence:{detected:false,reason:'background-shape'}})).state,'searching');
+});

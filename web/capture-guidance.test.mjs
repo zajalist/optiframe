@@ -48,3 +48,8 @@ test('camera tuning applies only supported continuous controls and rejection is 
   await optimizeCameraTrack({getCapabilities:()=>({focusMode:['continuous']}),applyConstraints:async()=>{throw Error('Unsupported');}});
   await optimizeCameraTrack({});
 });
+
+test('ambiguous shadow boundaries show a recovery cue and cannot qualify', () => {
+  assert.deepEqual(settled(createCaptureGuidance(), {presence:{detected:false,reason:'edge-refinement-unsupported'}}),
+    {message:'Edge unclear. Soften the light',ready:false});
+});

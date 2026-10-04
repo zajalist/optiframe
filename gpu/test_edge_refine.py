@@ -33,6 +33,26 @@ class EdgeRefineTests(unittest.TestCase):
         self.assertTrue(info['accepted'], info)
         self.assertLess(float(np.max(abs(np.ptp(np.asarray(refined), axis=0)-[200, 150]))), 3)
 
+    def test_two_comparable_boundaries_are_rejected_instead_of_chosen_arbitrarily(self):
+        image = np.full((280, 320, 3), 220, np.uint8)
+        for axes in [(100, 75), (108, 83)]:
+            cv2.ellipse(image, (160, 140), axes, 0, 0, 360, (100, 100, 100), 1, cv2.LINE_AA)
+        refined, info = refine_lens_edge(image, ellipse())
+        self.assertFalse(info['accepted'])
+        self.assertEqual(info['reason'], 'competing-edges')
+        self.assertEqual(refined, ellipse().tolist())
+
+    def test_soft_offset_cast_shadow_does_not_pull_clean_rim_outward(self):
+        image = np.full((280, 320, 3), 220, np.uint8)
+        shadow = np.zeros(image.shape[:2], np.uint8)
+        cv2.ellipse(shadow, (168, 148), (100, 75), 0, 0, 360, 60, -1)
+        shadow = cv2.GaussianBlur(shadow, (0, 0), 5)
+        image = np.clip(image.astype(float)-shadow[:, :, None], 0, 255).astype(np.uint8)
+        cv2.ellipse(image, (160, 140), (100, 75), 0, 0, 360, (105, 105, 105), 1, cv2.LINE_AA)
+        refined, info = refine_lens_edge(image, ellipse())
+        self.assertTrue(info['accepted'], info)
+        self.assertLess(float(np.max(abs(np.ptp(np.asarray(refined), axis=0)-[200, 150]))), 3)
+
     def test_broad_corners_are_not_replaced_with_an_ellipse(self):
         image = np.full((300, 340, 3), 220, np.uint8)
         shape = np.array([[70, 65], [240, 65], [275, 95], [265, 200], [230, 235], [95, 225], [60, 180], [55, 95]], np.int32)

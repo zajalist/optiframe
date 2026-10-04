@@ -39,10 +39,27 @@ class LiveSegmentTests(unittest.TestCase):
         self.assertEqual((result['width'], result['height']), (240, 160))
         self.assertGreater(len(result['contour']), 8)
         self.assertTrue(result['presence']['detected'])
+        self.assertTrue(result['edgeRefinement']['accepted'])
+        self.assertGreater(len(result['rawContour']), 8)
         self.assertGreaterEqual(result['quality']['score'], 0)
         self.assertLessEqual(result['quality']['score'], 1)
         self.assertIn('proposal-only', result['measurementStatus'])
         predictor.assert_called_once()
+
+    def test_unsupported_refinement_clears_live_edge_without_raw_fallback(self):
+        mask = np.zeros((160, 240), np.uint8)
+        cv2.ellipse(mask, (120, 80), (65, 45), 0, 0, 360, 255, -1)
+        with patch('segment.sam_mask', return_value=mask), \
+                patch('segment.refine_lens_edge', side_effect=lambda image, contour:
+                      (contour, {'accepted': False, 'reason': 'weak-edge-evidence'})):
+            response = self.post()
+        result = response.json()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(result['contour'], [])
+        self.assertFalse(result['presence']['detected'])
+        self.assertEqual(result['quality']['score'], 0)
+        self.assertEqual(result['quality']['reason'], 'edge-refinement-unsupported')
+        self.assertGreater(len(result['rawContour']), 8)
 
     def test_invalid_box_and_oversize_frame_are_rejected(self):
         with patch('segment.sam_mask') as predictor:

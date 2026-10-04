@@ -477,7 +477,7 @@ def segment_live_photo(photo: np.ndarray, parsed: tuple[int, int, int, int], *, 
             "presence": presence,
             "quality": live_quality(photo, contour, parsed),
             "method": "sam2.1-hiera-small-cuda",
-            "preprocessing": "edge-supported-lens-v3",
+            "preprocessing": "local-image-edge-dp" if refinement else "edge-supported-lens-v3",
             "measurementStatus": "proposal-only; review contour and calibrate sheet scale"}
 
 
@@ -490,7 +490,20 @@ def live_segment(image: UploadFile = File(...), box: str = Form(...)) -> dict:
     try:
         photo = decode_live_frame(raw)
         h, w = photo.shape[:2]
-        return segment_live_photo(photo, parse_lens_box(box, w, h))
+        parsed = parse_lens_box(box, w, h)
+        result = segment_live_photo(photo, parsed, refine=True)
+        if result.get("error"):
+            # An unsupported refinement is a normal live observation, never a
+            # reason to display the known-noisy raw SAM contour as a fallback.
+            return {"width": w, "height": h, "contour": [],
+                    "presence": absent("edge-refinement-unsupported"),
+                    "quality": {**live_quality(photo, [], parsed), "reason": "edge-refinement-unsupported"},
+                    "rawContour": result.get("rawContour", []),
+                    "edgeRefinement": result.get("edgeRefinement", {}),
+                    "method": "sam2.1-hiera-small-cuda",
+                    "preprocessing": "local-image-edge-dp",
+                    "measurementStatus": "proposal-only; edge evidence insufficient"}
+        return result
     except ModelBusyError as error:
         raise HTTPException(status_code=503, detail=str(error), headers={"Retry-After": "1"}) from error
     except (ValueError, TypeError, json.JSONDecodeError) as error:

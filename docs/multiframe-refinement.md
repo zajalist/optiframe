@@ -34,6 +34,18 @@ After image-based edge refinement, all five variants passed original-image suppo
 
 Regression suite: 124 web tests and 68 Python tests passed. Coverage includes empty scenes, blank/grid-only refinement, dark lenses, broad corners, blur, cancellation, stale results, disagreement, narrow spikes between samples, coordinate inversion, exact-frame identity and capture provenance.
 
-## API
+## Live preview and confirmation, v23
+
+The live endpoint now applies the same image-supported refinement as the final burst. Widespread competing boundaries cause rejection; unsupported refinement returns an empty contour and `presence.detected=false`, rather than falling back to the raw SAM mask. The UI gives a short lighting cue. Synthetic shadow tests and cached real-photo checks cover this behavior, but cannot establish performance under every real lighting condition.
+
+Automatic preview contours are stored in sheet coordinates and reprojected using current marker positions at up to 5 Hz, from a camera image capped at 480 pixels. Missing or invalid markers hide the overlay. This corrects display alignment only; it does not alter the source capture or its measurement coordinates, and assumes the lens remains stationary on the sheet.
+
+Confirmation defaults to **Photo**: a crop of the accepted original image, dimmed behind its pixel-aligned contour. **Outline** shows the perspective-corrected loop and dimensions. Dimensions are not overlaid on the unrectified photo. Both views share the same capture and confirmation action.
+
+After deployment, the five synthetic variants passed the public burst endpoint in 1.62 seconds. This is one warmed request, not a phone latency guarantee. Repeatability diagnostics remained approximately 0.128 mm at the 95th percentile; these are not physical accuracy measurements.
+
+The photo-import fallback also uses the refined endpoint, with a 1600-pixel cap and JPEG quality 95%. It requires explicit edge support and matching image dimensions. Ambiguous refinement cannot count as removing the first lens between captures. Release checks: 136 web tests and 71 Python tests passed; original-photo import and both confirmation views were checked in the browser at 390 × 844 with no page overflow.
+
+## Endpoint contract
 
 `POST /api/segment-burst`: repeated multipart `images` fields (3–5), plus `boxes` as a JSON array of pixel boxes in matching order. Maximum 6 MB per image and 20 MB total; 1600 pixels per side and 2.6 megapixels. Response `{frames:[...]}` preserves order. Individual unsupported images/refinements return an `error` entry. Malformed counts/boxes return 422; upload limits return 413; unavailable/busy GPU returns 503. The browser bounds the entire refinement request and pauses briefly after rejection to show one actionable cue.

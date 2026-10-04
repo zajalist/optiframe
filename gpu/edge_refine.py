@@ -109,6 +109,15 @@ def refine_lens_edge(image_rgb, contour, max_shift_px=12.0):
     support = abs(cv2.remap(ox, nx, ny, cv2.INTER_LINEAR).ravel()*np.cos(angles)
                   + cv2.remap(oy, nx, ny, cv2.INTER_LINEAR).ravel()*np.sin(angles))
     occluded = cv2.remap(grid, nx, ny, cv2.INTER_NEAREST).ravel() > 0
+    original_profile = abs(cv2.remap(ox, xx, yy, cv2.INTER_LINEAR)*np.cos(angles[:, None])
+                           + cv2.remap(oy, xx, yy, cv2.INTER_LINEAR)*np.sin(angles[:, None]))
+    profile_masked = cv2.remap(grid, xx, yy, cv2.INTER_NEAREST) > 0
+    separated = abs(offsets[None, :]-offsets[path, None]) >= 5
+    competing = np.max(np.where(separated & ~profile_masked, original_profile, 0), axis=1)
+    ambiguous_fraction = float(np.mean((competing >= np.maximum(.01, support*.8)) & ~occluded))
+    if ambiguous_fraction > .35:
+        return unchanged, {'accepted': False, 'reason': 'competing-edges',
+                           'ambiguousEdgeFraction': ambiguous_fraction}
     evidence = (support >= .008) & ~occluded
     supported = sum(float(np.mean(sector)) >= .35 for sector in np.array_split(evidence, 8))
     visible = support[~occluded]
@@ -120,6 +129,7 @@ def refine_lens_edge(image_rgb, contour, max_shift_px=12.0):
     to_raw = _distance_to_loop(new, raw)
     from_raw = _distance_to_loop(raw, new)
     diagnostics = {'accepted': True, 'supportedSectors': supported,
+                   'ambiguousEdgeFraction': ambiguous_fraction,
                    'maskedFraction': float(np.mean(occluded)), 'edgeSupportFraction': float(np.mean(evidence)),
                    'maxCorrectionPx': float(max(to_raw.max(), from_raw.max())),
                    'meanCorrectionPx': float(to_raw.mean()), 'correctionMetric': 'sampled-point-to-segment',

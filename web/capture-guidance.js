@@ -19,6 +19,7 @@ export function createCaptureGuidance() {
       slowCount = latencyMs > 700 ? slowCount + 1 : 0;
       if (state === 'remove') message = 'Remove the first lens';
       else if (Number.isFinite(brightness) && brightness < 45) { message = 'Add soft light'; ready = false; }
+      else if (presence?.reason === 'edge-refinement-unsupported') { message = 'Edge unclear. Soften the light'; ready = false; }
       else if (markers?.length === 4) {
         nearEdge = markers.some(([x, y]) => x < width * .025 || x > width * .975 || y < height * .025 || y > height * .975);
         const span = Math.min(Math.hypot(markers[1][0] - markers[0][0], markers[1][1] - markers[0][1]),

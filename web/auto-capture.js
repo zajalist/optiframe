@@ -30,7 +30,12 @@ export function createAutoCaptureGate({ durationMs = 1100, minFrames = 4, maxAge
       if (removal) {
         // A tracked loss with the sheet still visible is required between sides.
         // Timeouts or missing calibration never count as removing the first lens.
-        if (fresh && calibrated && presence?.detected === false && !dragging &&
+        // An unsupported refinement or weak boundary can still be the first
+        // lens. Only ordinary empty/background results prove its tracked loss.
+        // Missing reason retains compatibility with older explicit-absence APIs.
+        const absent = presence?.detected === false &&
+          (presence.reason == null || ['no-closed-edge', 'background-shape'].includes(presence.reason));
+        if (fresh && calibrated && absent && !dragging &&
             Number.isFinite(quality?.sharpness) && quality.sharpness >= 35 &&
             Number.isFinite(brightness) && brightness >= 45) {
           if (absentPrevious && (id === absentPrevious.id || sampledAt <= absentPrevious.sampledAt)) return { capture: false, state: 'remove' };

@@ -1,5 +1,5 @@
-import { createAutoCaptureGate } from './auto-capture.js?v=20';
-import { createCaptureGuidance, frameBrightness, optimizeCameraTrack } from './capture-guidance.js?v=21';
+import { createAutoCaptureGate } from './auto-capture.js?v=23';
+import { createCaptureGuidance, frameBrightness, optimizeCameraTrack } from './capture-guidance.js?v=23';
 import { captureSharpFrame } from './sharp-frame.js?v=22';
 import { fuseContours } from './contour-fusion.js?v=22';
 import { sheetHomography, project, unproject } from './calibration.js?v=22';
@@ -117,10 +117,13 @@ export function createLiveSegmentSession({
       context.restore();
     }
     if (!latest?.contour?.length) return;
+    // Automatic overlays follow the current sheet plane, never an old camera
+    // pose. The original SAM contour remains untouched for measurement.
+    if (autoCapture && !latest.displayContour?.length) return;
     context.beginPath();
-    latest.contour.forEach(([x, y], index) => {
-      const px = (x + (latest.offset?.[0] || 0)) * overlay.width / latest.width;
-      const py = (y + (latest.offset?.[1] || 0)) * overlay.height / latest.height;
+    (autoCapture ? latest.displayContour : latest.contour).forEach(([x, y], index) => {
+      const px = autoCapture ? x : (x + (latest.offset?.[0] || 0)) * overlay.width / latest.width;
+      const py = autoCapture ? y : (y + (latest.offset?.[1] || 0)) * overlay.height / latest.height;
       if (index) context.lineTo(px, py);
       else context.moveTo(px, py);
     });
@@ -194,12 +197,41 @@ export function createLiveSegmentSession({
     }
     return { gray, width, height };
   }
+  function trackSheetPlane() {
+    if (!latest) return;
+    latest.displayContour = null;
+    if (!trackingContext || !calibrateFrame || !latest.sheetContour?.length || !video.videoWidth || !video.videoHeight) return;
+    try {
+      const scale = Math.min(1, 480 / Math.max(video.videoWidth, video.videoHeight));
+      const width = Math.max(1, Math.round(video.videoWidth * scale));
+      const height = Math.max(1, Math.round(video.videoHeight * scale));
+      trackingCanvas.width = width; trackingCanvas.height = height;
+      trackingContext.drawImage(video, 0, 0, width, height);
+      const current = calibrateFrame(trackingContext.getImageData(0, 0, width, height), []);
+      if (!Array.isArray(current?.markers) || current.markers.length !== 4) return;
+      const homography = sheetHomography(current.markers);
+      latest.displayContour = latest.sheetContour.map(point => {
+        const [x, y] = unproject(point, homography);
+        if (x < 0 || y < 0 || x > width || y > height) throw new Error('Lens outside current view');
+        return [x * overlay.width / width, y * overlay.height / height];
+      });
+    } catch {
+      // Missing dots or invalid perspective hide the proposal until the sheet
+      // can be located again. Do not fall back to translation or a stale pose.
+      latest.displayContour = null;
+    }
+  }
   function trackOnce() {
     if (!stream || capturePending) return;
     animation = requestAnimationFrame(trackOnce);
-    if (!trackingBase || !latest || !video.videoWidth) return;
-    if (performance.now() - lastTrackAt < 90) return;
+    if (!latest || !video.videoWidth || (!autoCapture && !trackingBase)) return;
+    if (performance.now() - lastTrackAt < (autoCapture ? 200 : 90)) return;
     lastTrackAt = performance.now();
+    if (autoCapture) {
+      trackSheetPlane();
+      draw();
+      return;
+    }
     try {
       const current = grayFrame(video);
       if (!current || current.width !== trackingBase.width || current.height !== trackingBase.height) return;
@@ -360,8 +392,15 @@ export function createLiveSegmentSession({
         cadenceHz = cadenceHz === null ? rate : cadenceHz * 0.7 + rate * 0.3;
       }
       previousUpdateAt = updatedAt;
-      latest = { ...data, offset: [0, 0] };
-      try { trackingBase = grayFrame(frame); } catch { trackingBase = null; }
+      latest = { ...data, offset: [0, 0],
+        sheetContour: calibration?.contour?.map(point => [...point]), displayContour: null };
+      if (autoCapture) {
+        trackingBase = null;
+        trackSheetPlane();
+        lastTrackAt = performance.now();
+      } else {
+        try { trackingBase = grayFrame(frame); } catch { trackingBase = null; }
+      }
       if (autoCapture || !best || updatedAt - best.sampledAt > maxResultAgeMs / 2 || data.quality.score >= best.quality.score) {
         best = { blob, contour: data.contour.map(point => [...point]),
           width, height, quality: data.quality, capturedAt, latencyMs, sampledAt: startedAt,
@@ -566,6 +605,7 @@ export function createLiveSegmentSession({
     if (animation !== null && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(animation);
     animation = null;
     trackingBase = null;
+    lastTrackAt = 0;
     stream?.getTracks().forEach(track => track.stop());
     stream = null;
     video.pause?.();
