@@ -203,6 +203,26 @@ test('supported phone contour advances automatically from live preview through t
   } finally {fixture.session.stop();}
 });
 
+test('automatic final still survives transient GPU contention and reaches review', {timeout: 6000}, async () => {
+  let captured=null, calls=0, busy=0, still=false;
+  const proposal={...result,presence:{detected:true,evidence:{edgeSupport:.984,sectorsSupported:8}},
+    edgeRefinement:{accepted:true},quality:{score:.1818,sharpness:45.46,clippedFraction:.00063}};
+  const fixture=setup(async()=>{
+    calls++;
+    if (still && busy++<2) return {status:503,ok:false,json:async()=>({detail:'Service busy. Retrying…'})};
+    return {ok:true,json:async()=>proposal};
+  },value=>{captured=value;},{...autoOptions,stillCapture:true,
+    captureFrame:async()=>{still=true;const canvas=document.createElement('canvas');canvas.width=640;canvas.height=480;
+      return {canvas,sampledAt:performance.now(),capturedAt:new Date().toISOString()};}});
+  try {
+    await fixture.session.start();
+    await pause(2800);
+    assert.ok(captured,'the final still should retry its occupied GPU slot');
+    assert.equal(captured.source,'sharp-still');
+    assert.ok(busy>=2);
+  } finally {fixture.session.stop();}
+});
+
 test('a good preview never substitutes for a blurry or missing lens in the final still', {timeout:5000}, async () => {
   for (const invalid of [{presence:{detected:false},contour:[]}, {quality:{score:.7,sharpness:5}}]) {
     let captured=null, still=false;

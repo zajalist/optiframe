@@ -612,7 +612,21 @@ export function createLiveSegmentSession({
         results=payload.frames;
       } else {
         const item=prepared[0],body=new FormData();body.append('image',item.blob,`${side}-still.jpg`);body.append('box',JSON.stringify(item.prompt));
-        results=[await boundedStartup(segmentFrame(body,signal,item.frame,item.prompt),remaining,signal,'Refinement timed out. Retrying…')];
+        let still;
+        for (let retry=0;retry<10;retry++) {
+          const timeLeft=deadline-performance.now();
+          if(timeLeft<=0)throw new Error('Refinement timed out. Retrying…');
+          try {
+            still=await boundedStartup(segmentFrame(body,signal,item.frame,item.prompt),timeLeft,signal,'Refinement timed out. Retrying…');
+            break;
+          } catch(error) {
+            if(!error.busy || retry===9)throw error;
+            message('Finishing this lens scan…');
+            await boundedStartup(new Promise(resolve=>setTimeout(resolve,Math.min(900,timeLeft))),
+              timeLeft,signal,'Refinement timed out. Retrying…');
+          }
+        }
+        results=[still];
       }
       if(token!==generation || signal.aborted)return;
       for(let index=0;index<prepared.length;index++) {
