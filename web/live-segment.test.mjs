@@ -85,18 +85,18 @@ test('repeated service failures reveal the server reason instead of waiting fore
   } finally {fixture.session.stop();}
 });
 
-test('three busy replies stop streaming and expose a retryable failure', async () => {
+test('temporary GPU contention keeps automatic capture running with bounded retries', async () => {
   let calls=0, detail='';
-  const fixture=setup(async()=>{calls++;return {status:503,ok:false,
-    json:async()=>({detail:'Service busy. Retrying…'})};},async()=>{},
+  const fixture=setup(async()=>{calls++;return calls<4 ? {status:503,ok:false,
+    json:async()=>({detail:'Service busy. Retrying…'})} : {status:200,ok:true,json:async()=>result};},async()=>{},
   {onServiceFailure:value=>{detail=value;}});
-  await fixture.session.start();
-  await pause(2800);
-  assert.equal(calls,3);
-  assert.equal(detail,'Service busy. Retrying…');
-  assert.ok(fixture.stopped>0,'camera stream was released');
-  await pause(150);
-  assert.equal(calls,3,'automatic retries have stopped');
+  try {
+    await fixture.session.start();
+    await pause(5900);
+    assert.ok(calls>=4,'automatic preview resumes when the GPU becomes available');
+    assert.equal(detail,'');
+    assert.equal(fixture.stopped,0,'temporary contention never closes the camera');
+  } finally {fixture.session.stop();}
 });
 
 test('changing lighting invalidates the old outline and waits for exposure before sampling',async()=>{

@@ -48,12 +48,15 @@ export function createAutoCaptureGate({ durationMs = 1100, minFrames = 4, maxAge
         return { capture: false, state: removal ? 'remove' : 'searching' };
       }
       const points = calibration?.contour;
+      const strongRefinedEdge = sample.edgeRefinement?.accepted === true &&
+        presence?.evidence?.edgeSupport >= 0.8 && presence.evidence.sectorsSupported >= 7;
+      const minimumScore = strongRefinedEdge ? 0.16 : 0.3;
       if (!fresh || !calibrated || presence?.detected !== true || dragging ||
-          !Number.isFinite(quality?.score) || quality.score < 0.3 ||
+          !Number.isFinite(quality?.score) || quality.score < minimumScore ||
           !Number.isFinite(quality?.sharpness) || quality.sharpness < 35 || !validPoints(points)) {
         const reason = !fresh ? 'stale' : !calibrated ? 'calibration' : presence?.detected !== true ? 'no-lens'
           : dragging ? 'adjusting' : !Number.isFinite(quality?.sharpness) || quality.sharpness < 35 ? 'blur'
-          : !Number.isFinite(quality?.score) || quality.score < .3 ? 'quality' : 'outline';
+          : !Number.isFinite(quality?.score) || quality.score < minimumScore ? 'quality' : 'outline';
         clearSpan(); return { capture: false, state: 'searching', reason, progress: 0 };
       }
       const xs = points.map(p => p[0]), ys = points.map(p => p[1]);

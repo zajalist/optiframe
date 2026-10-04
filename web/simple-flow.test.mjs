@@ -110,15 +110,12 @@ test('persistent scanner failure reveals retry and photo import', () => {
   assert.match(app.$('status').textContent,/Service busy/);
 });
 
-test('live camera exposes immediate sheet feedback and a direct capture action', async () => {
+test('live camera exposes immediate sheet feedback while capture stays automatic', async () => {
   const app=harness(); await tick();
-  assert.equal(app.$('scan-now').hidden,false);
   assert.equal(app.$('live-guide').hidden,false);
   app.controllerOptions.onPreview({sheetReady:true});
   assert.match(app.$('live-guide').textContent,/Four dots in view/);
-  app.click('scan-now'); await tick(); await tick();
-  assert.ok(app.stops>0,'live camera request is stopped before still processing');
-  assert.equal(app.$('scan-now').hidden,true);
+  assert.equal(app.$('primary').hidden,true,'no manual shutter interrupts automatic capture');
 });
 
 test('flashlight control is shown in every live camera session and reflects supported, busy, and unavailable states',async()=>{

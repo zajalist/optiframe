@@ -1,4 +1,4 @@
-import { createAutoCaptureGate } from './auto-capture.js?v=23';
+import { createAutoCaptureGate } from './auto-capture.js?v=24';
 import { createCaptureGuidance, frameBrightness, optimizeCameraTrack } from './capture-guidance.js?v=38';
 import { captureSharpFrame } from './sharp-frame.js?v=22';
 import { fuseContours } from './contour-fusion.js?v=22';
@@ -518,12 +518,6 @@ export function createLiveSegmentSession({
         clearResult();
         message(error.busy ? busyFailures < 2 ? 'Waiting for scanner…' : error.message
           : performance.now()<refinementRetryAt ? refinementHint : `No lens edge yet. ${error.message}`);
-        if (busyFailures >= 3) {
-          const detail = error.message;
-          stop();
-          onServiceFailure(detail);
-          return;
-        }
       }
     } finally {
       job.abort.abort();

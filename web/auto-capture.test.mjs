@@ -27,6 +27,14 @@ test('a stationary lens can capture at a realistic mobile inference cadence', ()
   }
 });
 
+test('a confirmed refined edge from a soft phone image can auto capture despite a low heuristic score', () => {
+  const gate = createAutoCaptureGate({durationMs:350,minFrames:2,maxAgeMs:30000,toleranceMm:1.5});
+  const edge = {presence:{detected:true,evidence:{edgeSupport:.984,sectorsSupported:8}},
+    edgeRefinement:{accepted:true},quality:{score:.1818,sharpness:45.46}};
+  assert.equal(gate.update(sample(1000,{...edge,now:9000})).capture,false);
+  assert.equal(gate.update(sample(9100,{...edge,now:17100})).capture,true);
+});
+
 test('absence, missing presence, blur, low quality, missing scale and dragging never capture', () => {
   for (const extra of [{presence: {detected: false}}, {presence: undefined},
     {quality: {score: .8, sharpness: 10}}, {quality: {score: .2, sharpness: 100}},
