@@ -21,3 +21,19 @@ jobs:
       - name: Run capture math tests
         run: |
           xcodebuild -project ios/OptiFrameCapture.xcodeproj -scheme OptiFrameCapture -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' CODE_SIGNING_ALLOWED=NO test
+      - name: Capture native launch screen
+        run: |
+          DEVICE=$(xcrun simctl list devices available --json | python3 -c 'import json,sys; d=[v for a in json.load(sys.stdin)["devices"].values() for v in a if v["name"]=="iPhone 16"]; print(next((v["udid"] for v in d if v["state"]=="Booted"),d[-1]["udid"]))')
+          xcrun simctl boot "$DEVICE" || true
+          xcrun simctl bootstatus "$DEVICE" -b
+          APP=$(find "$HOME/Library/Developer/Xcode/DerivedData" -path '*/Debug-iphonesimulator/OptiFrameCapture.app' -type d -print -quit)
+          test -n "$APP"
+          xcrun simctl install "$DEVICE" "$APP"
+          xcrun simctl launch "$DEVICE" com.zajalist.optiframe.capture
+          sleep 3
+          mkdir -p native-ui-proof
+          xcrun simctl io "$DEVICE" screenshot native-ui-proof/iphone16-launch.png
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-ui-proof
+          path: native-ui-proof/iphone16-launch.png
